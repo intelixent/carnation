@@ -1,0 +1,127 @@
+* {
+    font-family: "Poppins", sans-serif;
+}
+.custom-page .header-logo img {
+    height: 10rem;
+}
+
+.jb_btn {
+    background-color: #db75a4 !important;
+    border-color: #db75a4 !important;
+    color: #fff !important;
+}
+
+.app-sidebar .main-sidebar-header .header-logo img {
+    height: 4rem !important;
+}
+
+.app-sidebar .main-sidebar-header {
+    padding: 0px;
+}
+
+.app-sidebar .side-menu__label {
+    color: #000;
+    /* font-size: .85rem; */
+}
+
+.app-sidebar .side-menu__angle {
+    font-size: 0.85rem;
+    color: #000;
+}
+
+.app-header {
+    background: #db75a4;
+}
+
+.app-sidebar .side-menu__icon {
+    line-height: 24px;
+    font-size: 1.3rem;
+    color: #db75a4;
+    fill: #db75a4;
+}
+
+.app-sidebar {
+    background: #f1f7ff;
+}
+
+.app-sidebar .side-menu__item.active::before {
+    background: rgb(253 183 20);
+}
+
+.app-sidebar .side-menu__item.active .side-menu__angle,
+.app-sidebar .side-menu__item.active .side-menu__label,
+.app-sidebar .side-menu__item:hover .side-menu__angle,
+.app-sidebar .side-menu__item:hover .side-menu__label {
+    color: #ffb200;
+}
+
+.app-sidebar .side-menu__item.active .side-menu__icon,
+.app-sidebar .side-menu__item:hover .side-menu__icon {
+    fill: rgb(79 79 79);
+    color: rgb(79 79 79);
+}
+
+.app-sidebar .slide.has-sub.open .side-menu__label {
+    color: #fdb714;
+}
+
+.card .card-header {
+    background-color: #db75a4 !important;
+    padding-block-start: 1rem !important;
+    padding-block-end: 0.25rem !important;
+}
+
+.form-control {
+    border: 1.5px solid #dbdfe9;
+    border-color: #dbdfe9;
+}
+
+.form-floating > label {
+    padding: 0.25rem 0.75rem;
+}
+
+.form-floating > .form-control-plaintext ~ label,
+.form-floating > .form-control:focus ~ label,
+.form-floating > .form-control:not(:placeholder-shown) ~ label,
+.form-floating > .form-select ~ label {
+    padding: 0.5rem !important;
+}
+
+.form-floating > .form-control-plaintext:focus,
+.form-floating > .form-control-plaintext:not(:placeholder-shown),
+.form-floating > .form-control:focus,
+.form-floating > .form-control:not(:placeholder-shown) {
+    padding-top: 0.625rem !important;
+}
+
+.form-floating > .form-control-plaintext ~ label,
+.form-floating > .form-control:focus ~ label,
+.form-floating > .form-control:not(:placeholder-shown) ~ label,
+.form-floating > .form-select ~ label {
+    color: #db75a4 !important;
+}
+
+.form-check-input {
+    border: 1px solid #000 !important;
+}
+
+.form-select {
+    border: 1px solid #5e6d8d;
+}
+
+.jb_btn_2 {
+    background-color: #4f4f4f !important;
+    border-color: #fdb714 !important;
+    color: #fff !important;
+}
+
+.card-tools {
+    margin-top: -8px;
+}
+.header-element.headerProfile-dropdown {
+    background-color: #4f4f4f !important;
+}
+
+.main-header-container .header-link {
+    padding: 0.64rem 0.65rem;
+}
