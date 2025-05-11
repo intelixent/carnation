@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Table Extractor</title>
+</head>
+<body>
+    <h1>Upload PDF</h1>
+    <form action="/process" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".pdf" required>
+        <br><br>
+        <select name="company" required>
+            <option value="">Select Company</option>
+            <option value="JackJones">Jack & Jones</option>
+            <option value="Skechers">Skechers</option>
+        </select>
+        <br><br>
+        <button type="submit">Process PDF</button>
+    </form>
+</body>
+</html>

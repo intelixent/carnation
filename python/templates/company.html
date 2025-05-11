@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Extracted Companies</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Extracted Companies</h1>
+    <a href="/">Upload New PDF</a>
+    <div style="margin: 20px 0;">
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Company</th>
+                <th>Filename</th>
+                <th>Upload Date</th>
+                <th>Action</th>
+            </tr>
+            {% for company in companies %}
+            <tr>
+                <td>{{ company.id }}</td>
+                <td>{{ company.name }}</td>
+                <td>{{ company.pdf_filename }}</td>
+                <td>{{ company.upload_date }}</td>
+                <td><a href="/company/{{ company.id }}">View Data</a></td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</body>
+</html>
