@@ -27,6 +27,10 @@
         background-color: #f2f2f2;
         text-align: left;
     }
+    .error
+    {
+        color:red;
+    }
 </style>
 <div class="container-fluid">
     <!-- BreadCrumbs -->
@@ -60,6 +64,10 @@
                                         <option value="">Choose Vendor</option>
                                         <option value="Skechers">Skechers</option>
                                         <option value="JackJones">JackJones</option>
+                                        <option value="puma">Puma</option>
+                                        <option value="JackJones">Selected</option>
+                                        <option value="benetton">BENETTON</option>
+                                        <option value="JackJones">Vero Modo</option>
                                     </select>
                                 </div>
                             </div>
@@ -77,9 +85,8 @@
                     </form>
 
                     <!-- Results section -->
-                    <div id="extractionResults">
-                        <h4>Extraction Results</h4>
-                        <div id="resultsContainer"></div>
+                    <div class="resultsContainer">
+                       
                     </div>
                 </div>
             </div>
@@ -162,20 +169,20 @@
                     });
 
                     $.ajax({
-                        url: "http://localhost:8000/process",
+                        // url: "http://localhost:8000/process",
+                        url:'{{ route("pdf_process") }}',
                         type: "POST",
-                        data: JSON.stringify({
-                            company: companyName,
-                            pdf_base64: base64Pdf
-                        }),
-                        contentType: "application/json",
+                        data: {'company': vendorId,'pdf_base64': base64Pdf},
+                        //contentType: "application/json",
                         dataType: "json",
                         success: function(response) {
                             Swal.close();
 
-                            if (response.success) {
-                                $('#resultsContainer').html(response.html_table);
-                                $('#extractionResults').show();
+                            if (response.status==true) {
+                                $('.resultsContainer').html(response.html);
+    document.getElementById("verifyCheck").addEventListener("change", function() {
+                document.getElementById("saveButton").disabled = !this.checked;
+    });
 
                                 $.toast({
                                     heading: 'Success',
@@ -218,5 +225,58 @@
             }
         });
     });
+
+    $(document).on('click', '#saveButton', function() {
+          
+            Swal.fire({
+                title: 'Loading...',
+                html: 'Please wait while we store the details',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            var po_details = $(".po_details").val();
+            var article_details = $(".article_details").val();
+            var po_items = $(".po_items").val();
+            var po_unit_price = $(".po_unit_price").val();
+            var po_qty = $(".po_qty").val();
+
+            $.ajax({
+                url: "{{route('pdf_extract_store')}}",
+                method: 'POST',
+                data: {
+                    'po_details': po_details,
+                    'article_details': article_details,
+                    'po_items': po_items,
+                    'po_unit_price': po_unit_price,
+                    'po_qty': po_qty,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    Swal.close();
+                        location.reload();
+                            $.toast({
+                                heading: 'Success',
+                                text: response.message,
+                                position: 'top-center',
+                                bgColor: '#000',
+                                textColor: 'white',
+                                hideAfter: 3000,
+                                stack: 6
+                            });
+                    
+                },
+                error: function(xhr, status, error) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Failed to load details. Please try again.'
+                    });
+                    console.error(error);
+                }
+            });
+        });
 </script>
 @endpush

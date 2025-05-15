@@ -7,6 +7,8 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\PdfExtractController;
 use App\Http\Controllers\VendorController;
+use App\Http\Controllers\POController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -63,6 +65,8 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/store', [PdfExtractController::class, 'store'])->name('pdf_extract_store');
         Route::post('/details', [PdfExtractController::class, 'details'])->name('pdf_extract_details');
         Route::post('/delete', [PdfExtractController::class, 'delete'])->name('pdf_extract_delete');
+        Route::post('/processpdf', [PdfExtractController::class, 'processpdf'])->name('pdf_process');
+        Route::get('/get_po_table', [POController::class, 'get_po_table'])->name('get_po_table');
     });
 
     Route::group(['prefix' => 'settings'], function () {
@@ -79,3 +83,5 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         });
     });
 });
+
+

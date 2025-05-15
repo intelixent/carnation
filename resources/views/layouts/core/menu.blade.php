@@ -66,12 +66,12 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                 <li class="slide has-sub {{ request()->is('extract*') ? 'active open' : '' }}">
                     <a href="javascript:void(0);" class="side-menu__item {{ request()->is('extract*') ? 'active' : '' }}">
                         <i class="side-menu__icon fa-solid fa-file-pdf"></i>
-                        <span class="side-menu__label ">Pdf Extract</span>
+                        <span class="side-menu__label ">Purchase Order</span>
                         <i class="fe fe-chevron-right side-menu__angle"></i>
                     </a>
                     <ul class="slide-menu child1">
                         <li class="slide">
-                            <a href="{{ route('pdf_extract_add') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_add') ? 'active' : '' }}">Add</a>
+                            <a href="{{ route('pdf_extract_add') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_add') ? 'active' : '' }}">Upload</a>
                         </li>
                         <li class="slide">
                             <a href="{{ route('pdf_extract_master') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_master') ? 'active' : '' }}">Master</a>
@@ -79,6 +79,22 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                     </ul>
                 </li>
                 <!-- End::slide -->
+
+                <li class="slide has-sub ">
+                    <a href="javascript:void(0);" class="side-menu__item ">
+                        <i class="side-menu__icon fa-solid fa-list-check"></i>
+                        <span class="side-menu__label ">Packing Lists</span>
+                        <i class="fe fe-chevron-right side-menu__angle"></i>
+                    </a>
+                    <ul class="slide-menu child1">
+                        <li class="slide">
+                            <a href="#" class="side-menu__item ">Prepare</a>
+                        </li>
+                        <li class="slide">
+                            <a href="#" class="side-menu__item ">Master</a>
+                        </li>
+                    </ul>
+                </li>
 
                 @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor', 'list-vendor', 'view-vendor']))
                 <li class="slide has-sub {{ request()->is('settings*') ? 'active open' : '' }}">

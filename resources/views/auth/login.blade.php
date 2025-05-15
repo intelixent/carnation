@@ -3,6 +3,16 @@
 @section('content')
 <!-- Start Switcher -->
 
+<style>
+    .bg-primary-transparent-3 {
+    background-color: rgb(219 117 164) !important;
+    color: rgb(219 117 164) !important;
+}
+.bg-primary-transparent-3:hover {
+    background-color: rgb(219 117 164) !important;
+    color: rgb(219 117 164) !important;
+}
+    </style>
 <!-- End Switcher -->
 
 <div class="container-fluid custom-page">
@@ -11,8 +21,8 @@
         <div class="col-md-6 col-lg-6 col-xl-7 d-none d-md-flex bg-primary-transparent-3">
             <div class="row w-100 mx-auto text-center">
                 <div class="col-md-12 col-lg-12 col-xl-12 my-auto mx-auto w-100">
-                    <img src="{{url('assets/web')}}/carnation_world.jpg"
-                        class="my-auto ht-xl-80p wd-md-100p wd-xl-80p mx-auto" alt="logo">
+                    <!-- <img src="{{url('assets/web')}}/carnation_world.jpg"
+                        class="my-auto ht-xl-80p wd-md-100p wd-xl-80p mx-auto" alt="logo"> -->
                 </div>
             </div>
         </div>
