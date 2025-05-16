@@ -30,11 +30,11 @@ class PdfExtractController extends BaseController
         $page_data = [
             'page_title' => "PO Master",
             'page_main_title' => "PO Master",
-             'page_child_title' => "Master",
+            'page_child_title' => "Master",
             'isSuperAdmin' => $this->isSuperAdmin,
-           
+
         ];
-         $page_data['vendors'] = VendorMaster::whereIn('status', [0, 1])
+        $page_data['vendors'] = VendorMaster::whereIn('status', [0, 1])
             ->orderBy('id', 'asc')
             ->get();
 
@@ -60,28 +60,30 @@ class PdfExtractController extends BaseController
         $company = $request->input('company');
         $pdfBase64 = $request->input('pdf_base64');
 
-        $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-                ])->post('http://localhost:8000/process', [
-                    'company' => $company,
-                    'pdf_base64' => $pdfBase64,
-                ]);
+        $response = Http::post('http://localhost:8000/process', [
+            'company' => $company,
+            'pdf_base64' => $pdfBase64,
+        ]);
 
         if ($response->successful()) {
-            $res_data = $response->json(); // assuming the API returns JSON
-           
-            $data['po_details']= $res_data['data']['po_details'];
-            $data['article_info']= $res_data['data']['article_info'];
-            $data['po_items']= $res_data['data']['po_items'];
-            //print_r($data);
-            $html = view('pdf_extract.pdf_response_view', compact('data'))->render();
-            return response()->json(['status'=>true,'html' => $html]);
+            $res_data = $response->json();
+
+            if ($company === 'Puma') {
+                $res_data['data']['po_details']['customer_address'] = $res_data['data']['customer_details']['address'] ?? '';
+                unset($res_data['data']['customer_details']);
+            }
+
+            $data = $res_data['data'];
+            $view = $company === 'Puma' ? 'pdf_extract.puma_response_view' : 'pdf_extract.pdf_response_view';
+
+            $html = view($view, compact('data'))->render();
+            return response()->json(['status' => true, 'html' => $html]);
         } else {
-            return response()->json(['error' => "Error Pdf"], 500);
+            return response()->json(['error' => "Error processing PDF"], 500);
         }
     }
 
-     public function store(Request $request)
+    public function store(Request $request)
     {
         try {
             $prefixSetting = PrefixSetting::where('id', 1)->first();
@@ -93,11 +95,11 @@ class PdfExtractController extends BaseController
             $currentNumber = $prefixSetting->number;
             $poNo = $prefixSetting->format . str_pad($currentNumber, 5, '0', STR_PAD_LEFT);
 
-          $po_details = json_decode($request->input('po_details'), true);
-          $article_details = $request->input('article_details');
-          $po_items = json_decode($request->input('po_items'), true);
+            $po_details = json_decode($request->input('po_details'), true);
+            $article_details = $request->input('article_details');
+            $po_items = json_decode($request->input('po_items'), true);
 
-        //   print_r($po_items);
+            //   print_r($po_items);
 
             $poData = [
                 'vendor_id' => "Jack Jone",
@@ -124,7 +126,7 @@ class PdfExtractController extends BaseController
             $prefixSetting->number = $currentNumber + 1;
             $prefixSetting->save();
 
-            foreach($po_items as $po_item):
+            foreach ($po_items as $po_item):
                 $poitemData = [
                     'po_id' => $pomaster->id,
                     'item_sno' => $po_item['item_sno'],
@@ -145,7 +147,7 @@ class PdfExtractController extends BaseController
                 PoItems::create($poitemData);
 
             endforeach;
-            
+
 
             return response()->json([
                 'success' => true,

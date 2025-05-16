@@ -64,7 +64,7 @@
                                         <option value="">Choose Vendor</option>
                                         <option value="Skechers">Skechers</option>
                                         <option value="JackJones">JackJones</option>
-                                        <option value="puma">Puma</option>
+                                        <option value="Puma">Puma</option>
                                         <option value="JackJones">Selected</option>
                                         <option value="benetton">BENETTON</option>
                                         <option value="JackJones">Vero Modo</option>
