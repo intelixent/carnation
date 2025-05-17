@@ -31,11 +31,13 @@ class POController extends BaseController
 
     public function get_po_table(Request $request)
     {
-       $query = Poutils::getPoQuery($request, $this->isSuperAdmin);
+        $query = Poutils::getPoQuery($request, $this->isSuperAdmin);
         return DataTables::of($query)
             ->addIndexColumn()
+            ->addColumn('po_ref_num', function ($row) {
+                return '<a href="javascript:void(0)" class="po-details-link" data-id="' . $row->id . '">' . $row->po_ref_num . '</a>';
+            })
             ->rawColumns(['po_ref_num', 'po_num', 'goods_ready_date', 'po_date', 'po_qty'])
             ->make(true);
     }
-
 }

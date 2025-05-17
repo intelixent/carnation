@@ -32,11 +32,9 @@ class PoMaster extends Model
         'po_unit_price',
         'po_qty',
         'created_by',
-'updated_at',
-'deleted_at',
+        'updated_at',
+        'deleted_at',
         'created_at',
         'status',
     ];
-
-    
 }
