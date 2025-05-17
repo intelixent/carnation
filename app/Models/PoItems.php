@@ -32,9 +32,6 @@ class PoItems extends Model
         'created_by',
         'updated_at',
         'deleted_at',
-'status'
-
+        'status'
     ];
-
-    
 }

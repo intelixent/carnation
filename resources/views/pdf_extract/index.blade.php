@@ -17,6 +17,16 @@
     .text-right {
         text-align: right !important;
     }
+
+    .po-details-link {
+        text-decoration: underline;
+        color: #0d6efd;
+        cursor: pointer;
+    }
+    
+    .po-details-link:hover {
+        color: #0a58ca;
+    }
 </style>
 <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
 
@@ -55,18 +65,19 @@
                                         <div class="col-sm-4">
                                             <div class="form-group">
                                                 <label for="company_id" class="form-label small">Vendor</label>
-                                               <select class="form-control select2" id="vendor_id" name="vendor_id">
-                                        <option value="">Choose Vendor</option>
-                                        <option value="Skechers">Skechers</option>
-                                        <option value="JackJones">JackJones</option>
-                                    </select>
+                                                <select class="form-control select2" id="vendor_id" name="vendor_id">
+                                                    <option value="">Choose Vendor</option>
+                                                    <option value="Skechers">Skechers</option>
+                                                    <option value="JackJones">JackJones</option>
+                                                    <option value="Puma">Puma</option>
+                                                </select>
                                             </div>
                                         </div>
-                                       
-                                        
+
+
                                     </div>
 
-                                
+
                                     <div class="row mb-2">
                                         <div class="col-sm-12 d-flex justify-content-end align-items-end">
                                             <button id="apply-filters" class="btn btn-sm btn-primary">Go</button>
@@ -154,8 +165,6 @@
             $(this).val('');
         });
 
-        
-
         var table = $(".dataTable").DataTable({
             processing: true,
             serverSide: true,
@@ -206,7 +215,7 @@
                     name: 'po_qty',
                     className: 'text-right'
                 }
-                
+
             ],
             pageLength: 50,
             order: [
@@ -215,14 +224,25 @@
             responsive: true,
             stateSave: true,
             drawCallback: function(settings) {
-                
+
             }
         });
 
-        
-
-
-       
+        $(document).on('click', '.po-details-link', function() {
+            var poId = $(this).data('id');
+            $.ajax({
+                url: "{{route('get_po_details')}}",
+                method: 'POST',
+                data: {
+                    po_id: poId,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    $("#detail_modal").html(response);
+                    $("#detail_modal").modal('show');
+                }
+            });
+        });
     });
 </script>
 @endpush

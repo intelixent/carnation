@@ -160,4 +160,54 @@ class PdfExtractController extends BaseController
             ]);
         }
     }
+
+    public function get_po_details(Request $request)
+    {
+        $po_id = $request->input('po_id');
+        $po_master = PoMaster::findOrFail($po_id);
+        $po_items = PoItems::where('po_id', $po_id)->get();
+
+        // Format PO details in the expected structure
+        $article_info = json_decode($po_master->article_info, true);
+
+        $po_details = [
+            'po_ref_num' => $po_master->po_ref_num,
+            'PO Number' => $po_master->po_num,
+            'PO Date' => $po_master->po_date,
+            'Goods Ready Date' => $po_master->goods_ready_date,
+            'MRP' => $po_master->mrp,
+            'VCP' => $po_master->vcp,
+            'Colors' => $po_master->colors,
+            'GSTIN' => $po_master->vendor_gst,
+            'CIN' => $po_master->vendor_cin,
+            'Delivery Address' => $po_master->vendor_del_adr,
+            'Communication Address' => $po_master->vendor_com_adr
+        ];
+
+        // Format PO items as expected by the view
+        $formatted_po_items = [];
+        foreach ($po_items as $item) {
+            $formatted_item = [
+                'sno' => $item->item_sno,
+                'article_number' => $item->item_article_number,
+                'color' => $item->item_id_color,
+                'size' => $item->size_in_years,
+                'quatity_uom' => $item->qty,
+                'uom' => $item->uom,
+                'igst_taxable_value' => $item->igst_taxable_value,
+                'igst_per' => $item->igst_per,
+                'mrp' => $item->mrp,
+                'ean_code' => $item->ean_code
+            ];
+            $formatted_po_items[] = $formatted_item;
+        }
+
+        $data = [
+            'po_details' => $po_details,
+            'article_info' => $article_info,
+            'po_items' => $formatted_po_items
+        ];
+
+        return view('pdf_extract.details', compact('data'));
+    }
 }

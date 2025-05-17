@@ -1025,31 +1025,65 @@ def extract_puma(pdf_path):
                 po_details["po_ehd"] = parts[2].strip()
                 break
         
-        # Extract customer details
-        customer_section = False
-        customer_lines = []
-        
-        for line in lines:
-            if "C\nU\nS\nT\nO\nM\nE\nR" in line or "CUSTOMER" in line:
-                customer_section = True
-                continue
-            
-            if customer_section and ("S\nE\nL\nL\nE\nR" in line or "SELLER" in line):
-                customer_section = False
-                break
-                
-            if customer_section and line.strip():
-                customer_lines.append(line.strip())
-        
-        # Clean up and join customer details
-        if customer_lines:
-            customer_details["address"] = " ".join(customer_lines)
-        
         # Process second page for article info and PO items
         if len(pdf.pages) > 1:
             page = pdf.pages[1]
             text = page.extract_text()
             lines = text.split('\n')
+            
+            # Try to extract table data directly first
+            tables = page.extract_tables()
+            
+            ship_to_address = []
+            ship_to_found = False
+            
+            # Try to extract from tables first
+            for i, table in enumerate(tables):
+                for row in table:
+                    if row and "Ship To" in str(row[0]):
+                        ship_to_found = True
+                        # If Ship To is in a table, the address might be in subsequent cells/rows
+                        for j in range(1, len(row)):
+                            if row[j] and row[j].strip():
+                                ship_to_address.append(row[j].strip())
+                    elif ship_to_found and row and row[0] is None and len(row) > 1:
+                        # Possible continuation of address in subsequent rows
+                        ship_to_address.append(row[1].strip())
+                    elif ship_to_found and row and "Ship Mode" in str(row[0]):
+                        # End of ship to section
+                        ship_to_found = False
+            
+            # If table extraction didn't work, try text-based extraction
+            if not ship_to_address:
+                in_ship_to_section = False
+                ship_to_marker_found = False
+                
+                for line in lines:
+                    if "Aggregated Production View" in line:
+                        in_ship_to_section = True
+                        continue
+                    
+                    if in_ship_to_section and "Ship To" in line:
+                        ship_to_marker_found = True
+                        # Check if there's content after "Ship To" on the same line
+                        address_part = line.split("Ship To")[-1].strip()
+                        if address_part:
+                            ship_to_address.append(address_part)
+                        continue
+                    
+                    if ship_to_marker_found and not "Ship Mode" in line:
+                        # This could be a continuation of the address
+                        if line.strip():
+                            ship_to_address.append(line.strip())
+                    
+                    if ship_to_marker_found and "Ship Mode" in line:
+                        break
+            
+            # Update customer details with Ship To address
+            if ship_to_address:
+                customer_details["address"] = "\n".join(ship_to_address)
+            else:
+                customer_details["address"] = ""
             
             # Extract article info
             for i, line in enumerate(lines):
