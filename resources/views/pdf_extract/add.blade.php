@@ -66,7 +66,7 @@
                                         <option value="JackJones">JackJones</option>
                                         <option value="Puma">Puma</option>
                                         <option value="JackJones">Selected</option>
-                                        <option value="benetton">BENETTON</option>
+                                        <option value="Benetton">BENETTON</option>
                                         <option value="JackJones">Vero Modo</option>
                                     </select>
                                 </div>
