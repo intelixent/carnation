@@ -955,46 +955,132 @@ def extract_jackjones_3(pdf_path):
     return None
 
 def extract_skechers(pdf_path):
-    data_rows = []
-    headers = None
-    table_started = False
-    
+    print(f"[DEBUG] Opening PDF: {pdf_path}")
+    po_details = {
+        'order_no': None,
+        'order_date': None,
+        'customer_name': None,
+        'customer_address': None,
+        'customer_gstin': None,
+        'ship_to_address': []
+    }
+    po_items = []
+
     with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            tables = page.extract_tables()
-            for table in tables:
-                for row in table:
-                    if all(cell is None or str(cell).strip() == "" for cell in row):
-                        continue
-                    if not headers and any("Sr" in (cell or "") for cell in row):
-                        headers = row
-                        table_started = True
-                        continue
-                    if table_started and any(
-                        key in (row[0] or "").lower()
-                        for key in ["port of", "remarks", "shipment", "total amount payable"]
-                    ):
-                        table_started = False
-                        break
-                    if table_started:
-                        data_rows.append(row)
-    
-    if headers is None:
-        return None
-    
-    if headers[0] is None:
-        headers = headers[1:]
-        data_rows = [row[1:] for row in data_rows]
-    if headers[-1] is None:
-        headers = headers[:-1]
-        data_rows = [row[:-1] for row in data_rows]
-    
-    df = pd.DataFrame(data_rows, columns=headers).dropna()
-    html_table = df.to_html(index=False, border=1, classes="table table-striped table-bordered")
-    responsive_table = f'<div class="table-responsive">{html_table}</div>'
+        page = pdf.pages[0]
+        text = page.extract_text() or ""
+        print("[DEBUG] Extracted text length:", len(text))
+
+        # Order No
+        m = re.search(r'Purchase Order No\.?\s*:\s*([^\s]+)', text)
+        print("[DEBUG] PO No match:", m)
+        if m:
+            po_details['order_no'] = m.group(1).strip()
+            print("[DEBUG] Parsed order_no =", po_details['order_no'])
+
+        # Order Date
+        m = re.search(r'Date\s*:\s*(\d{1,2}/\d{1,2}/\d{2,4})', text)
+        print("[DEBUG] Date match:", m)
+        if m:
+            po_details['order_date'] = m.group(1).strip()
+            print("[DEBUG] Parsed order_date =", po_details['order_date'])
+
+        # Customer Name
+        m = re.search(r'Customer Name\s*:\s*([^\n]+)', text)
+        print("[DEBUG] Cust Name match:", m)
+        if m:
+            po_details['customer_name'] = m.group(1).strip()
+            print("[DEBUG] Parsed customer_name =", po_details['customer_name'])
+
+        # Customer Address
+        addr_match = re.search(r'Customer Address\s*:\s*([\s\S]+?)Customer GSTIN', text)
+        print("[DEBUG] Address block match:", bool(addr_match))
+        if addr_match:
+            addr = addr_match.group(1).strip().replace('Customer Address :', '').strip()
+            po_details['customer_address'] = ' '.join(addr.splitlines())
+            print("[DEBUG] Parsed customer_address =", po_details['customer_address'])
+
+        # Customer GSTIN
+        m = re.search(r'Customer GSTIN\s*:\s*([^\n]+)', text)
+        print("[DEBUG] GSTIN match:", m)
+        if m:
+            po_details['customer_gstin'] = m.group(1).strip()
+            print("[DEBUG] Parsed customer_gstin =", po_details['customer_gstin'])
+
+        # Ship to address from table rows
+        for table in page.extract_tables():
+            for row in table:
+                # Check if any cell in the row contains 'Shipment Type'
+                if any(cell and 'Shipment Type' in str(cell) for cell in row):
+                    addr_cell = row[6] if row else None
+                    address_lines = []
+                    if addr_cell:
+                        # Split cell content into lines and clean up
+                        for ln in str(addr_cell).split('\n'):
+                            ln = ln.strip()
+                            if ln:
+                                address_lines.append(ln)
+                    po_details['ship_to_address'] = address_lines
+                    print(f"[DEBUG] Parsed ship_to_address = {po_details['ship_to_address']}")
+                    break  # stop after processing the first matching row
+            if po_details['ship_to_address']:
+                break  # exit loop once address is found
+
+        # locate main table
+        main_table = None
+        header_idx = None
+        for table in page.extract_tables():
+            for idx, row in enumerate(table):
+                cells = [str(c) for c in (row or [])]
+                if any('Sr' in c for c in cells) and any('Style No' in c for c in cells):
+                    main_table = table
+                    header_idx = idx
+                    print(f"[DEBUG] Found main_table at row {header_idx}")
+                    break
+            if main_table:
+                break
+
+        if not main_table:
+            print("[DEBUG] No main table found.")
+        else:
+            raw_headers = main_table[header_idx]
+            headers = [re.sub(r"[\n\r]+", " ", h or '').strip() for h in raw_headers]
+            print("[DEBUG] Headers:", headers)
+
+            for row in main_table[header_idx + 1:]:
+                # skip entirely blank rows
+                if not any(cell and cell.strip() for cell in row):
+                    print("[DEBUG] Skipping blank row")
+                    continue
+
+                # enforce that Sr. No. (second cell) is numeric
+                sr = (row[1] or '').strip()
+                if not sr.isdigit():
+                    print(f"[DEBUG] Skipping non‐item row (Sr. No. = '{sr}')")
+                    continue
+
+                # skip the grand‐total rows
+                if 'Total' in sr or 'TOTAL' in sr:
+                    print(f"[DEBUG] Skipping total row: {row}")
+                    continue
+
+                # build the item dict
+                item = {}
+                for col_idx, header in enumerate(headers):
+                    val = row[col_idx] if col_idx < len(row) and row[col_idx] else ''
+                    item[header] = val.strip() if isinstance(val, str) else val
+
+                # finally only append if we really see a Style No
+                if item.get('Style No') or item.get('Style No.'):
+                    po_items.append(item)
+                    print(f"[DEBUG] Appended item: Sr={sr}, Style No={item.get('Style No') or item.get('Style No.')}, QTY={item.get('QTY IN PCS')}")
+                else:
+                    print("[DEBUG] No Style No in row; skipping")
+
+    print(f"[DEBUG] Total items extracted: {len(po_items)}")
     return {
-        "data": df.to_dict(orient="records"),
-        "html_table": responsive_table
+        'po_details': po_details,
+        'po_items': po_items
     }
 
 def extract_puma(pdf_path):

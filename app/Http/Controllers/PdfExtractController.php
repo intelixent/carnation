@@ -78,6 +78,8 @@ class PdfExtractController extends BaseController
                 $view = 'pdf_extract.benetton_response_view';
             } elseif ($company === 'JackJones') {
                 $view = 'pdf_extract.jackjones_response_view';
+            } elseif ($company === 'Skechers') {
+                $view = 'pdf_extract.skechers_response_view';
             } else {
                 $view = 'pdf_extract.pdf_response_view';
             }
