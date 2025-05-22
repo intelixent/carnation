@@ -80,6 +80,7 @@
                                     <th>Gender</th>
                                     <th>Type</th>
                                     <th>Content</th>
+                                    <th>HSN Code</th>
                                     <th>Style Name</th>
                                     <th>Color</th>
                                     <th>Color Code</th>
@@ -113,6 +114,7 @@
                                 $gender = $item['Gender'] ?? '';
                                 $type = $item['Type'] ?? '';
                                 $content = $item['Content'] ?? '';
+                                $hsnCode = $item['HSN CODE'] ?? '';
                                 $styleName = $item['STYLE NAME'] ?? '';
                                 $color = $item['Color'] ?? '';
                                 $colorCode = $item['Color Code'] ?? '';
@@ -141,6 +143,7 @@
                                     <td>{{ $gender }}</td>
                                     <td>{{ $type }}</td>
                                     <td>{{ $content }}</td>
+                                    <td>{{ $hsnCode }}</td>
                                     <td>{{ $styleName }}</td>
                                     <td>{{ $color }}</td>
                                     <td>{{ $colorCode }}</td>
@@ -161,12 +164,16 @@
                                 @endforeach
 
                                 <tr class="table-secondary">
-                                    <td colspan="16" class="text-end"><strong>Total</strong></td>
+                                    <td colspan="17" class="text-end"><strong>Total</strong></td>
                                     <td><strong>{{ number_format($totalQty) }}</strong></td>
                                     <td></td>
                                     <td></td>
                                     <td><strong>{{ number_format($totalGstAmount, 2) }}</strong></td>
                                     <td><strong>{{ number_format($totalAmount, 2) }}</strong></td>
+                                </tr>
+                                <tr class="table-dark">
+                                    <td colspan="20" class="text-end"><strong>Grand Total (Amount + GST)</strong></td>
+                                    <td colspan="2"><strong>{{ number_format($totalGstAmount + $totalAmount, 2) }}</strong></td>
                                 </tr>
                             </tbody>
                         </table>

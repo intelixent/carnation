@@ -76,6 +76,7 @@
                                     <th>Part No</th>
                                     <th>Description</th>
                                     <th>Color</th>
+                                    <th>Size Group</th>
                                     <th>QTY</th>
                                     <th>Basic Cost</th>
                                     <th>Material Value</th>
@@ -96,16 +97,17 @@
 
                                 @foreach($poItems as $index => $item)
                                 @php
-                                $slNo = $item['S.N o'] ?? $item['sl_no'] ?? ($index + 1);
-                                $hsnCode = $item['HSN Code'] ?? $item['hsn_code'] ?? '';
+                                $slNo = $item['S.N\no'] ?? $item['S.N o'] ?? $item['sl_no'] ?? ($index + 1);
+                                $hsnCode = $item['HSN\nCode'] ?? $item['HSN Code'] ?? $item['hsn_code'] ?? '';
                                 $partNo = $item['Part No'] ?? $item['part_no'] ?? '';
                                 $partDesc = $item['Part Description'] ?? $item['description'] ?? '';
                                 $color = $item['Col'] ?? $item['color'] ?? '';
+                                $sizeGRP = $item['Sz\nGr\np'] ?? $item['Sz Gr p'] ?? $item['sz_gr_p'] ?? '';
                                 $qty = $item['Qty'] ?? $item['quantity'] ?? 0;
                                 $basicCost = $item['Basic Cost'] ?? $item['basic_cost'] ?? 0;
                                 $materialValue = $item['Material Value'] ?? $item['material_value'] ?? 0;
-                                $gstPercent = $item['IGST %'] ?? $item['gst_percent'] ?? 0;
-                                $gstAmount = $item['IGST Amount'] ?? $item['gst_amount'] ?? 0;
+                                $gstPercent = $item['IGST\n%'] ?? $item['IGST %'] ?? $item['gst_percent'] ?? 0;
+                                $gstAmount = $item['IGST\nAmount'] ?? $item['IGST Amount'] ?? $item['gst_amount'] ?? 0;
                                 $itemTotalValue = $item['Total Value'] ?? $item['total_value'] ?? 0;
                                 $dueDate = $item['Due Date'] ?? $item['due_date'] ?? '';
                                 $mrp = $item['MRP/UNIT'] ?? $item['mrp'] ?? 0;
@@ -121,6 +123,7 @@
                                     <td>{{ $partNo }}</td>
                                     <td>{{ $partDesc }}</td>
                                     <td>{{ $color }}</td>
+                                    <td>{{ $sizeGRP }}</td>
                                     <td>{{ number_format(floatval(str_replace(',', '', $qty))) }}</td>
                                     <td>{{ number_format(floatval(str_replace(',', '', $basicCost)), 2) }}</td>
                                     <td>{{ number_format(floatval(str_replace(',', '', $materialValue)), 2) }}</td>
@@ -133,7 +136,7 @@
                                 @endforeach
 
                                 <tr class="table-secondary">
-                                    <td colspan="7" class="text-end"><strong>Total</strong></td>
+                                    <td colspan="8" class="text-end"><strong>Total</strong></td>
                                     <td><strong>{{ number_format($totalMaterialValue, 2) }}</strong></td>
                                     <td></td>
                                     <td><strong>{{ number_format($totalGstAmount, 2) }}</strong></td>

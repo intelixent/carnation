@@ -26,15 +26,19 @@
                                 <li class="list-group-item">
                                     <strong>EHD Date:</strong> {{ $data['po_details']['po_ehd'] ?? '' }}
                                 </li>
+                                <li class="list-group-item">
+                                    <strong>Customer Address:</strong><br>
+                                    <div style="white-space: pre-line;">{{ $data['po_details']['customer_address'] ?? 'No customer address found' }}</div>
+                                </li>
                             </ul>
                         </div>
 
                         <div class="col-md-6">
-                            <h5>Customer Information</h5>
+                            <h5>Delivery Information</h5>
                             <ul class="list-group mb-3">
                                 <li class="list-group-item">
-                                    <strong>Address:</strong>
-                                    {{ $data['po_details']['customer_address'] ?? '' }}
+                                    <strong>Delivery Address:</strong><br>
+                                    <div style="white-space: pre-line;">{{ $data['po_details']['delivery_address'] ?? 'No delivery address found' }}</div>
                                 </li>
                             </ul>
                         </div>
