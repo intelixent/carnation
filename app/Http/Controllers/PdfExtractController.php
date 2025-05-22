@@ -69,6 +69,8 @@ class PdfExtractController extends BaseController
             $res_data = $response->json();
             $data = $res_data['data'];
 
+            // print_r($data);
+
             // Handle different company data structures
             if ($company === 'Puma') {
                 $data['po_details']['customer_address'] = $data['customer_details']['address'] ?? '';
@@ -77,7 +79,7 @@ class PdfExtractController extends BaseController
             } elseif ($company === 'Benetton') {
                 $view = 'pdf_extract.benetton_response_view';
             } elseif ($company === 'JackJones') {
-                $view = 'pdf_extract.jackjones_response_view';
+                $view = 'pdf_extract.pdf_response_view';
             } elseif ($company === 'Skechers') {
                 $view = 'pdf_extract.skechers_response_view';
             } else {
