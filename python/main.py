@@ -1535,10 +1535,29 @@ def extract_benetton(pdf_path):
                 if len(table) > 1 and any("HSN" in str(cell) for cell in table[0]):
                     print("\nFound potential items table:")
                     headers = [cell for cell in table[0]]
+                    
+                    # Clean headers by removing newlines and extra spaces
+                    cleaned_headers = []
+                    for header in headers:
+                        if header:
+                            cleaned_header = str(header).replace('\n', ' ').strip()
+                            cleaned_headers.append(cleaned_header)
+                        else:
+                            cleaned_headers.append('')
+                    
+                    print(f"Original headers: {headers}")
+                    print(f"Cleaned headers: {cleaned_headers}")
+                    
                     for row in table[1:]:
                         if any("Total" in str(cell) for cell in row) or not row[0]:
                             continue
-                        item = {str(headers[i]): str(cell) for i, cell in enumerate(row) if i < len(headers)}
+                        
+                        # Create item dictionary with cleaned headers
+                        item = {}
+                        for i, cell in enumerate(row):
+                            if i < len(cleaned_headers):
+                                item[cleaned_headers[i]] = str(cell) if cell else ''
+                        
                         po_items.append(item)
                         print(f"Item extracted: {item}")
             
@@ -1569,6 +1588,7 @@ def extract_benetton(pdf_path):
             print("\n--- FINAL RESULTS ---")
             print(f"ship_to_address: {results.get('ship_to_address', 'Not found')}")
             print(f"gstin: {results.get('gstin', 'Not found')}")
+            print(f"po_items: {results.get('po_items', [])}")
             
     except Exception as e:
         print(f"Error during extraction: {str(e)}")
