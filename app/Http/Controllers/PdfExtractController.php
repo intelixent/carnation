@@ -67,14 +67,22 @@ class PdfExtractController extends BaseController
 
         if ($response->successful()) {
             $res_data = $response->json();
-
-            if ($company === 'Puma') {
-                $res_data['data']['po_details']['customer_address'] = $res_data['data']['customer_details']['address'] ?? '';
-                unset($res_data['data']['customer_details']);
-            }
-
             $data = $res_data['data'];
-            $view = $company === 'Puma' ? 'pdf_extract.puma_response_view' : 'pdf_extract.pdf_response_view';
+
+            // Handle different company data structures
+            if ($company === 'Puma') {
+                $data['po_details']['customer_address'] = $data['customer_details']['address'] ?? '';
+                unset($data['customer_details']);
+                $view = 'pdf_extract.puma_response_view';
+            } elseif ($company === 'Benetton') {
+                $view = 'pdf_extract.benetton_response_view';
+            } elseif ($company === 'JackJones') {
+                $view = 'pdf_extract.jackjones_response_view';
+            } elseif ($company === 'Skechers') {
+                $view = 'pdf_extract.skechers_response_view';
+            } else {
+                $view = 'pdf_extract.pdf_response_view';
+            }
 
             $html = view($view, compact('data'))->render();
             return response()->json(['status' => true, 'html' => $html]);

@@ -955,46 +955,132 @@ def extract_jackjones_3(pdf_path):
     return None
 
 def extract_skechers(pdf_path):
-    data_rows = []
-    headers = None
-    table_started = False
-    
+    print(f"[DEBUG] Opening PDF: {pdf_path}")
+    po_details = {
+        'order_no': None,
+        'order_date': None,
+        'customer_name': None,
+        'customer_address': None,
+        'customer_gstin': None,
+        'ship_to_address': []
+    }
+    po_items = []
+
     with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            tables = page.extract_tables()
-            for table in tables:
-                for row in table:
-                    if all(cell is None or str(cell).strip() == "" for cell in row):
-                        continue
-                    if not headers and any("Sr" in (cell or "") for cell in row):
-                        headers = row
-                        table_started = True
-                        continue
-                    if table_started and any(
-                        key in (row[0] or "").lower()
-                        for key in ["port of", "remarks", "shipment", "total amount payable"]
-                    ):
-                        table_started = False
-                        break
-                    if table_started:
-                        data_rows.append(row)
-    
-    if headers is None:
-        return None
-    
-    if headers[0] is None:
-        headers = headers[1:]
-        data_rows = [row[1:] for row in data_rows]
-    if headers[-1] is None:
-        headers = headers[:-1]
-        data_rows = [row[:-1] for row in data_rows]
-    
-    df = pd.DataFrame(data_rows, columns=headers).dropna()
-    html_table = df.to_html(index=False, border=1, classes="table table-striped table-bordered")
-    responsive_table = f'<div class="table-responsive">{html_table}</div>'
+        page = pdf.pages[0]
+        text = page.extract_text() or ""
+        print("[DEBUG] Extracted text length:", len(text))
+
+        # Order No
+        m = re.search(r'Purchase Order No\.?\s*:\s*([^\s]+)', text)
+        print("[DEBUG] PO No match:", m)
+        if m:
+            po_details['order_no'] = m.group(1).strip()
+            print("[DEBUG] Parsed order_no =", po_details['order_no'])
+
+        # Order Date
+        m = re.search(r'Date\s*:\s*(\d{1,2}/\d{1,2}/\d{2,4})', text)
+        print("[DEBUG] Date match:", m)
+        if m:
+            po_details['order_date'] = m.group(1).strip()
+            print("[DEBUG] Parsed order_date =", po_details['order_date'])
+
+        # Customer Name
+        m = re.search(r'Customer Name\s*:\s*([^\n]+)', text)
+        print("[DEBUG] Cust Name match:", m)
+        if m:
+            po_details['customer_name'] = m.group(1).strip()
+            print("[DEBUG] Parsed customer_name =", po_details['customer_name'])
+
+        # Customer Address
+        addr_match = re.search(r'Customer Address\s*:\s*([\s\S]+?)Customer GSTIN', text)
+        print("[DEBUG] Address block match:", bool(addr_match))
+        if addr_match:
+            addr = addr_match.group(1).strip().replace('Customer Address :', '').strip()
+            po_details['customer_address'] = ' '.join(addr.splitlines())
+            print("[DEBUG] Parsed customer_address =", po_details['customer_address'])
+
+        # Customer GSTIN
+        m = re.search(r'Customer GSTIN\s*:\s*([^\n]+)', text)
+        print("[DEBUG] GSTIN match:", m)
+        if m:
+            po_details['customer_gstin'] = m.group(1).strip()
+            print("[DEBUG] Parsed customer_gstin =", po_details['customer_gstin'])
+
+        # Ship to address from table rows
+        for table in page.extract_tables():
+            for row in table:
+                # Check if any cell in the row contains 'Shipment Type'
+                if any(cell and 'Shipment Type' in str(cell) for cell in row):
+                    addr_cell = row[6] if row else None
+                    address_lines = []
+                    if addr_cell:
+                        # Split cell content into lines and clean up
+                        for ln in str(addr_cell).split('\n'):
+                            ln = ln.strip()
+                            if ln:
+                                address_lines.append(ln)
+                    po_details['ship_to_address'] = address_lines
+                    print(f"[DEBUG] Parsed ship_to_address = {po_details['ship_to_address']}")
+                    break  # stop after processing the first matching row
+            if po_details['ship_to_address']:
+                break  # exit loop once address is found
+
+        # locate main table
+        main_table = None
+        header_idx = None
+        for table in page.extract_tables():
+            for idx, row in enumerate(table):
+                cells = [str(c) for c in (row or [])]
+                if any('Sr' in c for c in cells) and any('Style No' in c for c in cells):
+                    main_table = table
+                    header_idx = idx
+                    print(f"[DEBUG] Found main_table at row {header_idx}")
+                    break
+            if main_table:
+                break
+
+        if not main_table:
+            print("[DEBUG] No main table found.")
+        else:
+            raw_headers = main_table[header_idx]
+            headers = [re.sub(r"[\n\r]+", " ", h or '').strip() for h in raw_headers]
+            print("[DEBUG] Headers:", headers)
+
+            for row in main_table[header_idx + 1:]:
+                # skip entirely blank rows
+                if not any(cell and cell.strip() for cell in row):
+                    print("[DEBUG] Skipping blank row")
+                    continue
+
+                # enforce that Sr. No. (second cell) is numeric
+                sr = (row[1] or '').strip()
+                if not sr.isdigit():
+                    print(f"[DEBUG] Skipping non‐item row (Sr. No. = '{sr}')")
+                    continue
+
+                # skip the grand‐total rows
+                if 'Total' in sr or 'TOTAL' in sr:
+                    print(f"[DEBUG] Skipping total row: {row}")
+                    continue
+
+                # build the item dict
+                item = {}
+                for col_idx, header in enumerate(headers):
+                    val = row[col_idx] if col_idx < len(row) and row[col_idx] else ''
+                    item[header] = val.strip() if isinstance(val, str) else val
+
+                # finally only append if we really see a Style No
+                if item.get('Style No') or item.get('Style No.'):
+                    po_items.append(item)
+                    print(f"[DEBUG] Appended item: Sr={sr}, Style No={item.get('Style No') or item.get('Style No.')}, QTY={item.get('QTY IN PCS')}")
+                else:
+                    print("[DEBUG] No Style No in row; skipping")
+
+    print(f"[DEBUG] Total items extracted: {len(po_items)}")
     return {
-        "data": df.to_dict(orient="records"),
-        "html_table": responsive_table
+        'po_details': po_details,
+        'po_items': po_items
     }
 
 def extract_puma(pdf_path):
@@ -1190,6 +1276,187 @@ def extract_puma(pdf_path):
     
     return results
 
+def extract_benetton(pdf_path):
+    print("Starting extraction from:", pdf_path)
+    results = {}
+    
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            print(f"PDF opened successfully with {len(pdf.pages)} pages")
+            
+            # Extract all tables from every page
+            all_tables = []
+            for i, page in enumerate(pdf.pages):
+                print(f"\nProcessing Page {i+1} tables...")
+                tables = page.extract_tables({
+                    "vertical_strategy": "lines",
+                    "horizontal_strategy": "lines",
+                    "explicit_vertical_lines": page.curves + page.edges,
+                    "explicit_horizontal_lines": page.curves + page.edges,
+                })
+                
+                for table_num, table in enumerate(tables):
+                    print(f"\nTable {table_num+1} on page {i+1}:")
+                    for row_num, row in enumerate(table):
+                        print(f"Row {row_num}: {row}")
+                    all_tables.append(table)
+            
+            # Store raw tables for template to handle
+            results["raw_tables"] = all_tables
+            
+            # Extract text from all pages
+            text = ""
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                text += page_text + "\n"
+                print(f"\n--- Page {pdf.pages.index(page) + 1} Text Preview ---")
+                print(page_text[:500] + "..." if len(page_text) > 500 else page_text)
+            
+            print("\n--- DEBUGGING: Looking for 'Ship To' in text ---")
+            ship_to_index = text.find("Ship To")
+            if ship_to_index >= 0:
+                print(f"Found 'Ship To' at position {ship_to_index}")
+                # Print the text context around "Ship To"
+                context_start = max(0, ship_to_index - 50)
+                context_end = min(len(text), ship_to_index + 300)
+                print(f"Context around 'Ship To': \n{text[context_start:context_end]}")
+            else:
+                print("'Ship To' not found in text!")
+            
+            # Original extraction logic for order details
+            order_no_match = re.search(r'Order No:?\s*(\d+)', text)
+            order_date_match = re.search(r'Order Date:?\s*(\d{2}\.\d{2}\.\d{4})', text)
+            delivery_date_match = re.search(r'Delivery Date:?\s*(\d{2}\.\d{2}\.\d{4})', text)
+            season_match = re.search(r'Season:?\s*([A-Za-z\s]+\d{4})', text)
+            
+            results.update({
+                "order_no": order_no_match.group(1) if order_no_match else "",
+                "order_date": order_date_match.group(1) if order_date_match else "",
+                "delivery_date": delivery_date_match.group(1) if delivery_date_match else "",
+                "season": season_match.group(1) if season_match else ""
+            })
+            
+            # Try multiple patterns for Ship To address extraction with debugging
+            print("\n--- DEBUGGING: Trying different Ship To patterns ---")
+            
+            # Pattern 1: Original pattern
+            ship_to_pattern1 = r'Ship To\.\s*\n((?:.*\n){1,7}?)(?:Bill To\.|GSTIN:)'
+            ship_to_match1 = re.search(ship_to_pattern1, text)
+            print(f"Pattern 1 match result: {ship_to_match1 is not None}")
+            
+            # Pattern 2: More flexible pattern
+            ship_to_pattern2 = r'Ship To\.?\s*[,.\n]((?:.*\n){1,7}?)(?:Bill To\.?|GSTIN:)'
+            ship_to_match2 = re.search(ship_to_pattern2, text)
+            print(f"Pattern 2 match result: {ship_to_match2 is not None}")
+            
+            # Pattern 3: Very simple pattern
+            ship_to_pattern3 = r'Ship To[^B]*Bill To'
+            ship_to_match3 = re.search(ship_to_pattern3, text, re.DOTALL)
+            print(f"Pattern 3 match result: {ship_to_match3 is not None}")
+            
+            # Use the first successful match
+            ship_to_match = ship_to_match1 or ship_to_match2 or ship_to_match3
+            
+            if ship_to_match:
+                # Process the ship to address into an array of lines
+                ship_to_text = ship_to_match.group(1).strip() if (ship_to_match1 or ship_to_match2) else ship_to_match.group(0).replace("Ship To", "").replace("Bill To", "").strip()
+                print(f"\nRaw ship to text: {ship_to_text}")
+                
+                ship_to_lines = [line.strip() for line in ship_to_text.split('\n') if line.strip()]
+                print(f"Parsed ship to lines: {ship_to_lines}")
+                
+                # Extract GSTIN separately if it's in the ship to address
+                gstin = None
+                for i, line in enumerate(ship_to_lines):
+                    if "GSTIN:" in line:
+                        gstin_match = re.search(r'GSTIN:\s*([A-Z0-9]+)', line)
+                        if gstin_match:
+                            gstin = gstin_match.group(1)
+                            # Remove GSTIN from the address line
+                            ship_to_lines[i] = line.split("GSTIN:")[0].strip()
+                            # If the line is now empty, remove it
+                            if not ship_to_lines[i]:
+                                ship_to_lines.pop(i)
+                            print(f"Extracted GSTIN: {gstin}")
+                        break
+                
+                results["ship_to_address"] = ship_to_lines
+                if gstin:
+                    results["gstin"] = gstin
+            else:
+                print("All ship to address patterns failed. Trying manual approach...")
+                
+                # Manual approach: Look for specific position after "Ship To" and before "Bill To"
+                ship_to_pos = text.find("Ship To")
+                bill_to_pos = text.find("Bill To")
+                
+                if ship_to_pos >= 0 and bill_to_pos > ship_to_pos:
+                    ship_to_text = text[ship_to_pos+8:bill_to_pos].strip()
+                    print(f"Manual extraction ship_to_text: {ship_to_text}")
+                    ship_to_lines = [line.strip() for line in ship_to_text.split('\n') if line.strip()]
+                    
+                    # Filter out any lines that seem unrelated to address
+                    ship_to_lines = [line for line in ship_to_lines if not line.startswith("Order") and not line.startswith("Supplier")]
+                    
+                    results["ship_to_address"] = ship_to_lines
+                    print(f"Final manual ship_to_lines: {ship_to_lines}")
+                    
+                    # Try to find GSTIN in this section
+                    gstin_match = re.search(r'GSTIN:\s*([A-Z0-9]+)', ship_to_text)
+                    if gstin_match:
+                        results["gstin"] = gstin_match.group(1)
+                else:
+                    results["ship_to_address"] = "Not found"
+                    print("Manual extraction also failed")
+            
+            # Extract PO items from tables
+            po_items = []
+            for table in all_tables:
+                if len(table) > 1 and any("Part No" in str(cell) for cell in table[0]):
+                    print("\nFound potential items table:")
+                    headers = [cell for cell in table[0]]
+                    for row in table[1:]:
+                        if any("Total" in str(cell) for cell in row) or not row[0]:
+                            continue
+                        item = {str(headers[i]): str(cell) for i, cell in enumerate(row) if i < len(headers)}
+                        po_items.append(item)
+                        print(f"Item extracted: {item}")
+            
+            results["po_items"] = po_items
+            
+            # Extract size tables in a format that works with our template
+            size_tables = []
+            for table in all_tables:
+                if any("COL/SIZ" in str(cell) for cell in table[0]):
+                    print("\nFound potential size table:")
+                    headers = []
+                    if " " in str(table[0][1]):
+                        headers = str(table[0][1]).strip().split()
+                    
+                    rows = []
+                    for row in table[1:]:
+                        if not row[0]:
+                            continue
+                        rows.append(row)
+                    
+                    size_tables.append({
+                        "headers": headers,
+                        "rows": rows
+                    })
+            
+            results["size_tables"] = size_tables
+            
+            print("\n--- FINAL RESULTS ---")
+            print(f"ship_to_address: {results.get('ship_to_address', 'Not found')}")
+            print(f"gstin: {results.get('gstin', 'Not found')}")
+            
+    except Exception as e:
+        print(f"Error during extraction: {str(e)}")
+        import traceback
+        traceback.print_exc()
+    
+    return results
+
 @app.post("/process")
 async def process_pdf(request: dict = Body(...)):
     company = request.get("company", "")
@@ -1213,7 +1480,9 @@ async def process_pdf(request: dict = Body(...)):
             elif "Skechers" in company:
                 result = extract_skechers(temp_path)
             elif "Puma" in company:
-                result = extract_puma(temp_path)    
+                result = extract_puma(temp_path)
+            elif "Benetton" in company:
+                result = extract_benetton(temp_path)    
             else:
                 result = None
 
