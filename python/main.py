@@ -692,18 +692,18 @@ def extract_jackjones_o(pdf_path):
                                 # Extract construction type
                                 if start_idx < len(page_lines):
                                     const_line = page_lines[start_idx].strip()
-                                    if const_line and "Knit" in const_line:
-                                        article_info["Construction type"] = const_line
-                                        print(f"Extracted Construction type: {article_info['Construction type']}")
-                                        start_idx += 1
+                                    #if const_line and "Knit" in const_line:
+                                    article_info["Construction type"] = const_line
+                                    print(f"Extracted Construction type: {article_info['Construction type']}")
+                                    start_idx += 1
                                 
                                 # Extract gender
                                 if start_idx < len(page_lines):
                                     gender_line = page_lines[start_idx].strip()
-                                    if gender_line in ["Male", "Female", "Unisex"]:
-                                        article_info["Gender"] = gender_line
-                                        print(f"Extracted Gender: {article_info['Gender']}")
-                                        start_idx += 1
+                                    #if gender_line in ["Male", "Female", "Unisex"]:
+                                    article_info["Gender"] = gender_line
+                                    print(f"Extracted Gender: {article_info['Gender']}")
+                                    start_idx += 1
                                 
                                 # Extract article group
                                 if start_idx < len(page_lines):
@@ -756,8 +756,12 @@ def extract_jackjones_o(pdf_path):
                         # Match the item row pattern
                         # More flexible pattern to catch variations
                         try:
+                            # item_match = re.match(
+                            #     r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+(.*?)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.?\d*)\s+([\d.]+)\s+([\d,]+\.?\d*)\s+(\d+)',
+                            #     line
+                            # )
                             item_match = re.match(
-                                r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+(.*?)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.?\d*)\s+([\d.]+)\s+([\d,]+\.?\d*)\s+(\d+)',
+                                r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+([\w/]+)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.\d+)\s+([\d.]+)\s+([\d,]+\.\d+)\s+(\d{11})\s+(\d+)',
                                 line
                             )
                             
@@ -1412,7 +1416,8 @@ def extract_benetton(pdf_path):
             # Extract PO items from tables
             po_items = []
             for table in all_tables:
-                if len(table) > 1 and any("Part No" in str(cell) for cell in table[0]):
+                print(table)
+                if len(table) > 1 and any("HSN" in str(cell) for cell in table[0]):
                     print("\nFound potential items table:")
                     headers = [cell for cell in table[0]]
                     for row in table[1:]:
