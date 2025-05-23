@@ -1096,6 +1096,16 @@ def extract_puma(pdf_path):
     article_info = {}
     po_items = []
     
+    STATIC_CUSTOMER_ADDRESS = """Puma Sports India Pvt
+        Ground floor 496,Next to Hewlett
+        Packard Service Gate,
+        Mahadevapura Main Road,
+        Mahadevapura
+        Bangalore
+        Karnataka
+        560048
+        IN"""
+
     with pdfplumber.open(pdf_path) as pdf:
         # Process first page for PO details and customer information
         page = pdf.pages[0]
@@ -1113,6 +1123,8 @@ def extract_puma(pdf_path):
                 po_details["po_number"] = parts[0].strip()
                 po_details["po_release_date"] = parts[1].strip()
                 po_details["po_ehd"] = parts[2].strip()
+                po_details["customer_address"] = STATIC_CUSTOMER_ADDRESS
+                print(f"DEBUG: Extracted PO details - Number: {po_details['po_number']}, Release Date: {po_details['po_release_date']}, EHD: {po_details['po_ehd']}")
                 break
         
         # Process second page for article info and PO items
@@ -1132,29 +1144,34 @@ def extract_puma(pdf_path):
                 for row in table:
                     if row and "Ship To" in str(row[0]):
                         ship_to_found = True
+                        print(f"DEBUG: Found 'Ship To' in table row: {row}")
                         # If Ship To is in a table, the address might be in subsequent cells/rows
                         for j in range(1, len(row)):
                             if row[j] and row[j].strip():
                                 ship_to_address.append(row[j].strip())
                     elif ship_to_found and row and row[0] is None and len(row) > 1:
                         # Possible continuation of address in subsequent rows
-                        ship_to_address.append(row[1].strip())
+                        if row[1] and row[1].strip():
+                            ship_to_address.append(row[1].strip())
                     elif ship_to_found and row and "Ship Mode" in str(row[0]):
                         # End of ship to section
                         ship_to_found = False
             
             # If table extraction didn't work, try text-based extraction
             if not ship_to_address:
+                print("DEBUG: Table extraction failed, trying text-based extraction")
                 in_ship_to_section = False
                 ship_to_marker_found = False
                 
                 for line in lines:
                     if "Aggregated Production View" in line:
                         in_ship_to_section = True
+                        print("DEBUG: Found 'Aggregated Production View' - entering ship to section")
                         continue
                     
                     if in_ship_to_section and "Ship To" in line:
                         ship_to_marker_found = True
+                        print(f"DEBUG: Found 'Ship To' line: {line}")
                         # Check if there's content after "Ship To" on the same line
                         address_part = line.split("Ship To")[-1].strip()
                         if address_part:
@@ -1163,36 +1180,63 @@ def extract_puma(pdf_path):
                     
                     if ship_to_marker_found and not "Ship Mode" in line:
                         # This could be a continuation of the address
-                        if line.strip():
+                        if line.strip() and not any(keyword in line for keyword in ["Ultimate Cust", "Article Number", "Size International"]):
                             ship_to_address.append(line.strip())
+                            print(f"DEBUG: Added address line: {line.strip()}")
                     
                     if ship_to_marker_found and "Ship Mode" in line:
+                        print("DEBUG: Found 'Ship Mode' - ending ship to extraction")
                         break
             
-            # Update customer details with Ship To address
+            # Set delivery address (Ship To address) - this is different from customer address
             if ship_to_address:
-                customer_details["address"] = "\n".join(ship_to_address)
+                delivery_address_str = "\n".join(ship_to_address)
+                po_details["delivery_address"] = delivery_address_str
+                print(f"DEBUG: Delivery address extracted: {delivery_address_str}")
+                po_details["customer_address"] = STATIC_CUSTOMER_ADDRESS
+                
+                # Update customer_details with Ship To address (for backward compatibility)
+                customer_details["address"] = delivery_address_str
             else:
+                po_details["delivery_address"] = ""
                 customer_details["address"] = ""
-            
-            # Extract article info
+                print("DEBUG: No delivery address found")
+                        
             for i, line in enumerate(lines):
                 if "Article Number" in line and "Style Description" in line and "Color" in line:
                     if i + 1 < len(lines):
-                        article_data = lines[i + 1].split()
-                        if len(article_data) >= 3:
+                        article_line = lines[i + 1]
+                        print(f"DEBUG: Raw article line: {article_line}")
+                        
+                        article_data = re.split(r'\s+', article_line.strip())
+                        print(f"DEBUG: Processed article data: {article_data}")
+                        
+                        if len(article_data) >= 4:
                             article_info["article_number"] = article_data[0]
-                            # Extract style description (may contain spaces)
-                            style_end_idx = -1
-                            for j, part in enumerate(article_data[1:], 1):
-                                if "PUMA" in part and j < len(article_data) - 1:
-                                    style_end_idx = j
-                                    break
                             
-                            if style_end_idx > 0:
-                                article_info["style_description"] = " ".join(article_data[1:style_end_idx])
-                                article_info["color"] = " ".join(article_data[style_end_idx:])
-                            break
+                            # Find PUMA position
+                            puma_index = next((idx for idx, word in enumerate(article_data) 
+                                            if "PUMA" in word), None)
+                            
+                            if puma_index and puma_index > 1:
+                                # Style Description = everything between article number and PUMA
+                                article_info["style_description"] = " ".join(article_data[1:puma_index])
+                                
+                                # Color = PUMA + next word
+                                color_parts = article_data[puma_index:puma_index+2]
+                                article_info["color"] = " ".join(color_parts)
+                                
+                                # Product Character = remaining parts
+                                product_parts = article_data[puma_index+2:]
+                                article_info["product_character"] = " ".join(product_parts)
+                                
+                                print(f"DEBUG: Correct article info: {article_info}")
+                                break
+                            else:
+                                # Fallback if PUMA not found
+                                article_info["style_description"] = " ".join(article_data[1:-2])
+                                article_info["color"] = article_data[-2]
+                                article_info["product_character"] = article_data[-1]
             
             # Extract PO items and additional fields (Pack Factor, SKU/Line No, Incoterm, Named Place)
             size_row = None
@@ -1206,53 +1250,66 @@ def extract_puma(pdf_path):
             for i, line in enumerate(lines):
                 if "Size International" in line:
                     size_row = line.replace("Size International", "").strip().split()
+                    print(f"DEBUG: Size row extracted: {size_row}")
                 if size_row and re.search(r"Total Size Qty EACH|Quantity EACH", line):
                     quantity_parts = re.split(r"Total Size Qty EACH|Quantity EACH", line)
                     if len(quantity_parts) > 1:
                         quantity_row = quantity_parts[1].strip().split()
+                        print(f"DEBUG: Quantity row extracted: {quantity_row}")
                 if size_row and "Unit Price INR" in line:
                     price_parts = line.split("Unit Price INR")
                     if len(price_parts) > 1:
                         price_row = price_parts[1].strip().split()
+                        print(f"DEBUG: Price row extracted: {price_row}")
                 if size_row and "Pack Factor" in line:
                     pack_parts = line.split("Pack Factor")
                     if len(pack_parts) > 1:
                         pack_factor_row = pack_parts[1].strip().split()
+                        print(f"DEBUG: Pack factor row extracted: {pack_factor_row}")
                 if size_row and "SKU/Line No" in line:
                     sku_parts = line.split("SKU/Line No.")
                     if len(sku_parts) > 1:
                         sku_line_row = sku_parts[1].strip().split()
+                        print(f"DEBUG: SKU/Line row extracted: {sku_line_row}")
                 if size_row and "Incoterm" in line:
                     incoterm_parts = line.split("Incoterm")
                     if len(incoterm_parts) > 1:
                         incoterm_row = incoterm_parts[1].strip().split()
+                        print(f"DEBUG: Incoterm row extracted: {incoterm_row}")
                 if size_row and "Named Place" in line:
                     named_place_parts = line.split("Named Place")
                     if len(named_place_parts) > 1:
                         named_place_row = named_place_parts[1].strip().split()
+                        print(f"DEBUG: Named place row extracted: {named_place_row}")
             
             # If we don't find the explicit rows, try to find them in the bottom part of PDF
             if not pack_factor_row or not sku_line_row or not incoterm_row or not named_place_row:
+                print("DEBUG: Some rows missing, searching in bottom part of PDF")
                 for i, line in enumerate(lines):
                     if "Pack Factor" in line and i + 1 < len(lines):
                         potential_values = lines[i + 1].strip().split()
                         if potential_values and len(potential_values) >= len(size_row or []):
                             pack_factor_row = potential_values
+                            print(f"DEBUG: Pack factor row found in bottom: {pack_factor_row}")
                     if "SKU/Line No" in line and i + 1 < len(lines):
                         potential_values = lines[i + 1].strip().split()
                         if potential_values and len(potential_values) >= len(size_row or []):
                             sku_line_row = potential_values
+                            print(f"DEBUG: SKU/Line row found in bottom: {sku_line_row}")
                     if "Incoterm" in line and i + 1 < len(lines):
                         potential_values = lines[i + 1].strip().split()
                         if potential_values and len(potential_values) >= len(size_row or []):
                             incoterm_row = potential_values
+                            print(f"DEBUG: Incoterm row found in bottom: {incoterm_row}")
                     if "Named Place" in line and i + 1 < len(lines):
                         potential_values = lines[i + 1].strip().split()
                         if potential_values and len(potential_values) >= len(size_row or []):
                             named_place_row = potential_values
+                            print(f"DEBUG: Named place row found in bottom: {named_place_row}")
             
             # Create PO items from size and quantity data
             if size_row and quantity_row:
+                print(f"DEBUG: Creating {min(len(size_row), len(quantity_row))} PO items")
                 for i in range(min(len(size_row), len(quantity_row))):
                     item = {
                         "size": size_row[i],
@@ -1269,16 +1326,74 @@ def extract_puma(pdf_path):
                     if named_place_row and i < len(named_place_row):
                         item["named_place"] = named_place_row[i]
                     po_items.append(item)
-    
+                    print(f"DEBUG: Created PO item {i+1}: {item}")
+
     # Create final result structure
     results = {
         "po_details": po_details,
-        "customer_details": customer_details,
         "article_info": article_info,
-        "po_items": po_items
+        "po_items": po_items,
+        "customer_details": {
+            "address": STATIC_CUSTOMER_ADDRESS 
+        }
     }
-    
+
     return results
+
+def extract_ship_to_address_simple(text):
+    """
+    Extract ship to address using a simpler, more reliable approach
+    """
+    print("\n--- SIMPLE SHIP TO EXTRACTION ---")
+    
+    # Find the position of "Ship To"
+    ship_to_pos = text.find("Ship To")
+    if ship_to_pos == -1:
+        print("'Ship To' not found")
+        return None
+    
+    # Find the position of "Bill To" (this marks the end of ship to section)
+    bill_to_pos = text.find("Bill To", ship_to_pos)
+    if bill_to_pos == -1:
+        print("'Bill To' not found after 'Ship To'")
+        return None
+    
+    # Extract the text between "Ship To" and "Bill To"
+    ship_to_section = text[ship_to_pos:bill_to_pos].strip()
+    print(f"Ship To section: {ship_to_section}")
+    
+    # Split into lines and clean up
+    lines = ship_to_section.split('\n')
+    
+    # Remove the "Ship To." line itself and any empty lines
+    address_lines = []
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith("Ship To"):
+            # Skip lines that contain commas at the start (these are often formatting artifacts)
+            if not line.startswith(','):
+                address_lines.append(line)
+    
+    # Extract GSTIN if present and remove it from address
+    gstin = None
+    clean_address_lines = []
+    
+    for line in address_lines:
+        if "GSTIN:" in line:
+            gstin_match = re.search(r'GSTIN:\s*([A-Z0-9]+)', line)
+            if gstin_match:
+                gstin = gstin_match.group(1)
+                # Remove GSTIN from the line
+                line_without_gstin = line.split("GSTIN:")[0].strip()
+                if line_without_gstin:
+                    clean_address_lines.append(line_without_gstin)
+        else:
+            clean_address_lines.append(line)
+    
+    return {
+        "address_lines": clean_address_lines,
+        "gstin": gstin
+    }
 
 def extract_benetton(pdf_path):
     print("Starting extraction from:", pdf_path)
@@ -1420,10 +1535,29 @@ def extract_benetton(pdf_path):
                 if len(table) > 1 and any("HSN" in str(cell) for cell in table[0]):
                     print("\nFound potential items table:")
                     headers = [cell for cell in table[0]]
+                    
+                    # Clean headers by removing newlines and extra spaces
+                    cleaned_headers = []
+                    for header in headers:
+                        if header:
+                            cleaned_header = str(header).replace('\n', ' ').strip()
+                            cleaned_headers.append(cleaned_header)
+                        else:
+                            cleaned_headers.append('')
+                    
+                    print(f"Original headers: {headers}")
+                    print(f"Cleaned headers: {cleaned_headers}")
+                    
                     for row in table[1:]:
                         if any("Total" in str(cell) for cell in row) or not row[0]:
                             continue
-                        item = {str(headers[i]): str(cell) for i, cell in enumerate(row) if i < len(headers)}
+                        
+                        # Create item dictionary with cleaned headers
+                        item = {}
+                        for i, cell in enumerate(row):
+                            if i < len(cleaned_headers):
+                                item[cleaned_headers[i]] = str(cell) if cell else ''
+                        
                         po_items.append(item)
                         print(f"Item extracted: {item}")
             
@@ -1454,6 +1588,7 @@ def extract_benetton(pdf_path):
             print("\n--- FINAL RESULTS ---")
             print(f"ship_to_address: {results.get('ship_to_address', 'Not found')}")
             print(f"gstin: {results.get('gstin', 'Not found')}")
+            print(f"po_items: {results.get('po_items', [])}")
             
     except Exception as e:
         print(f"Error during extraction: {str(e)}")
