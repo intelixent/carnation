@@ -10,17 +10,15 @@ class PoItems extends Model
     use HasFactory;
 
     protected $table = 'po_items';
-
     protected $primaryKey = 'id';
-
     public $timestamps = false;
 
     protected $fillable = [
         'po_id',
-        'item_sno',
-        'item_article_number',
-        'item_id_color',
-        'size_in_years',
+        'sno',
+        'article_number',
+        'id_color',
+        'size',
         'qty',
         'uom',
         'igst_taxable_value',
@@ -32,6 +30,24 @@ class PoItems extends Model
         'created_by',
         'updated_at',
         'deleted_at',
-        'status'
+        'status',        
+        'gender',
+        'type',
+        'content',
+        'color',
+        'color_code',
+        'fi_dates',
+        'unit_price',
+        'total_amount',
+        'style_description',
+        'product_character',
+        'pack_factor',
+        'sku_line_no',
+        'incoterm',
+        'named_place',
+        'part_description',
+        'material_value',
+        'total_value',
+        'due_date',
     ];
 }

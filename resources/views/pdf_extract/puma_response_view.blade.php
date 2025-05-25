@@ -132,12 +132,12 @@
             I accept and verify PO.
         </label>
     </div>
-    <input type="hidden" name="po_details" class="po_details"
-        value="{{ json_encode($data['po_details']) }}">
-    <input type="hidden" name="article_details" class="article_details"
-        value="{{ json_encode($data['article_info']) }}">
-    <input type="hidden" name="po_items" class="po_items"
-        value="{{ json_encode($data['po_items']) }}">
+    <input type="hidden" name="po_details" class="po_details" value="{{ json_encode($data['po_details']) }}">
+    <input type="hidden" name="article_details" class="article_details" value="{{ json_encode($data['article_info']) }}">
+    <input type="hidden" name="po_items" class="po_items" value="{{ json_encode($data['po_items']) }}">
+    <input type="hidden" name="vendor_name" id="vendor_name" value="Puma">
+    <input type="hidden" name="po_unit_price" class="po_unit_price" value="">
+    <input type="hidden" name="po_qty" class="po_qty" value="">
     <button type="button" class="btn btn-success btn-block w-100" id="saveButton" disabled>
         Verify & Save PO
     </button>

@@ -88,10 +88,10 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                     </a>
                     <ul class="slide-menu child1">
                         <li class="slide">
-                            <a href="#" class="side-menu__item ">Prepare</a>
+                            <a href="{{ route('packing_list_add') }}" class="side-menu__item {{ request()->routeIs('packing_list_add') ? 'active' : '' }}">Entry</a>
                         </li>
                         <li class="slide">
-                            <a href="#" class="side-menu__item ">Master</a>
+                            <a href="{{ route('pdf_extract_master') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_master') ? 'active' : '' }}">List</a>
                         </li>
                     </ul>
                 </li>
@@ -104,7 +104,7 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                         <i class="fe fe-chevron-right side-menu__angle"></i>
                     </a>
                     <ul class="slide-menu child1">
-                        @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor', 'list-vendor', 'view-vendor']))
+                        @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor', 'list-vendor', 'create-vendor-carton', 'list-vendor-carton']))
                         <li class="slide has-sub {{ request()->is('settings/vendor*') ? 'active open' : '' }}">
                             <a href="javascript:void(0);" class="side-menu__item {{ request()->is('settings/vendor*') ? 'active' : '' }}">
                                 Vendor
@@ -114,6 +114,11 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                                 @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor', 'list-vendor', 'view-vendor']))
                                 <li class="slide">
                                     <a href="{{route('vendor_index')}}" class="side-menu__item {{ request()->routeIs('vendor_index') ? 'active' : '' }}">Master</a>
+                                </li>
+                                @endif
+                                @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor-carton', 'list-vendor-carton', 'view-vendor-carton']))
+                                <li class="slide">
+                                    <a href="{{route('carton_jack_master')}}" class="side-menu__item {{ request()->routeIs('carton_jack_master') ? 'active' : '' }}">Carton</a>
                                 </li>
                                 @endif
                             </ul>

@@ -10,7 +10,7 @@
                 <div class="row mb-3">
                     <div class="col-sm-6">
                         <div class="form-floating">
-                            <input type="text" class="form-control form-control-sm" id="name" name="name" value="{{ $vendor_details['name'] }}" placeholder="Name">
+                            <input type="text" class="form-control form-control-sm" id="name" name="name" value="{{ $vendor_details['name'] }}" placeholder="Name" readonly>
                             <label for="name">Name</label>
                         </div>
                     </div>

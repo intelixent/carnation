@@ -170,15 +170,16 @@
 
 <div class="fixed-bottom p-3 bg-white border-top">
     <div class="form-check mb-2">
-    <input class="form-check-input" type="checkbox" id="verifyCheck">
-    <label class="form-check-label" for="verifyCheck">
-      I accept and verify PO.
-    </label>
-  </div>
-<input type="hidden" name="po_details" class="po_details" value='<?php echo json_encode($po);?>'/>
-<input type="hidden" name="article_details" class="article_details" value='<?php echo json_encode($article_info);?>'/>
-<input type="hidden" name="po_items" class="po_items" value='<?php echo json_encode($data['po_items']);?>'/>
-<input type="hidden" name="po_unit_price" class="po_unit_price" value='<?php echo $per_unit_price;?>'/>
-<input type="hidden" name="po_qty" class="po_qty" value="<?php echo $total_qty;?>"/>
+        <input class="form-check-input" type="checkbox" id="verifyCheck">
+        <label class="form-check-label" for="verifyCheck">
+            I accept and verify PO.
+        </label>
+    </div>
+    <input type="hidden" name="po_details" class="po_details" value='<?php echo json_encode($po);?>'/>
+    <input type="hidden" name="article_details" class="article_details" value='<?php echo json_encode($article_info);?>'/>
+    <input type="hidden" name="po_items" class="po_items" value='<?php echo json_encode($data['po_items']);?>'/>
+    <input type="hidden" name="po_unit_price" class="po_unit_price" value='<?php echo $per_unit_price;?>'/>
+    <input type="hidden" name="po_qty" class="po_qty" value="<?php echo $total_qty;?>"/>
+    <input type="hidden" name="vendor_name" id="vendor_name" value="Jack Jones">
     <button type="button" class="btn btn-success btn-block w-100" id="saveButton" disabled>Verify & Save PO</button>
 </div>

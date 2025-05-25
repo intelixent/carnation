@@ -1615,9 +1615,9 @@ async def process_pdf(request: dict = Body(...)):
             temp_path = temp_pdf.name
         
         try:
-            if "JackJones" in company:
+            if "Jack Jones" in company:
                 result = extract_jackjones_o(temp_path)
-            elif "Skechers" in company:
+            elif "Skecher" in company:
                 result = extract_skechers(temp_path)
             elif "Puma" in company:
                 result = extract_puma(temp_path)
