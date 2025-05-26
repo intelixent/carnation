@@ -27,9 +27,9 @@
         background-color: #f2f2f2;
         text-align: left;
     }
-    .error
-    {
-        color:red;
+
+    .error {
+        color: red;
     }
 </style>
 <div class="container-fluid">
@@ -46,7 +46,7 @@
         </div>
     </div>
     <!-- BreadCrumbs -->
-    
+
     <!-- row -->
     <div class="row">
         <div class="col-xl-12">
@@ -58,18 +58,15 @@
                     <form id="pdfExtractAddForm" enctype="multipart/form-data">
                         <div class="row mb-3">
                             <div class="col-sm-6">
-                                <div class="form-group">
-                                    <label for="vendor_id">Vendor</label>
-                                    <select class="form-control select2" id="vendor_id" name="vendor_id">
-                                        <option value="">Choose Vendor</option>
-                                        <option value="Skechers">Skechers</option>
-                                        <option value="JackJones">JackJones</option>
-                                        <option value="Puma">Puma</option>
-                                        <option value="JackJones">Selected</option>
-                                        <option value="Benetton">BENETTON</option>
-                                        <option value="JackJones">Vero Modo</option>
-                                    </select>
-                                </div>
+                                <label for="vendor_id" class="form-label">Select Vendor <span class="text-danger">*</span></label>
+                                <select name="vendor_id" id="vendor_id" class="form-control select2" required>
+                                    <option value="">Select Vendor</option>
+                                    @foreach($vendors as $vendor)
+                                    <option value="{{ $vendor->name }}" {{ request('vendor_id') == $vendor->name ? 'selected' : '' }}>
+                                        {{ $vendor->name }}
+                                    </option>
+                                    @endforeach
+                                </select>
                             </div>
                             <div class="col-sm-6">
                                 <label for="pdf_file" class="form-label">Pdf File</label>
@@ -86,7 +83,7 @@
 
                     <!-- Results section -->
                     <div class="resultsContainer">
-                       
+
                     </div>
                 </div>
             </div>
@@ -170,19 +167,22 @@
 
                     $.ajax({
                         // url: "http://localhost:8000/process",
-                        url:'{{ route("pdf_process") }}',
+                        url: '{{ route("pdf_process") }}',
                         type: "POST",
-                        data: {'company': vendorId,'pdf_base64': base64Pdf},
+                        data: {
+                            'company': vendorId,
+                            'pdf_base64': base64Pdf
+                        },
                         //contentType: "application/json",
                         dataType: "json",
                         success: function(response) {
                             Swal.close();
 
-                            if (response.status==true) {
+                            if (response.status == true) {
                                 $('.resultsContainer').html(response.html);
-    document.getElementById("verifyCheck").addEventListener("change", function() {
-                document.getElementById("saveButton").disabled = !this.checked;
-    });
+                                document.getElementById("verifyCheck").addEventListener("change", function() {
+                                    document.getElementById("saveButton").disabled = !this.checked;
+                                });
 
                                 $.toast({
                                     heading: 'Success',
@@ -227,56 +227,60 @@
     });
 
     $(document).on('click', '#saveButton', function() {
-          
-            Swal.fire({
-                title: 'Loading...',
-                html: 'Please wait while we store the details',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
 
-            var po_details = $(".po_details").val();
-            var article_details = $(".article_details").val();
-            var po_items = $(".po_items").val();
-            var po_unit_price = $(".po_unit_price").val();
-            var po_qty = $(".po_qty").val();
-
-            $.ajax({
-                url: "{{route('pdf_extract_store')}}",
-                method: 'POST',
-                data: {
-                    'po_details': po_details,
-                    'article_details': article_details,
-                    'po_items': po_items,
-                    'po_unit_price': po_unit_price,
-                    'po_qty': po_qty,
-                    _token: '{{ csrf_token() }}'
-                },
-                success: function(response) {
-                    Swal.close();
-                        location.reload();
-                            $.toast({
-                                heading: 'Success',
-                                text: response.message,
-                                position: 'top-center',
-                                bgColor: '#000',
-                                textColor: 'white',
-                                hideAfter: 3000,
-                                stack: 6
-                            });
-                    
-                },
-                error: function(xhr, status, error) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: 'Failed to load details. Please try again.'
-                    });
-                    console.error(error);
-                }
-            });
+        Swal.fire({
+            title: 'Loading...',
+            html: 'Please wait while we store the details',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
         });
+
+        var po_data = $(".po_data").val();
+        var po_details = $(".po_details").val();
+        var article_details = $(".article_details").val();
+        var po_items = $(".po_items").val();
+        var po_unit_price = $(".po_unit_price").val();
+        var po_qty = $(".po_qty").val();
+        var vendor_name = $("#vendor_name").val();
+
+        $.ajax({
+            url: "{{route('pdf_extract_store')}}",
+            method: 'POST',
+            data: {
+                'po_data': po_data,
+                'po_details': po_details,
+                'article_details': article_details,
+                'po_items': po_items,
+                'po_unit_price': po_unit_price,
+                'po_qty': po_qty,
+                'vendor_name': vendor_name,
+                _token: '{{ csrf_token() }}'
+            },
+            success: function(response) {
+                Swal.close();
+                //location.reload();
+                $.toast({
+                    heading: 'Success',
+                    text: response.message,
+                    position: 'top-center',
+                    bgColor: '#000',
+                    textColor: 'white',
+                    hideAfter: 3000,
+                    stack: 6
+                });
+
+            },
+            error: function(xhr, status, error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'Failed to load details. Please try again.'
+                });
+                console.error(error);
+            }
+        });
+    });
 </script>
 @endpush

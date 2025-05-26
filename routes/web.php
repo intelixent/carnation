@@ -8,7 +8,7 @@ use App\Http\Controllers\UsersController;
 use App\Http\Controllers\PdfExtractController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\POController;
-
+use App\Http\Controllers\PackingListController;
 
 /*
 |--------------------------------------------------------------------------
@@ -70,6 +70,16 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/details', [PdfExtractController::class, 'get_po_details'])->name('get_po_details');
     });
 
+    Route::group(['prefix' => 'packing_list'], function () {
+        Route::get('/add', [PackingListController::class, 'add'])->name('packing_list_add');
+        Route::post('/store', [PackingListController::class, 'store'])->name('packing_list_store');
+        Route::get('/po_search', [PackingListController::class, 'search_po'])->name('packing_list_search');
+        Route::get('/po_details', [PackingListController::class, 'get_po_details'])->name('packing_list_details');
+        Route::post('/item_add', [PackingListController::class, 'item_add'])->name('packing_list_item_add');
+        Route::get('/item_sizes', [PackingListController::class, 'get_sizes'])->name('packing_list_sizes');
+        Route::post('/item_store', [PackingListController::class, 'item_store'])->name('packing_list_item_store');
+    });
+
     Route::group(['prefix' => 'settings'], function () {
 
         Route::group(['prefix' => 'vendor'], function () {
@@ -81,8 +91,21 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
             Route::post('/update', [VendorController::class, 'update'])->name('vendor_update');
             Route::post('/delete', [VendorController::class, 'delete'])->name('vendor_delete');
             Route::post('/update_status', [VendorController::class, 'update_status'])->name('vendor_update_status');
+
+            Route::group(['prefix' => 'carton'], function () {
+                Route::get('/jack_master', [VendorController::class, 'carton_jack_master'])->name('carton_jack_master');
+                Route::get('/skecher_master', [VendorController::class, 'carton_skecher_master'])->name('carton_skecher_master');
+                Route::get('/puma_master', [VendorController::class, 'carton_puma_master'])->name('carton_puma_master');
+                Route::get('/benetton_master', [VendorController::class, 'carton_benetton_master'])->name('carton_benetton_master');
+                Route::get('/selected_master', [VendorController::class, 'carton_selected_master'])->name('carton_selected_master');
+                Route::get('/vero_master', [VendorController::class, 'carton_vero_master'])->name('carton_vero_master');
+                Route::post('/add', [VendorController::class, 'carton_add'])->name('carton_add');
+                Route::post('/store', [VendorController::class, 'carton_store'])->name('carton_store');
+                Route::post('/details', [VendorController::class, 'get_carton_details'])->name('get_carton_details');
+                Route::post('/edit', [VendorController::class, 'carton_edit'])->name('carton_edit');
+                Route::post('/update', [VendorController::class, 'carton_update'])->name('carton_update');
+                Route::post('/delete', [VendorController::class, 'carton_delete'])->name('carton_delete');
+            });
         });
     });
 });
-
-

@@ -65,13 +65,6 @@
                     </div>
                 </div>
                 <div class="card-body">
-                    @if($isSuperAdmin ||auth()->user()->hasDirectPermission('create-vendor'))
-                    <div class="mb-3 d-flex justify-content-end">
-                        <button type="button" class="btn btn-primary add-vendor">
-                            Add Vendor
-                        </button>
-                    </div>
-                    @endif
                     <div class="table-responsive">
                         <table class="table table-bordered text-nowrap w-100 dataTable">
                             <thead>
@@ -81,7 +74,6 @@
                                     <th>Contact</th>
                                     <th>Gst</th>
                                     <th>Actions</th>
-                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -109,18 +101,7 @@
                                                 @if($isSuperAdmin ||auth()->user()->hasDirectPermission('edit-vendor'))
                                                 <li><a class="dropdown-item edit-vendor" data-id="{{ $vendor->id }}" href="javascript:void(0);">Edit</a></li>
                                                 @endif
-                                                @if($isSuperAdmin ||auth()->user()->hasDirectPermission('delete-vendor'))
-                                                <li><a class="dropdown-item delete-vendor" data-id="{{ $vendor->id }}" href="javascript:void(0);">Delete</a></li>
-                                                @endif
                                             </ul>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="form-check form-switch">
-                                            @php
-                                            $hasPermission = $isSuperAdmin || auth()->user()->hasDirectPermission('status-vendor');
-                                            @endphp
-                                            <input class="form-check-input status-switch" type="checkbox" data-id="{{ $vendor->id }}" data-has-permission="{{ $hasPermission ? 'true' : 'false' }}" {{ $vendor->status == 0 ? 'checked' : '' }}>
                                         </div>
                                     </td>
                                 </tr>
@@ -243,70 +224,6 @@
                                 'error'
                             );
                         }
-                    });
-                }
-            });
-        });
-
-        $(document).on('change', '.status-switch', function() {
-            var id = $(this).data('id');
-            var status = $(this).is(':checked') ? 0 : 1;
-            var hasPermissionAttr = $(this).attr('data-has-permission');
-            var hasPermission = hasPermissionAttr === 'true';
-
-            if (!hasPermission) {
-                $(this).prop('checked', !$(this).is(':checked'));
-
-                Swal.fire({
-                    title: 'Permission Denied',
-                    text: 'You do not have permission to change vendor status.',
-                    icon: 'error',
-                    confirmButtonColor: '#3085d6',
-                    confirmButtonText: 'OK'
-                });
-                return;
-            }
-
-            $.ajax({
-                url: "{{ route('vendor_update_status') }}",
-                type: 'POST',
-                data: {
-                    id: id,
-                    status: status,
-                    _token: "{{ csrf_token() }}"
-                },
-                success: function(response) {
-                    if (response.success) {
-                        $.toast({
-                            heading: 'Success',
-                            text: 'Status updated successfully',
-                            position: 'top-right',
-                            bgColor: '#2ecc71',
-                            textColor: 'white',
-                            hideAfter: 3000,
-                            stack: 6
-                        });
-                    } else {
-                        $.toast({
-                            heading: 'Error',
-                            text: 'Error updating status',
-                            position: 'top-right',
-                            bgColor: '#e74c3c',
-                            textColor: 'white',
-                            hideAfter: 3000,
-                            stack: 6
-                        });
-                    }
-                },
-                error: function() {
-                    $.toast({
-                        heading: 'Error',
-                        text: 'Error updating status',
-                        position: 'top-right',
-                        bgColor: '#e74c3c',
-                        textColor: 'white',
-                        hideAfter: 3000,
-                        stack: 6
                     });
                 }
             });

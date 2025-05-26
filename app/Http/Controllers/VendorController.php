@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\VendorMaster;
 use App\Models\StateMaster;
+use App\Models\CartonMaster;
 
 class VendorController extends BaseController
 {
@@ -29,6 +30,11 @@ class VendorController extends BaseController
             $this->middleware('permissions:edit-vendor')->only(['edit_vendor', 'update']);
             $this->middleware('permissions:delete-vendor')->only('delete');
             $this->middleware('permissions:status-vendor')->only('update_status');
+            $this->middleware('permissions:create-vendor-carton')->only(['carton_add', 'carton_store']);
+            $this->middleware('permissions:list-vendor-carton')->only(['carton_selected_master', 'carton_puma_master', 'carton_jack_master', 'carton_skecher_master', 'carton_benetton_master', 'carton_vero_master']);
+            $this->middleware('permissions:view-vendor-carton')->only(['get_carton_details']);
+            $this->middleware('permissions:edit-vendor-carton')->only(['carton_edit', 'carton_update']);
+            $this->middleware('permissions:delete-vendor-carton')->only('carton_delete');
         }
     }
 
@@ -99,7 +105,6 @@ class VendorController extends BaseController
             $vendor = VendorMaster::findOrFail($request->vendor_id);
 
             $vendor->update([
-                'name' => $request->name,
                 'mobile' => $request->mobile,
                 'email' => $request->email,
                 'address' => $request->address,
@@ -142,5 +147,225 @@ class VendorController extends BaseController
             }
         }
         return response()->json(['success' => false]);
+    }
+
+    public function carton_jack_master()
+    {
+        $cartons = CartonMaster::where('vendor_id', 1)
+            ->where('status', 0)
+            ->get();
+
+        $page_data = [
+            'page_title' => "Master",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Carton",
+            'cartons' => $cartons,
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        return view('settings.vendor.carton.jack_master', $page_data);
+    }
+
+    public function carton_skecher_master()
+    {
+        $cartons = CartonMaster::where('vendor_id', 2)
+            ->where('status', 0)
+            ->get();
+
+        $page_data = [
+            'page_title' => "Master",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Carton",
+            'cartons' => $cartons,
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        return view('settings.vendor.carton.skecher_master', $page_data);
+    }
+
+    public function carton_puma_master()
+    {
+        $cartons = CartonMaster::where('vendor_id', 3)
+            ->where('status', 0)
+            ->get();
+
+        $page_data = [
+            'page_title' => "Master",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Carton",
+            'cartons' => $cartons,
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        return view('settings.vendor.carton.puma_master', $page_data);
+    }
+
+    public function carton_benetton_master()
+    {
+        $cartons = CartonMaster::where('vendor_id', 4)
+            ->where('status', 0)
+            ->get();
+
+        $page_data = [
+            'page_title' => "Master",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Carton",
+            'cartons' => $cartons,
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        return view('settings.vendor.carton.benetton_master', $page_data);
+    }
+
+    public function carton_selected_master()
+    {
+        $cartons = CartonMaster::where('vendor_id', 5)
+            ->where('status', 0)
+            ->get();
+
+        $page_data = [
+            'page_title' => "Master",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Carton",
+            'cartons' => $cartons,
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        return view('settings.vendor.carton.selected_master', $page_data);
+    }
+
+    public function carton_vero_master()
+    {
+        $cartons = CartonMaster::where('vendor_id', 6)
+            ->where('status', 0)
+            ->get();
+
+        $page_data = [
+            'page_title' => "Master",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Carton",
+            'cartons' => $cartons,
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        return view('settings.vendor.carton.vero_master', $page_data);
+    }
+
+    public function carton_add()
+    {
+        $vendors = VendorMaster::where('status', 0)->get();
+        return view('settings.vendor.carton.add', compact('vendors'));
+    }
+
+    public function carton_store(Request $request)
+    {
+        try {
+            $request->validate([
+                'vendor_id' => 'required|exists:vendor_master,id',
+                'cartons' => 'required|array|min:1',
+                'cartons.*.name' => 'required|string|max:255',
+                'cartons.*.length' => 'required|numeric|min:0',
+                'cartons.*.breadth' => 'required|numeric|min:0',
+                'cartons.*.height' => 'required|numeric|min:0',
+                'cartons.*.weight' => 'required|numeric|min:0',
+            ]);
+
+            $vendorId = $request->vendor_id;
+            $cartons = $request->cartons;
+            $createdBy = auth()->id();
+
+            foreach ($cartons as $cartonData) {
+                CartonMaster::create([
+                    'vendor_id' => $vendorId,
+                    'name' => $cartonData['name'],
+                    'length' => $cartonData['length'],
+                    'breadth' => $cartonData['breadth'],
+                    'height' => $cartonData['height'],
+                    'weight' => $cartonData['weight'],
+                    'created_by' => $createdBy,
+                    'created_at' => now(),
+                    'status' => 0
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cartons added successfully!',
+                'vendor_id' => $vendorId
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function carton_edit(Request $request)
+    {
+        $carton = CartonMaster::find($request->id);
+        $vendors = VendorMaster::where('status', 0)->get();
+        return view('settings.vendor.carton.edit', compact('carton', 'vendors'));
+    }
+
+    public function carton_update(Request $request)
+    {
+        try {
+            $request->validate([
+                'id' => 'required|exists:carton_master,id',
+                'name' => 'required|string|max:255',
+                'length' => 'required|numeric|min:0',
+                'breadth' => 'required|numeric|min:0',
+                'height' => 'required|numeric|min:0',
+                'weight' => 'required|numeric|min:0',
+            ]);
+
+            $carton = CartonMaster::find($request->id);
+            $carton->update([
+                'name' => $request->name,
+                'length' => $request->length,
+                'breadth' => $request->breadth,
+                'height' => $request->height,
+                'weight' => $request->weight,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Carton updated successfully!',
+                'vendor_id' => $request->vendor_id
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function carton_delete(Request $request)
+    {
+        try {
+            $carton = CartonMaster::find($request->id);
+            if ($carton) {
+                $vendorId = $carton->vendor_id;
+                $carton->delete();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Carton deleted successfully!',
+                    'vendor_id' => $vendorId
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Carton not found!'
+                ]);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
     }
 }

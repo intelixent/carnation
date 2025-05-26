@@ -192,6 +192,12 @@
         </label>
     </div>
     <input type="hidden" name="po_data" class="po_data" value="{{ json_encode($data) }}">
+    <input type="hidden" name="vendor_name" id="vendor_name" value="Skecher">
+    <input type="hidden" name="po_details" class="po_details" value="">
+    <input type="hidden" name="article_details" class="article_details" value="">
+    <input type="hidden" name="po_items" class="po_items" value="">
+    <input type="hidden" name="po_unit_price" class="po_unit_price" value="">
+    <input type="hidden" name="po_qty" class="po_qty" value="">
     <button type="button" class="btn btn-success btn-block w-100" id="saveButton" disabled>
         Verify & Save PO
     </button>
