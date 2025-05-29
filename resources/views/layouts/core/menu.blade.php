@@ -91,7 +91,7 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                             <a href="{{ route('packing_list_add') }}" class="side-menu__item {{ request()->routeIs('packing_list_add') ? 'active' : '' }}">Entry</a>
                         </li>
                         <li class="slide">
-                            <a href="{{ route('pdf_extract_master') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_master') ? 'active' : '' }}">List</a>
+                            <a href="{{ route('packing_list_master') }}" class="side-menu__item {{ request()->routeIs('packing_list_master') ? 'active' : '' }}">Master</a>
                         </li>
                     </ul>
                 </li>

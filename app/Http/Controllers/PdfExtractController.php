@@ -10,7 +10,6 @@ use App\Models\PoItems;
 use App\Models\PrefixSetting;
 use Illuminate\Support\Facades\Http;
 
-
 class PdfExtractController extends BaseController
 {
     protected $isSuperAdmin;
@@ -152,8 +151,10 @@ class PdfExtractController extends BaseController
 
     private function createPoMaster($vendor_id, $poNo, $po_details, $article_details, $request, $article_details_input)
     {
+        $actualVendorId = $this->getVendorIdByName($vendor_id);
+
         $poData = [
-            'vendor_id' => $vendor_id,
+            'vendor_id' => $actualVendorId,
             'po_ref_num' => $poNo,
             'created_by' => auth()->user()->id,
             'created_at' => now(),
@@ -215,6 +216,13 @@ class PdfExtractController extends BaseController
         return PoMaster::create($poData);
     }
 
+    private function getVendorIdByName($vendorName)
+    {
+        $vendor = VendorMaster::where('name', $vendorName)->first();
+
+        return $vendor->id;
+    }
+
     private function createPoItems($vendor_id, $po_id, $po_items, $po_details)
     {
         switch ($vendor_id) {
@@ -239,14 +247,20 @@ class PdfExtractController extends BaseController
     private function createJackJonesItems($po_id, $po_items)
     {
         foreach ($po_items as $po_item) {
+            $quantityUom = $po_item['quatity_uom'];
+            preg_match('/^(\d+)\s*(.*)$/', $quantityUom, $matches);
+
+            $qty = isset($matches[1]) ? (int)$matches[1] : 0;
+            $uom = isset($matches[2]) ? trim($matches[2]) : null;
+
             $poitemData = [
                 'po_id' => $po_id,
                 'sno' => $po_item['item_sno'],
                 'article_number' => $po_item['article_number'],
                 'id_color' => $po_item['artcicle_id_color'],
                 'size' => $po_item['size_years'],
-                'qty' => $po_item['quatity_uom'],
-                'uom' => $po_item['quatity_uom'],
+                'qty' => $qty,
+                'uom' => $uom,
                 'igst_taxable_value' => $po_item['igst_taxable_value'],
                 'igst_per' => $po_item['igst_percentage'],
                 'mrp' => $po_item['mrp'],
@@ -450,10 +464,10 @@ class PdfExtractController extends BaseController
         $formatted_po_items = [];
         foreach ($po_items as $item) {
             $formatted_item = [
-                'sno' => $item->item_sno,
-                'article_number' => $item->item_article_number,
-                'color' => $item->item_id_color,
-                'size' => $item->size_in_years,
+                'sno' => $item->sno,
+                'article_number' => $item->article_number,
+                'color' => $item->id_color,
+                'size' => $item->size,
                 'quatity_uom' => $item->qty,
                 'uom' => $item->uom,
                 'igst_taxable_value' => $item->igst_taxable_value,
