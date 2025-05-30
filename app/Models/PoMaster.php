@@ -37,4 +37,9 @@ class PoMaster extends Model
         'created_at',
         'status',
     ];
+
+    public function vendor()
+    {
+        return $this->belongsTo(VendorMaster::class, 'vendor_id');
+    }
 }

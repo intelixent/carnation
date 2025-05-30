@@ -14,7 +14,7 @@ class PackingListMaster extends Model
     protected $primaryKey = 'id';
 
     public $timestamps = false;
-    
+
     protected $fillable = [
         'po_id',
         'vendor_id',
@@ -23,6 +23,11 @@ class PackingListMaster extends Model
         'created_by',
         'status'
     ];
+
+    public function vendor()
+    {
+        return $this->belongsTo(VendorMaster::class, 'vendor_id');
+    }
 
     public function po()
     {

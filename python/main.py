@@ -362,6 +362,19 @@ def extract_jackjones_o(pdf_path):
                 print(f"Error extracting PO Number: {e}")
                 podata['PO Number'] = "Error extracting"
             
+            # Extract Vendor Number
+            try:
+                vendor_no_match = re.search(r'Your (?:goods )?vendor number with us:\s*(\d+)', first_page_text)
+                if vendor_no_match:
+                    podata['Vendor Number'] = vendor_no_match.group(1)
+                    print(f"Extracted Vendor Number: {podata['Vendor Number']}")
+                else:
+                    print("Warning: Vendor Number not found")
+                    podata['Vendor Number'] = "Not found"
+            except Exception as e:
+                print(f"Error extracting Vendor Number: {e}")
+                podata['Vendor Number'] = "Error extracting"
+            
             # Extract PO Date
             try:
                 po_date_match = re.search(r'PO number\s*/\s*PO date\s*\n\s*\d+\s*/\s*([\d.]+)', first_page_text)
@@ -570,6 +583,15 @@ def extract_jackjones_o(pdf_path):
             article_header_page = -1
             article_header_line = -1
             
+            # Add vendor number and colors to article_info
+            if 'Vendor Number' in podata:
+                article_info["Vendor"] = podata['Vendor Number']
+                print(f"Added Vendor to article_info: {article_info['Vendor']}")
+            
+            if 'Colors' in podata:
+                article_info["Colors"] = podata['Colors']
+                print(f"Added Colors to article_info: {article_info['Colors']}")
+            
             # First, locate the article header
             for page_idx in range(min(len(pdf.pages), 10)):  # Limit to first 10 pages
                 if article_header_page >= 0:
@@ -692,7 +714,6 @@ def extract_jackjones_o(pdf_path):
                                 # Extract construction type
                                 if start_idx < len(page_lines):
                                     const_line = page_lines[start_idx].strip()
-                                    #if const_line and "Knit" in const_line:
                                     article_info["Construction type"] = const_line
                                     print(f"Extracted Construction type: {article_info['Construction type']}")
                                     start_idx += 1
@@ -700,7 +721,6 @@ def extract_jackjones_o(pdf_path):
                                 # Extract gender
                                 if start_idx < len(page_lines):
                                     gender_line = page_lines[start_idx].strip()
-                                    #if gender_line in ["Male", "Female", "Unisex"]:
                                     article_info["Gender"] = gender_line
                                     print(f"Extracted Gender: {article_info['Gender']}")
                                     start_idx += 1
@@ -750,92 +770,109 @@ def extract_jackjones_o(pdf_path):
                     print(f"Scanning page {page_idx+1} with {len(lines)} lines for items")
                     
                     i = 0
-                    while i < len(lines) - 1:
-                        line = lines[i]
+                    while i < len(lines): # Adjusted loop condition slightly, main check is inside
+                        line = lines[i].strip() # Ensure current line is stripped
                         
                         # Match the item row pattern
-                        # More flexible pattern to catch variations
                         try:
-                            # item_match = re.match(
-                            #     r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+(.*?)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.?\d*)\s+([\d.]+)\s+([\d,]+\.?\d*)\s+(\d+)',
-                            #     line
-                            # )
+                            # Original item_match pattern
                             item_match = re.match(
                                 r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+([\w/]+)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.\d+)\s+([\d.]+)\s+([\d,]+\.\d+)\s+(\d{11})\s+(\d+)',
                                 line
                             )
                             
                             if item_match:
-                                print(f"Found item row at line {i} on page {page_idx+1}")
+                                print(f"Found item row at line {i} on page {page_idx+1}: '{line}'")
                                 item_number = item_match.group(1)
                                 article_variant = item_match.group(2)
                                 variant_id = item_match.group(3)
                                 
+                                # Initialize size from first line
+                                size_from_line1 = item_match.group(4).strip()
+                                print(f"Initial size from first line: '{size_from_line1}'")
+                                
+                                # Initialize other variables
+                                color = "Unknown"
+                                ean_suffix = ""
+                                current_item_size = size_from_line1 
+                                
                                 # Check for next line with additional information
                                 if i + 1 < len(lines):
-                                    next_line = lines[i + 1]
-                                    print(f"Next line: {next_line}")
+                                    next_line = lines[i + 1].strip()
+                                    print(f"Next line content: '{next_line}'")
                                     
-                                    # Check if the next line has the color and EAN suffix
-                                    color_match = re.match(r'^(.*?)(\d+)$', next_line.strip())
+                                    # Extract EAN suffix (last consecutive digits)
+                                    ean_suffix_match = re.search(r'(\d+)$', next_line)
+                                    if ean_suffix_match:
+                                        ean_suffix = ean_suffix_match.group(1)
+                                        base_str = next_line[:ean_suffix_match.start()].strip()
+                                    else:
+                                        ean_suffix = ""
+                                        base_str = next_line
                                     
-                                    if color_match:
-                                        color = color_match.group(1).strip()
-                                        ean_suffix = color_match.group(2)
-                                        print(f"Extracted color: '{color}' and EAN suffix: {ean_suffix}")
-                                        
-                                        # Get size
-                                        size = item_match.group(4).strip()
-                                        
-                                        # Get remaining fields
-                                        quantity_value = item_match.group(5)
-                                        nos_pcs = item_match.group(6)
-                                        igst = item_match.group(7)
-                                        igst_rate = item_match.group(8)
-                                        mrp = item_match.group(9)
-                                        ean_partial = item_match.group(10)
-                                        
-                                        # HSN code
-                                        hsn = ""
-                                        if len(item_match.groups()) > 10:
-                                            hsn = item_match.group(11)
+                                    # Check for size suffix in last token (ending with 'Y' or digit+'Y')
+                                    tokens = base_str.split()
+                                    size_suffix = None
+                                    color = "Unknown"
+                                    
+                                    if tokens:
+                                        last_token = tokens[-1]
+                                        # Check if last token is a size suffix (ends with Y or is digit+Y)
+                                        if last_token.endswith('Y') or re.fullmatch(r'\d+Y', last_token):
+                                            size_suffix = last_token
+                                            color = " ".join(tokens[:-1]).strip() or "Unknown"
                                         else:
-                                            # Try to extract HSN from the end of next_line
-                                            hsn_match = re.search(r'(\d{8})$', next_line)
-                                            if hsn_match:
-                                                hsn = hsn_match.group(1)
-                                                print(f"Extracted HSN from next line: {hsn}")
-                                            # If HSN not in next line, try to find it elsewhere on the page
-                                            elif "HSN" in text:
-                                                hsn_line_match = re.search(r'HSN[^\d]*(\d{8})', text)
-                                                if hsn_line_match:
-                                                    hsn = hsn_line_match.group(1)
-                                                    print(f"Extracted HSN from page text: {hsn}")
-                                        
-                                        full_ean = ean_partial + ean_suffix
-                                        quantity = f"{quantity_value} {nos_pcs}"
-                                        id_colour = f"{variant_id}/{color.strip()}"
-                                        
-                                        row = {
-                                            "item_sno": item_number,
-                                            "article_number": article_variant,
-                                            "artcicle_id_color": id_colour,
-                                            "size_years": size,
-                                            "quatity_uom": quantity,
-                                            "igst_taxable_value": igst,
-                                            "igst_percentage": igst_rate,
-                                            "mrp": mrp,
-                                            "ean_code": full_ean,
-                                            "hsn_code": hsn
-                                        }
-                                        
-                                        data_rows.append(row)
-                                        print(f"Added item row: {row}")
-                                        i += 2  # Skip the next line
-                                        continue
+                                            color = base_str.strip() or "Unknown"
+                                    else:
+                                        color = "Unknown"
+                                    
+                                    # Process size suffix if found
+                                    if size_suffix:
+                                        current_item_size = size_from_line1 + size_suffix
+                                        print(f"Extracted color: '{color}', size suffix: '{size_suffix}', combined size: '{current_item_size}', EAN suffix: '{ean_suffix}'")
+                                        i += 1  # Consume the next line
+                                    else:
+                                        print(f"Extracted color: '{color}', size unchanged: '{size_from_line1}', EAN suffix: '{ean_suffix}'")
+                                        i += 1  # Still consume the next line
+                                
+                                # Get remaining fields from item_match
+                                quantity_value = item_match.group(5)
+                                nos_pcs = item_match.group(6)
+                                igst = item_match.group(7)
+                                igst_rate = item_match.group(8)
+                                mrp = item_match.group(9)
+                                ean_partial = item_match.group(10)
+                                hsn = item_match.group(11) # HSN is group 11
+                                
+                                # Create full EAN code
+                                full_ean = ean_partial + ean_suffix
+                                
+                                # Prepare data row
+                                quantity = f"{quantity_value} {nos_pcs}"
+                                id_colour = f"{variant_id}/{color}" # Color is stripped above
+                                
+                                row = {
+                                    "item_sno": item_number,
+                                    "article_number": article_variant,
+                                    "artcicle_id_color": id_colour,
+                                    "size_years": current_item_size, # Use the combined or initial size
+                                    "quatity_uom": quantity,
+                                    "igst_taxable_value": igst,
+                                    "igst_percentage": igst_rate,
+                                    "mrp": mrp,
+                                    "ean_code": full_ean,
+                                    "hsn_code": hsn
+                                }
+                                
+                                data_rows.append(row)
+                                print(f"Added item row: {row}\n---")
+                                
+                                i += 1 # Increment for the current line (item_match line)
+                                continue # Continue to the next iteration of the while loop
+                            
                         except Exception as e:
-                            print(f"Error parsing item row at line {i}: {e}")
-                        
+                            print(f"Error parsing item row components at line {i} ('{line}'): {e}")
+
                         # Check for totals information
                         try:
                             total_match = re.search(r'Total Value\s+([A-Z]+)\s+([\d,]+\.\d+)', line)
@@ -890,7 +927,6 @@ def extract_jackjones_o(pdf_path):
         import traceback
         traceback.print_exc()
         return None
-
 
 def extract_jackjones_3(pdf_path):
     headers = [
@@ -1127,6 +1163,52 @@ def extract_puma(pdf_path):
                 print(f"DEBUG: Extracted PO details - Number: {po_details['po_number']}, Release Date: {po_details['po_release_date']}, EHD: {po_details['po_ehd']}")
                 break
         
+        # Extract Customer PO No. from first page
+        for line in lines:
+            if "Customer PO No." in line and "Ultimate Customer PO No." in line:
+                print(f"DEBUG: Found Customer PO line: {line}")
+                # Look for the next line that contains the actual PO numbers
+                continue
+            elif "Customer PO No." in line:
+                print(f"DEBUG: Found Customer PO header line: {line}")
+                # The PO numbers are likely on the next line or same line
+                po_line = line
+                # Look for pattern: number space INP/number
+                po_match = re.search(r'(\d+)\s+(INP/\d+)', po_line)
+                if po_match:
+                    article_info["customer_po_no"] = po_match.group(1)
+                    article_info["ultimate_customer_po_no"] = po_match.group(2)
+                    print(f"DEBUG: Customer PO No: {article_info['customer_po_no']}")
+                    print(f"DEBUG: Ultimate Customer PO No: {article_info['ultimate_customer_po_no']}")
+                    break
+                
+        # If not found in the same line, check subsequent lines in first page
+        if "customer_po_no" not in article_info:
+            for i, line in enumerate(lines):
+                if "Customer PO No." in line and i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    print(f"DEBUG: Checking next line for PO numbers: {next_line}")
+                    po_match = re.search(r'(\d+)\s+(INP/\d+)', next_line)
+                    if po_match:
+                        article_info["customer_po_no"] = po_match.group(1)
+                        article_info["ultimate_customer_po_no"] = po_match.group(2)
+                        print(f"DEBUG: Customer PO No (next line): {article_info['customer_po_no']}")
+                        print(f"DEBUG: Ultimate Customer PO No (next line): {article_info['ultimate_customer_po_no']}")
+                        break
+        
+        # If still not found, try a broader search pattern in first page
+        if "customer_po_no" not in article_info:
+            print("DEBUG: Trying broader search for Customer PO numbers in first page")
+            for line in lines:
+                # Look for the pattern anywhere in the line
+                po_match = re.search(r'(\d{10})\s+(INP/\d+)', line)
+                if po_match:
+                    article_info["customer_po_no"] = po_match.group(1)
+                    article_info["ultimate_customer_po_no"] = po_match.group(2)
+                    print(f"DEBUG: Customer PO No (broad search): {article_info['customer_po_no']}")
+                    print(f"DEBUG: Ultimate Customer PO No (broad search): {article_info['ultimate_customer_po_no']}")
+                    break
+
         # Process second page for article info and PO items
         if len(pdf.pages) > 1:
             page = pdf.pages[1]
@@ -1214,21 +1296,27 @@ def extract_puma(pdf_path):
                         if len(article_data) >= 4:
                             article_info["article_number"] = article_data[0]
                             
-                            # Find PUMA position
+                            # Find PUMA position (first occurrence)
                             puma_index = next((idx for idx, word in enumerate(article_data) 
                                             if "PUMA" in word), None)
                             
                             if puma_index and puma_index > 1:
-                                # Style Description = everything between article number and PUMA
+                                # Style Description = everything between article number and first PUMA
                                 article_info["style_description"] = " ".join(article_data[1:puma_index])
                                 
-                                # Color = PUMA + next word
-                                color_parts = article_data[puma_index:puma_index+2]
+                                # Color = everything from first PUMA until "National" (or end if not found)
+                                national_index = next((idx for idx, word in enumerate(article_data) 
+                                                    if "National" in word), len(article_data))
+                                
+                                color_parts = article_data[puma_index:national_index]
                                 article_info["color"] = " ".join(color_parts)
                                 
-                                # Product Character = remaining parts
-                                product_parts = article_data[puma_index+2:]
-                                article_info["product_character"] = " ".join(product_parts)
+                                # Product Character = everything from "National" onwards
+                                if national_index < len(article_data):
+                                    product_parts = article_data[national_index:]
+                                    article_info["product_character"] = " ".join(product_parts)
+                                else:
+                                    article_info["product_character"] = ""
                                 
                                 print(f"DEBUG: Correct article info: {article_info}")
                                 break
@@ -1237,6 +1325,7 @@ def extract_puma(pdf_path):
                                 article_info["style_description"] = " ".join(article_data[1:-2])
                                 article_info["color"] = article_data[-2]
                                 article_info["product_character"] = article_data[-1]
+
             
             # Extract PO items and additional fields (Pack Factor, SKU/Line No, Incoterm, Named Place)
             size_row = None

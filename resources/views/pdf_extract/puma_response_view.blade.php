@@ -73,6 +73,10 @@
                                 <td><strong>Color:</strong></td>
                                 <td>{{ $data['article_info']['color'] ?? '' }}</td>
                             </tr>
+                            <tr>
+                                <td><strong>Customer PO NO:</strong></td>
+                                <td>{{ $data['article_info']['customer_po_no'] ?? '' }}</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
