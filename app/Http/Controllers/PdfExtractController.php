@@ -72,9 +72,9 @@ class PdfExtractController extends BaseController
             // print_r($data);
 
             // Handle different company data structures
-            if ($company === 'Jack Jones') {
+            if ($company === 'JackJones') {
                 $view = 'pdf_extract.pdf_response_view';
-            } elseif ($company === 'Skecher') {
+            } elseif ($company === 'Skechers') {
                 $view = 'pdf_extract.skechers_response_view';
             } elseif ($company === 'Puma') {
                 $data['po_details']['customer_address'] = $data['customer_details']['address'] ?? '';
