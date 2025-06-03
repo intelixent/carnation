@@ -2,6 +2,15 @@
 
 @section('pagetitle', $page_title)
 @section('content')
+@push('styles')
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+<style>
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+        background-color: #007bff;
+        color: white;
+    }
+</style>
 <div class="container-fluid">
     <!-- row -->
 
@@ -12,44 +21,32 @@
             <div class="card">
                 <div class="card-header justify-content-between bg-primary">
                     <div class="card-title text-white">
-                        Packing List Entry
+                        Edit Packing List
                     </div>
                 </div>
                 <div class="card-body">
                     @csrf
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="po_search">Search PO/Vendor</label>
-                                <select class="form-control select2-po-search"
-                                    id="po_search"
-                                    name="po_id"
-                                    data-placeholder="Search by PO Number or Vendor Name"
-                                    required>
-                                    <option value=""></option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
+                    <input type="hidden" id="packing_list_id" value="{{ $packingList->id }}">
+                    <input type="hidden" id="po_id" value="{{ $packingList->po_id }}">
 
                     <!-- PO Details Display -->
-                    <div class="row mt-3" id="po_details" style="display: none;">
+                    <div class="row mt-3" id="po_details">
                         <div class="col-md-12">
                             <div class="row">
                                 <div class="col-md-4">
-                                    <p class="mb-1"><strong>PO Number:</strong> <span id="po_num"></span></p>
+                                    <p class="mb-1"><strong>PO Number:</strong> <span id="po_num">{{ $packingList->po_no }}</span></p>
                                 </div>
                                 <div class="col-md-4">
-                                    <p class="mb-1"><strong>PO Date:</strong> <span id="po_date"></span></p>
+                                    <p class="mb-1"><strong>PO Date:</strong> <span id="po_date">{{ \Carbon\Carbon::parse($packingList->po_date)->format('d-m-Y') }}</span></p>
                                 </div>
                                 <div class="col-md-4">
-                                    <p class="mb-1"><strong>Vendor:</strong> <span id="vendor_name"></span></p>
+                                    <p class="mb-1"><strong>Vendor:</strong> <span id="vendor_name">{{ $packingList->vendor->name }}</span></p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Add this after the PO details display -->
+                    <!-- Carton Items Table -->
                     <div class="row mt-4">
                         <div class="col-md-12">
                             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -69,7 +66,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <!-- Dynamic rows will be added here -->
+                                    <!-- Dynamic rows will be loaded here -->
                                 </tbody>
                             </table>
                         </div>
@@ -80,18 +77,6 @@
     </div>
 </div>
 @endsection
-
-@push('styles')
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
-<style>
-    .select2-container--default .select2-results__option--highlighted[aria-selected] {
-        background-color: #007bff;
-        color: white;
-    }
-</style>
-@endpush
-
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -103,76 +88,17 @@
             }
         });
 
-        // Initialize Select2
-        $('.select2-po-search').select2({
-            placeholder: "Search by PO Number or Vendor Name",
-            minimumInputLength: 2,
-            ajax: {
-                url: '{{ route("packing_list_search") }}',
-                dataType: 'json',
-                delay: 250,
-                data: function(params) {
-                    return {
-                        q: params.term
-                    };
-                },
-                processResults: function(data) {
-                    return {
-                        results: $.map(data, function(item) {
-                            return {
-                                id: item.id,
-                                text: item.po_num + ' || ' + item.vendor_name
-                            }
-                        })
-                    };
-                },
-                cache: true
-            }
-        });
+        // Load packing list items on page load
+        loadPackingListItems();
 
-        $('#po_search').on('change', function() {
-            var poId = $(this).val();
-            if (poId) {
-                $.ajax({
-                    url: '{{ route("get_packing_po_details") }}',
-                    type: 'GET',
-                    data: {
-                        id: poId
-                    },
-                    success: function(data) {
-                        $('#po_num').text(data.po_num);
-                        $('#po_date').text(data.po_date_formatted);
-                        $('#vendor_name').text(data.vendor_name);
+        function loadPackingListItems() {
+            const packingListId = $('#packing_list_id').val();
 
-                        // Store vendor_id in a hidden field for later use
-                        if (!$('#vendor_id').length) {
-                            $('body').append('<input type="hidden" id="vendor_id" value="' + data.vendor_id + '">');
-                        } else {
-                            $('#vendor_id').val(data.vendor_id);
-                        }
-
-                        $('#po_details').show();
-
-                        // Load existing packing list items
-                        loadPackingListItems(poId);
-                    },
-                    error: function(xhr) {
-                        console.error('Error fetching PO details');
-                        $('#po_details').hide();
-                    }
-                });
-            } else {
-                $('#po_details').hide();
-                $('#itemsTable tbody').empty();
-            }
-        });
-
-        function loadPackingListItems(poId) {
             $.ajax({
-                url: '{{ route("packing_list_items") }}',
+                url: '{{ route("packing_list_items_by_id") }}',
                 type: 'GET',
                 data: {
-                    po_id: poId
+                    packing_list_id: packingListId
                 },
                 success: function(items) {
                     $('#itemsTable tbody').empty();
@@ -200,6 +126,9 @@
                             `);
                         });
                     }
+                },
+                error: function(xhr) {
+                    console.error('Error loading items');
                 }
             });
         }
@@ -238,7 +167,7 @@
 
         $(document).on('click', '.edit-item', function() {
             const itemId = $(this).data('id');
-            const poId = $('#po_search').val();
+            const poId = $('#po_id').val();
 
             $.ajax({
                 url: "{{ route('packing_list_item_edit') }}",
@@ -260,7 +189,6 @@
 
         $(document).on('click', '.remove-item', function() {
             const itemId = $(this).data('id');
-            const row = $(this).closest('tr');
 
             Swal.fire({
                 title: 'Are you sure?',
@@ -288,11 +216,7 @@
                                 showConfirmButton: false
                             });
 
-                            // Reload items to update delete button visibility
-                            const poId = $('#po_search').val();
-                            if (poId) {
-                                loadPackingListItems(poId);
-                            }
+                            loadPackingListItems();
                         },
                         error: function(xhr) {
                             Swal.fire({
@@ -369,8 +293,9 @@
                     });
 
                     if (response.po_id) {
-                        loadPackingListItems(response.po_id);
+                        loadPackingListItems();
                     }
+
                 },
                 error: function(xhr) {
                     let errorMessage = 'Something went wrong';

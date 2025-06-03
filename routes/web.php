@@ -71,13 +71,22 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
     });
 
     Route::group(['prefix' => 'packing_list'], function () {
+        Route::get('/master', [PackingListController::class, 'index'])->name('packing_list_master');
         Route::get('/add', [PackingListController::class, 'add'])->name('packing_list_add');
-        Route::post('/store', [PackingListController::class, 'store'])->name('packing_list_store');
+        Route::get('/edit/{id}', [PackingListController::class, 'edit'])->name('packing_list_edit');
+        Route::get('/items_by_id', [PackingListController::class, 'get_packing_list_items_by_id'])->name('packing_list_items_by_id');
         Route::get('/po_search', [PackingListController::class, 'search_po'])->name('packing_list_search');
-        Route::get('/po_details', [PackingListController::class, 'get_po_details'])->name('packing_list_details');
+        Route::get('/po_details', [PackingListController::class, 'get_packing_po_details'])->name('get_packing_po_details');
+        Route::post('/details', [PackingListController::class, 'packing_list_details'])->name('packing_list_details');
+        Route::get('/items', [PackingListController::class, 'get_packing_list_items'])->name('packing_list_items');
         Route::post('/item_add', [PackingListController::class, 'item_add'])->name('packing_list_item_add');
         Route::get('/item_sizes', [PackingListController::class, 'get_sizes'])->name('packing_list_sizes');
         Route::post('/item_store', [PackingListController::class, 'item_store'])->name('packing_list_item_store');
+        Route::post('/item_edit', [PackingListController::class, 'item_edit'])->name('packing_list_item_edit');
+        Route::post('/item_update', [PackingListController::class, 'item_update'])->name('packing_list_item_update');
+        Route::delete('/item_delete', [PackingListController::class, 'item_delete'])->name('packing_list_item_delete');
+        Route::post('/delete', [PackingListController::class, 'delete'])->name('packing_list_delete');
+        Route::get('/print/{id}', [PackingListController::class, 'po_print'])->name('packing_list_print');
     });
 
     Route::group(['prefix' => 'settings'], function () {

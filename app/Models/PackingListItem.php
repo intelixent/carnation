@@ -17,6 +17,7 @@ class PackingListItem extends Model
     
     protected $fillable = [
         'packing_list_id',
+        'po_item_id',
         'carton_id',
         'article_number',
         'size',
@@ -28,6 +29,11 @@ class PackingListItem extends Model
     public function carton()
     {
         return $this->belongsTo(CartonMaster::class, 'carton_id');
+    }
+
+    public function po_item()
+    {
+        return $this->belongsTo(PoItems::class, 'po_item_id');
     }
 
     public function packingList()
