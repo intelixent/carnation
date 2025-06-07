@@ -74,7 +74,7 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                             <a href="{{ route('pdf_extract_add') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_add') ? 'active' : '' }}">Upload</a>
                         </li>
                         <li class="slide">
-                            <a href="{{ route('pdf_extract_master') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_master') ? 'active' : '' }}">Master</a>
+                            <a href="{{ route('pdf_extract_amended_master') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_amended_master') || request()->routeIs('pdf_extract_all_master')? 'active' : '' }}">Master</a>
                         </li>
                     </ul>
                 </li>
@@ -87,6 +87,9 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                         <i class="fe fe-chevron-right side-menu__angle"></i>
                     </a>
                     <ul class="slide-menu child1">
+                        <li class="slide">
+                            <a href="{{ route('packing_list_config') }}" class="side-menu__item {{ request()->routeIs('packing_list_config') ? 'active' : '' }}">Config</a>
+                        </li>
                         <li class="slide">
                             <a href="{{ route('packing_list_add') }}" class="side-menu__item {{ request()->routeIs('packing_list_add') ? 'active' : '' }}">Entry</a>
                         </li>

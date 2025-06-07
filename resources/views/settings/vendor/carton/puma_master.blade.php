@@ -52,7 +52,6 @@
                                             <thead>
                                                 <tr>
                                                     <th>S.No</th>
-                                                    <th>Name</th>
                                                     <th>Length</th>
                                                     <th>Breadth</th>
                                                     <th>Height</th>
@@ -64,7 +63,6 @@
                                                 @foreach($cartons as $key => $carton)
                                                 <tr>
                                                     <td>{{ $key + 1 }}</td>
-                                                    <td>{{ $carton ->name }}</td>
                                                     <td>{{ $carton ->length }}</td>
                                                     <td>{{ $carton ->breadth }}</td>
                                                     <td>{{ $carton ->height }}</td>
@@ -212,9 +210,6 @@
             const newRow = `
             <tr>
                 <td>
-                    <input type="text" name="cartons[${rowIndex}][name]" class="form-control carton-name" placeholder="Enter carton name" required>
-                </td>
-                <td>
                     <input type="number" name="cartons[${rowIndex}][length]" class="form-control carton-length" placeholder="Length" step="0.01" required>
                 </td>
                 <td>
@@ -347,10 +342,6 @@
             // Edit form validation
             $("#CartonEditForm").validate({
                 rules: {
-                    name: {
-                        required: true,
-                        minlength: 2
-                    },
                     length: {
                         required: true,
                         min: 0.01
@@ -369,10 +360,6 @@
                     }
                 },
                 messages: {
-                    name: {
-                        required: "Please enter carton name",
-                        minlength: "Carton name must be at least 2 characters"
-                    },
                     length: {
                         required: "Please enter length",
                         min: "Length must be greater than 0"

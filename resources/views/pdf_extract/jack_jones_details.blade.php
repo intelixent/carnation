@@ -1,8 +1,8 @@
 <div class="modal-dialog modal-xl">
     <div class="modal-content">
         @php
-                                    $po = $data['po_details'];
-                                    @endphp
+        $po = $data['po_details'];
+        @endphp
         <div class="modal-header">
             <h5 class="modal-title">Purchase Order Details - #{{ $po['po_ref_num'] ?? '' }}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -27,13 +27,13 @@
                                     <div class="col-md-6">
                                         <h5>PO Information</h5>
                                         <ul class="list-group mb-3">
-                                            <li class="list-group-item"><strong>PO Number:</strong> {{ $po['PO Number'] ?? '' }} - <strong>PO Date:</strong> {{ $po['PO Date'] ?? '' }}</li>
-                                            <li class="list-group-item"><strong>Goods Ready Date:</strong> {{ $po['Goods Ready Date'] ?? '' }}</li>
-                                            <li class="list-group-item"><strong>MRP:</strong> {{ $po['MRP'] ?? '' }}</li>
-                                            <li class="list-group-item"><strong>VCP:</strong> {{ $po['VCP'] ?? '' }}</li>
-                                            <li class="list-group-item"><strong>Colors:</strong> {{ $po['Colors'] ?? '' }}</li>
-                                            <li class="list-group-item"><strong>GSTIN:</strong> {{ $po['GSTIN'] ?? '' }}</li>
-                                            <li class="list-group-item"><strong>CIN:</strong> {{ $po['CIN'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>PO Number:</strong> {{ $po['po_num'] ?? '' }} - <strong>PO Date:</strong> {{ $po['po_date'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>Goods Ready Date:</strong> {{ $po['goods_ready_date'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>MRP:</strong> {{ $po['mrp'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>VCP:</strong> {{ $po['vcp'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>Colors:</strong> {{ $po['colors'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>GSTIN:</strong> {{ $po['vendor_gst'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>CIN:</strong> {{ $po['vendor_cin'] ?? '' }}</li>
                                         </ul>
                                     </div>
 

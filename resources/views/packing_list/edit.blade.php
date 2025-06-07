@@ -28,18 +28,29 @@
                     @csrf
                     <input type="hidden" id="packing_list_id" value="{{ $packingList->id }}">
                     <input type="hidden" id="po_id" value="{{ $packingList->po_id }}">
+                    <input type="hidden" id="vendor_id" value="{{ $packingList->vendor_id }}">
+
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">Color</label>
+                            <select class="form-control select2" id="colorSelect" required disabled>
+                                <option value="">Select Color</option>
+                            </select>
+                        </div>
+                    </div>
 
                     <!-- PO Details Display -->
                     <div class="row mt-3" id="po_details">
                         <div class="col-md-12">
                             <div class="row">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <p class="mb-1"><strong>PO Number:</strong> <span id="po_num">{{ $packingList->po_no }}</span></p>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <p class="mb-1"><strong>PO Date:</strong> <span id="po_date">{{ \Carbon\Carbon::parse($packingList->po_date)->format('d-m-Y') }}</span></p>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <p class="mb-1"><strong>Vendor:</strong> <span id="vendor_name">{{ $packingList->vendor->name }}</span></p>
                                 </div>
                             </div>
@@ -88,6 +99,29 @@
             }
         });
 
+        $('.select2').select2();
+
+        const poId = $('#po_id').val()
+
+        loadColors(poId);
+
+        function loadColors(poId) {
+            $.ajax({
+                url: '{{ route("get_po_colors") }}',
+                type: 'GET',
+                data: {
+                    po_id: poId
+                },
+                success: function(colors) {
+                    var options = '<option value="">Select Color</option>';
+                    colors.forEach(function(color) {
+                        options += '<option value="' + color + '">' + color + '</option>';
+                    });
+                    $('#colorSelect').html(options).prop('disabled', false);
+                }
+            });
+        }
+
         // Load packing list items on page load
         loadPackingListItems();
 
@@ -134,18 +168,9 @@
         }
 
         $(document).on('click', '.add-item', function() {
-            const poId = $('#po_search').val();
+            const poId = $('#po_id').val();
             const vendorId = $('#vendor_id').val();
-
-            if (!poId) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'PO Required',
-                    text: 'Please select a PO first',
-                    confirmButtonColor: '#3085d6'
-                });
-                return;
-            }
+            const color = $('#colorSelect').val();
 
             $.ajax({
                 url: "{{ route('packing_list_item_add') }}",
@@ -153,6 +178,8 @@
                 data: {
                     id: poId,
                     vendor_id: vendorId,
+                    color: color,
+                    packing_list_id: $('#packing_list_id').val()
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
@@ -179,6 +206,22 @@
                 success: function(response) {
                     $("#add_modal").html(response);
                     $('.select2').select2({
+                        width: '100%',
+                        dropdownParent: $('.modal-body')
+                    });
+                    $("#add_modal").modal('show');
+                }
+            });
+            $.ajax({
+                url: "{{ route('packing_list_item_edit') }}",
+                method: 'POST',
+                data: {
+                    id: itemId,
+                    po_id: poId
+                },
+                success: function(response) {
+                    $("#add_modal").html(response);
+                    $('.select2', '#add_modal').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
                     });
@@ -233,28 +276,70 @@
 
         $(document).on('change', '#articleSelect', function() {
             const poId = $('#po_id').val();
+            const color = $('#color').val();
             const article = $(this).val();
 
-            $.ajax({
-                url: '{{ route("packing_list_sizes") }}',
-                data: {
-                    po_id: poId,
-                    article_number: article
-                },
-                success: function(data) {
-                    $('#sizeSelect').html(data.options).prop('disabled', false);
-                }
-            });
+            if (article) {
+                $.ajax({
+                    url: '{{ route("get_sizes_with_qty") }}',
+                    data: {
+                        po_id: poId,
+                        color: color,
+                        article_number: article
+                    },
+                    success: function(data) {
+                        let options = '<option value="">Select Size</option>';
+                        data.forEach(function(item) {
+                            if (item.remaining_qty > 0) {
+                                options += `<option value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
+                                    ${item.size} (Available: ${item.remaining_qty})
+                                </option>`;
+                            }
+                        });
+                        $('#sizeSelect').html(options).prop('disabled', false);
+                        $('#quantityInput').val('').prop('max', 0);
+                    }
+                });
+            } else {
+                $('#sizeSelect').html('<option value="">Select Size</option>').prop('disabled', true);
+                $('#quantityInput').val('').prop('max', 0);
+            }
+        });
+
+        $(document).on('change', '#sizeSelect', function() {
+            const maxQty = parseInt($(this).find(':selected').data('max-qty')) || 0;
+            $('#quantityInput').attr('max', maxQty).val('');
+            if (maxQty > 0) {
+                $('#quantityInput').prop('disabled', false);
+            }
+        });
+
+        $(document).on('input', '#quantityInput', function() {
+            const maxQty = parseInt($('#sizeSelect').find(':selected').data('max-qty')) || 0;
+            const currentQty = parseInt($(this).val()) || 0;
+
+            if (currentQty > maxQty) {
+                $(this).val(maxQty);
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Quantity Limit',
+                    text: `Maximum available quantity is ${maxQty}`,
+                    confirmButtonColor: '#3085d6'
+                });
+            }
         });
 
         $(document).on('click', '#saveItemBtn', function() {
             const isEdit = $('#itemId').length > 0;
             const data = {
                 po_id: $('#po_id').val(),
-                carton_id: $('#cartonSelect').val(),
+                carton_id: $('#carton_id').val(),
                 article_number: $('#articleSelect').val(),
+                color: $('#color').val(),
                 size: $('#sizeSelect').val(),
-                quantity: $('#quantityInput').val()
+                quantity: $('#quantityInput').val(),
+                packing_list_id: $('#packing_list_id').val(),
+                config_item_id: $('#sizeSelect').find(':selected').data('config-id')
             };
 
             if (isEdit) {
@@ -292,10 +377,7 @@
                         showConfirmButton: false
                     });
 
-                    if (response.po_id) {
-                        loadPackingListItems();
-                    }
-
+                    loadPackingListItems();
                 },
                 error: function(xhr) {
                     let errorMessage = 'Something went wrong';

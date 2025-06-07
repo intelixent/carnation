@@ -59,15 +59,20 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         });
     });
 
-    Route::group(['prefix' => 'extract'], function () {
-        Route::get('/', [PdfExtractController::class, 'index'])->name('pdf_extract_master');
+    Route::group(['prefix' => 'po'], function () {
+        Route::get('/amended', [PdfExtractController::class, 'amended'])->name('pdf_extract_amended_master');
+        Route::get('/all', [PdfExtractController::class, 'all'])->name('pdf_extract_all_master');
         Route::get('/add', [PdfExtractController::class, 'add'])->name('pdf_extract_add');
         Route::post('/store', [PdfExtractController::class, 'store'])->name('pdf_extract_store');
         Route::post('/details', [PdfExtractController::class, 'details'])->name('pdf_extract_details');
         Route::post('/delete', [PdfExtractController::class, 'delete'])->name('pdf_extract_delete');
-        Route::post('/processpdf', [PdfExtractController::class, 'processpdf'])->name('pdf_process');
-        Route::get('/get_po_table', [POController::class, 'get_po_table'])->name('get_po_table');
+        Route::post('/pdf_process', [PdfExtractController::class, 'pdf_process'])->name('pdf_process');
+        Route::get('/get_po_table', [PdfExtractController::class, 'get_po_table'])->name('get_po_table');
         Route::post('/details', [PdfExtractController::class, 'get_po_details'])->name('get_po_details');
+        Route::post('/get_vendor_custom_field', [PdfExtractController::class, 'get_vendor_custom_field'])->name('get_vendor_custom_field');
+        Route::post('/check_po_exists', [PdfExtractController::class, 'check_po_exists'])->name('check_po_exists');
+        Route::post('/get_amend_details', [PdfExtractController::class, 'get_amend_details'])->name('get_amend_details');
+        Route::post('/po_amended', [PdfExtractController::class, 'po_amended'])->name('po_amended');
     });
 
     Route::group(['prefix' => 'packing_list'], function () {
@@ -77,6 +82,8 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/items_by_id', [PackingListController::class, 'get_packing_list_items_by_id'])->name('packing_list_items_by_id');
         Route::get('/po_search', [PackingListController::class, 'search_po'])->name('packing_list_search');
         Route::get('/po_details', [PackingListController::class, 'get_packing_po_details'])->name('get_packing_po_details');
+        Route::get('/po_colors', [PackingListController::class, 'get_po_colors'])->name('get_po_colors');
+        Route::get('/sizes_with_qty', [PackingListController::class, 'get_sizes_with_qty'])->name('get_sizes_with_qty');
         Route::post('/details', [PackingListController::class, 'packing_list_details'])->name('packing_list_details');
         Route::get('/items', [PackingListController::class, 'get_packing_list_items'])->name('packing_list_items');
         Route::post('/item_add', [PackingListController::class, 'item_add'])->name('packing_list_item_add');
@@ -87,6 +94,10 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::delete('/item_delete', [PackingListController::class, 'item_delete'])->name('packing_list_item_delete');
         Route::post('/delete', [PackingListController::class, 'delete'])->name('packing_list_delete');
         Route::get('/print/{id}', [PackingListController::class, 'po_print'])->name('packing_list_print');
+        Route::get('/config', [PackingListController::class, 'config'])->name('packing_list_config');
+        Route::post('/get_config_vendor_po', [PackingListController::class, 'get_config_vendor_po'])->name('get_config_vendor_po');
+        Route::post('/get_config_po_details', [PackingListController::class, 'get_config_po_details'])->name('get_config_po_details');
+        Route::post('/save_config_po_details', [PackingListController::class, 'save_config_po_details'])->name('save_config_po_details');
     });
 
     Route::group(['prefix' => 'settings'], function () {

@@ -30,7 +30,6 @@
                     <table class="table table-bordered" id="carton-table">
                         <thead class="table-primary">
                             <tr>
-                                <th>Name <span class="text-danger">*</span></th>
                                 <th>Length <span class="text-danger">*</span></th>
                                 <th>Breadth <span class="text-danger">*</span></th>
                                 <th>Height <span class="text-danger">*</span></th>

@@ -14,11 +14,12 @@ class PackingListItem extends Model
     protected $primaryKey = 'id';
 
     public $timestamps = false;
-    
+
     protected $fillable = [
         'packing_list_id',
         'po_item_id',
         'carton_id',
+        'carton_name',
         'article_number',
         'size',
         'quantity',

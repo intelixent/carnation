@@ -20,14 +20,6 @@
                 </div>
 
                 <div class="row mb-3">
-                    <div class="col-sm-12">
-                        <label for="edit_name" class="form-label">Carton Name <span class="text-danger">*</span></label>
-                        <input type="text" name="name" id="edit_name" class="form-control"
-                            value="{{ $carton->name }}" placeholder="Enter carton name" required>
-                    </div>
-                </div>
-
-                <div class="row mb-3">
                     <div class="col-sm-6">
                         <label for="edit_length" class="form-label">Length <span class="text-danger">*</span></label>
                         <input type="number" name="length" id="edit_length" class="form-control"

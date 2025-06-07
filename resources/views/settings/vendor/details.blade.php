@@ -51,6 +51,20 @@
                             </td>
                         </tr>
                         <tr>
+                            <td>
+                                <div class="d-flex flex-column gap-1">
+                                    <span class="text-uppercase text-secondary" style="font-size: 11px;">Excess</span>
+                                    <span class="fw-semibold text-dark">{{ $vendor_details->excess ?? 'N/A' }} %</span>
+                                </div>
+                            </td>
+                            <td colspan="2">
+                                <div class="d-flex flex-column gap-1">
+                                    <span class="text-uppercase text-secondary" style="font-size: 11px;">Shortage</span>
+                                    <span class="fw-semibold text-dark">{{ $vendor_details->shortage ?? 'N/A' }} %</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
                             <td colspan="3">
                                 <div class="d-flex flex-column gap-1">
                                     <span class="text-uppercase text-secondary" style="font-size: 11px;">Notes</span>
