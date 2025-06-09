@@ -147,7 +147,7 @@
                 @if($packing_list->items->isNotEmpty())
                 {{-- Group items by carton name --}}
                 @php
-                $byCarton = $packing_list->items->groupBy(fn($item) => $item->carton->name);
+                $byCarton = $packing_list->items->groupBy(fn($item) => $item->carton_name);
                 @endphp
 
                 @foreach($byCarton as $cartonName => $items)

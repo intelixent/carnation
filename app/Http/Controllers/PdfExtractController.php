@@ -8,7 +8,9 @@ use App\Models\VendorMaster;
 use App\Models\PoMaster;
 use App\Models\PoItems;
 use App\Models\PrefixSetting;
+use App\Utils\POutils;
 use Illuminate\Support\Facades\Http;
+use Yajra\DataTables\Facades\DataTables;
 
 class PdfExtractController extends BaseController
 {
@@ -24,12 +26,12 @@ class PdfExtractController extends BaseController
         }
     }
 
-    public function index()
+    public function amended()
     {
         $page_data = [
-            'page_title' => "PO Master",
-            'page_main_title' => "PO Master",
-            'page_child_title' => "Master",
+            'page_title' => "PO Amended Master",
+            'page_main_title' => "PO Amended Master",
+            'page_child_title' => "Amended Master",
             'isSuperAdmin' => $this->isSuperAdmin,
 
         ];
@@ -37,7 +39,68 @@ class PdfExtractController extends BaseController
             ->orderBy('id', 'asc')
             ->get();
 
-        return view('pdf_extract.index', $page_data);
+        return view('pdf_extract.amended', $page_data);
+    }
+
+    public function all()
+    {
+        $page_data = [
+            'page_title' => "PO All Master",
+            'page_main_title' => "PO All Master",
+            'page_child_title' => "All Master",
+            'isSuperAdmin' => $this->isSuperAdmin,
+
+        ];
+        $page_data['vendors'] = VendorMaster::whereIn('status', [0, 1])
+            ->orderBy('id', 'asc')
+            ->get();
+
+        return view('pdf_extract.all', $page_data);
+    }
+
+    public function get_po_table(Request $request)
+    {
+        $query = POutils::getPoQuery($request, $this->isSuperAdmin);
+
+        return DataTables::of($query)
+            ->addIndexColumn()
+            ->addColumn('po_ref_num', function ($row) use ($request) {
+                if ($request->type === 'amended') {
+                    $displayText = $row->po_job_num;
+                } else {
+                    $displayText = $row->po_ref_num;
+                }
+
+                $viewDetails = '';
+                $viewDetails .= '<li><a class="dropdown-item po-details-link" data-id="' . $row->id . '" href="javascript:void(0);">View</a></li>';
+
+                if ($this->isSuperAdmin && $row->status == 0) {
+                    $viewDetails .= '<li><a class="dropdown-item po-amend" data-id="' . $row->id . '" href="javascript:void(0);">Amend PO</a></li>';
+                }
+
+                return '<div class="dropdown">
+                        <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">' . $displayText . '</button>
+                        <ul class="dropdown-menu">
+                        ' . $viewDetails . '
+                        </ul>
+                    </div>';
+            })
+            ->addColumn('vendor', function ($row) {
+                $vendor_name = $row->vendor->name ?? 'N/A';
+
+                return "<strong>{$vendor_name}</strong>";
+            })
+            ->addColumn('created', function ($row) {
+                $created_date = \Carbon\Carbon::parse($row->created_at)->format('d-m-Y h:i A');
+                $time_elapsed = \Carbon\Carbon::parse($row->created_at)->diffForHumans();
+                $creator_name = $row->creator->full_name ?? 'N/A';
+
+                return "<div>{$created_date}<br>
+            <span class='text-muted'>($time_elapsed)</span></div>
+            <small class='text-muted'>Created By: {$creator_name}</small>";
+            })
+            ->rawColumns(['po_ref_num', 'po_num', 'created', 'po_date', 'vendor'])
+            ->make(true);
     }
 
     public function add()
@@ -54,13 +117,40 @@ class PdfExtractController extends BaseController
         return view('pdf_extract.add', $page_data);
     }
 
-    public function processpdf(Request $request)
+    public function get_vendor_custom_field(Request $request)
     {
-        $company = $request->input('company');
+        try {
+            $vendor_id = $request->input('vendor_id');
+
+            $vendor = VendorMaster::where('id', $vendor_id)->first();
+
+            if ($vendor) {
+                return response()->json([
+                    'success' => true,
+                    'custom_field_no' => $vendor->custom_field_no,
+                    'extraction_no' => $vendor->extraction_no,
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor not found'
+                ]);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching vendor data: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function pdf_process(Request $request)
+    {
+        $extraction_no = $request->input('extraction_no');
         $pdfBase64 = $request->input('pdf_base64');
 
         $response = Http::post('http://localhost:8000/process', [
-            'company' => $company,
+            'extraction_no' => $extraction_no,
             'pdf_base64' => $pdfBase64,
         ]);
 
@@ -71,24 +161,67 @@ class PdfExtractController extends BaseController
             // print_r($data);
 
             // Handle different company data structures
-            if ($company === 'JackJones') {
-                $view = 'pdf_extract.pdf_response_view';
-            } elseif ($company === 'Skechers') {
+            if ($extraction_no === '1') {
+                $view = 'pdf_extract.jack_jones_response_view';
+            } elseif ($extraction_no === '2') {
                 $view = 'pdf_extract.skechers_response_view';
-            } elseif ($company === 'Puma') {
+            } elseif ($extraction_no === '3') {
                 $data['po_details']['customer_address'] = $data['customer_details']['address'] ?? '';
                 unset($data['customer_details']);
                 $view = 'pdf_extract.puma_response_view';
-            } elseif ($company === 'Benetton') {
+            } elseif ($extraction_no === '4') {
                 $view = 'pdf_extract.benetton_response_view';
             } else {
-                $view = 'pdf_extract.pdf_response_view';
+                $view = 'pdf_extract.jack_jones_response_view';
             }
 
             $html = view($view, compact('data'))->render();
             return response()->json(['status' => true, 'html' => $html]);
         } else {
             return response()->json(['error' => "Error processing PDF"], 500);
+        }
+    }
+
+    public function check_po_exists(Request $request)
+    {
+        try {
+            $vendor_id = $request->input('vendor_id');
+            $po_num = null;
+
+            if ($request->has('po_data')) {
+                $data = json_decode($request->input('po_data'), true);
+                if ($vendor_id === "2") {
+                    $po_num = $data['po_details']['order_no'] ?? null;
+                } elseif ($vendor_id === "4") {
+                    $po_num = $data['order_no'] ?? null;
+                }
+            } else {
+                $po_details = json_decode($request->input('po_details'), true);
+                if (in_array($vendor_id, ["1", "5", "6"])) {
+                    $po_num = $po_details['PO Number'] ?? null;
+                } elseif ($vendor_id === "3") {
+                    $po_num = $po_details['po_number'] ?? null;
+                }
+            }
+
+            if (!$po_num) {
+                return response()->json([
+                    'exists' => false,
+                    'message' => 'PO number not found'
+                ]);
+            }
+
+            $exists = PoMaster::where('po_num', $po_num)->exists();
+
+            return response()->json([
+                'exists' => $exists,
+                'po_num' => $po_num
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'exists' => false,
+                'message' => 'Error checking PO existence: ' . $e->getMessage()
+            ]);
         }
     }
 
@@ -104,7 +237,8 @@ class PdfExtractController extends BaseController
             $currentNumber = $prefixSetting->number;
             $poNo = $prefixSetting->format . str_pad($currentNumber, 5, '0', STR_PAD_LEFT);
 
-            $vendor_id = $request->input('vendor_name');
+            $vendor_id = $request->input('vendor_id');
+            $hsn_code = $request->input('hsn_code');
 
             // Modified data extraction logic
             if ($request->has('po_data')) {
@@ -122,7 +256,7 @@ class PdfExtractController extends BaseController
                 $po_items = json_decode($request->input('po_items'), true);
 
                 // Merge article_details into po_details for Puma
-                if ($vendor_id === "Puma") {
+                if ($vendor_id === "3") {
                     $po_details['article_details'] = $article_details;
                 }
             }
@@ -135,7 +269,7 @@ class PdfExtractController extends BaseController
             $prefixSetting->save();
 
             // Create PO Items
-            $this->createPoItems($vendor_id, $pomaster->id, $po_items, $po_details);
+            $this->createPoItems($vendor_id, $pomaster->id, $po_items, $po_details, $hsn_code);
 
             return response()->json([
                 'success' => true,
@@ -161,7 +295,9 @@ class PdfExtractController extends BaseController
         ];
 
         switch ($vendor_id) {
-            case "Jack Jones":
+            case "1":
+            case "5":
+            case "6":
                 $poData = array_merge($poData, [
                     'po_num' => $po_details['PO Number'],
                     'po_date' => $po_details['PO Date'],
@@ -179,7 +315,7 @@ class PdfExtractController extends BaseController
                 ]);
                 break;
 
-            case "Skecher":
+            case "2":
                 $skecherDetails = $po_details['po_details'] ?? [];
                 $poData = array_merge($poData, [
                     'po_num' => $skecherDetails['order_no'],
@@ -190,7 +326,7 @@ class PdfExtractController extends BaseController
                 ]);
                 break;
 
-            case "Puma":
+            case "3":
                 $poData = array_merge($poData, [
                     'po_num' => $po_details['po_number'],
                     'po_date' => $po_details['po_release_date'],
@@ -201,7 +337,7 @@ class PdfExtractController extends BaseController
                 ]);
                 break;
 
-            case "Benetton":
+            case "4":
                 $poData = array_merge($poData, [
                     'po_num' => $po_details['order_no'] ?? null,
                     'po_date' => $po_details['order_date'] ?? null,
@@ -218,28 +354,30 @@ class PdfExtractController extends BaseController
 
     private function getVendorIdByName($vendorName)
     {
-        $vendor = VendorMaster::where('name', $vendorName)->first();
+        $vendor = VendorMaster::where('id', $vendorName)->first();
 
         return $vendor->id;
     }
 
-    private function createPoItems($vendor_id, $po_id, $po_items, $po_details)
+    private function createPoItems($vendor_id, $po_id, $po_items, $po_details, $hsn_code)
     {
         switch ($vendor_id) {
-            case "Jack Jones":
+            case "1":
+            case "5":
+            case "6":
                 $this->createJackJonesItems($po_id, $po_items);
                 break;
 
-            case "Skecher":
-                $this->createSkechersItems($po_id, $po_items);
+            case "2":
+                $this->createSkechersItems($po_id, $po_items, $hsn_code);
                 break;
 
-            case "Puma":
-                $this->createPumaItems($po_id, $po_items, $po_details);
+            case "3":
+                $this->createPumaItems($po_id, $po_items, $po_details, $hsn_code);
                 break;
 
-            case "Benetton":
-                $this->createBenettonItems($po_id, $po_items, $po_details);
+            case "4":
+                $this->createBenettonItems($po_id, $po_items, $po_details, $hsn_code);
                 break;
         }
     }
@@ -253,11 +391,24 @@ class PdfExtractController extends BaseController
             $qty = isset($matches[1]) ? (int)$matches[1] : 0;
             $uom = isset($matches[2]) ? trim($matches[2]) : null;
 
+            $idColorField = $po_item['artcicle_id_color'] ?? '';
+            $colorId = null;
+            $colorName = null;
+
+            if (strpos($idColorField, '/') !== false) {
+                $colorParts = explode('/', $idColorField, 2);
+                $colorId = trim($colorParts[0]);
+                $colorName = trim($colorParts[1]);
+            } else {
+                $colorName = trim($idColorField);
+            }
+
             $poitemData = [
                 'po_id' => $po_id,
                 'sno' => $po_item['item_sno'],
                 'article_number' => $po_item['article_number'],
-                'id_color' => $po_item['artcicle_id_color'],
+                'id_color' => $colorId,
+                'color' => $colorName,
                 'size' => $po_item['size_years'],
                 'qty' => $qty,
                 'uom' => $uom,
@@ -274,7 +425,7 @@ class PdfExtractController extends BaseController
         }
     }
 
-    private function createSkechersItems($po_id, $po_items)
+    private function createSkechersItems($po_id, $po_items, $hsn_code)
     {
         $sizeColumns = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
@@ -306,6 +457,7 @@ class PdfExtractController extends BaseController
                     'igst_taxable_value' => $this->cleanNumber($po_item['Gst Total'] ?? 0),
                     'total_amount' => $this->cleanNumber($po_item['Amount (INR) - (c = a x b)'] ?? 0),
                     'fi_dates' => $po_item['FI dates'] ?? null,
+                    'hsn_code' => $hsn_code,
                     'created_at' => now(),
                     'created_by' => auth()->user()->id,
                 ]);
@@ -323,7 +475,7 @@ class PdfExtractController extends BaseController
         return (float) str_replace('%', '', $value);
     }
 
-    private function createPumaItems($po_id, $po_items, $po_details)
+    private function createPumaItems($po_id, $po_items, $po_details, $hsn_code)
     {
         // Access article_details from po_details
         $article_info = $po_details['article_details'] ?? [];
@@ -339,7 +491,7 @@ class PdfExtractController extends BaseController
                 'sno' => $index + 1,
                 'article_number' => $article_info['article_number'] ?? null,
                 'style_description' => $article_info['style_description'] ?? null,
-                'id_color' => $article_info['color'] ?? null, // Ensure this matches the key in article_details
+                'color' => $article_info['color'] ?? null,
                 'product_character' => $article_info['product_character'] ?? null,
                 'size' => $po_item['size'] ?? null,
                 'qty' => $po_item['quantity'] ?? 0,
@@ -348,6 +500,7 @@ class PdfExtractController extends BaseController
                 'sku_line_no' => $po_item['sku_line_no'] ?? null,
                 'incoterm' => $po_item['incoterm'] ?? null,
                 'named_place' => $po_item['named_place'] ?? null,
+                'hsn_code' => $hsn_code,
                 'created_at' => now(),
                 'created_by' => auth()->user()->id,
             ];
@@ -356,7 +509,7 @@ class PdfExtractController extends BaseController
         }
     }
 
-    private function createBenettonItems($po_id, $po_items, $po_details)
+    private function createBenettonItems($po_id, $po_items, $po_details, $hsn_code)
     {
         foreach ($po_items as $po_item) {
             // Get size breakdown from size_tables if available
@@ -393,6 +546,7 @@ class PdfExtractController extends BaseController
                             'sno' => $po_item['S.N o'] ?? 0,
                             'article_number' => $po_item['Part No'] ?? null,
                             'part_description' => $po_item['Part Description'] ?? null,
+                            'id_color' => $po_item['Col'] ?? null,
                             'color_code' => $po_item['Col'] ?? null,
                             'size' => $size,
                             'qty' => $qty,
@@ -403,7 +557,7 @@ class PdfExtractController extends BaseController
                             'total_value' => ($qty * ($po_item['Basic Cost'] ?? 0) * (1 + ($po_item['IGST %'] ?? 0) / 100)),
                             'due_date' => $po_item['Due Date'] ?? null,
                             'mrp' => $po_item['MRP/UNIT'] ?? 0,
-                            'hsn_code' => $po_item['HSN Code'] ?? null,
+                            'hsn_code' => $hsn_code,
                             'created_at' => now(),
                             'created_by' => auth()->user()->id,
                         ];
@@ -418,6 +572,7 @@ class PdfExtractController extends BaseController
                     'item_sno' => $po_item['S.N o'] ?? 0,
                     'item_article_number' => $po_item['Part No'] ?? null,
                     'part_description' => $po_item['Part Description'] ?? null,
+                    'id_color' => $po_item['Col'] ?? null,
                     'color_code' => $po_item['Col'] ?? null,
                     'qty' => $po_item['Qty'] ?? 0,
                     'unit_price' => $po_item['Basic Cost'] ?? 0,
@@ -443,47 +598,62 @@ class PdfExtractController extends BaseController
         $po_master = PoMaster::findOrFail($po_id);
         $po_items = PoItems::where('po_id', $po_id)->get();
 
-        // Format PO details in the expected structure
-        $article_info = json_decode($po_master->article_info, true);
+        // Get vendor_id to determine which view to show
+        $vendor_id = $po_master->vendor_id;
 
-        $po_details = [
-            'po_ref_num' => $po_master->po_ref_num,
-            'PO Number' => $po_master->po_num,
-            'PO Date' => $po_master->po_date,
-            'Goods Ready Date' => $po_master->goods_ready_date,
-            'MRP' => $po_master->mrp,
-            'VCP' => $po_master->vcp,
-            'Colors' => $po_master->colors,
-            'GSTIN' => $po_master->vendor_gst,
-            'CIN' => $po_master->vendor_cin,
-            'Delivery Address' => $po_master->vendor_del_adr,
-            'Communication Address' => $po_master->vendor_com_adr
-        ];
-
-        // Format PO items as expected by the view
-        $formatted_po_items = [];
-        foreach ($po_items as $item) {
-            $formatted_item = [
-                'sno' => $item->sno,
-                'article_number' => $item->article_number,
-                'color' => $item->id_color,
-                'size' => $item->size,
-                'quatity_uom' => $item->qty,
-                'uom' => $item->uom,
-                'igst_taxable_value' => $item->igst_taxable_value,
-                'igst_per' => $item->igst_per,
-                'mrp' => $item->mrp,
-                'ean_code' => $item->ean_code
-            ];
-            $formatted_po_items[] = $formatted_item;
-        }
+        // Get HSN code (assuming it's the same for all items, take from first item)
+        $hsn_code = $po_items->isNotEmpty() ? $po_items->first()->hsn_code : '';
 
         $data = [
-            'po_details' => $po_details,
-            'article_info' => $article_info,
-            'po_items' => $formatted_po_items
+            'po_master' => $po_master,
+            'po_items' => $po_items,
+            'hsn_code' => $hsn_code
         ];
 
-        return view('pdf_extract.details', compact('data'));
+        // Determine which view to show based on vendor_id
+        $view = 'pdf_extract.details'; // default view
+
+        if ($vendor_id == 1) {
+            // Jack Jones view
+            $view = 'pdf_extract.jack_jones_details';
+        } elseif ($vendor_id == 2) {
+            // Skechers view
+            $view = 'pdf_extract.skechers_details';
+        } elseif ($vendor_id == 3) {
+            // Puma view
+            $view = 'pdf_extract.puma_details';
+        } elseif ($vendor_id == 4) {
+            // Benetton view
+            $view = 'pdf_extract.benetton_details';
+        }
+
+        return view($view, compact('data'));
+    }
+
+    public function get_amend_details(Request $request)
+    {
+        $po_id = $request->input('po_id');
+        $po_master = PoMaster::findOrFail($po_id);
+
+        return view('pdf_extract.amend_details', compact('po_master'));
+    }
+
+    public function po_amended(Request $request)
+    {
+        $request->validate([
+            'po_id'      => 'required',
+            'job_number' => 'required',
+        ]);
+
+        $po = PoMaster::findOrFail($request->po_id);
+        $po->status     = 1;
+        $po->po_job_num = $request->job_number;
+        $po->remarks    = $request->remarks;
+        $po->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Purchase Order amended successfully.',
+        ]);
     }
 }

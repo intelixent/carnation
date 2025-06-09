@@ -271,6 +271,12 @@
                     },
                     state_id: {
                         required: true
+                    },
+                    excess: {
+                        required: true
+                    },
+                    shortage: {
+                        required: true
                     }
                 },
                 messages: {
@@ -296,7 +302,13 @@
                     },
                     state_id: {
                         required: "Please select a State"
-                    }
+                    },
+                    excess: {
+                        required: "Please enter excess %"
+                    },
+                    shortage: {
+                        required: "Please enter shortage %"
+                    },
                 },
                 errorElement: 'span',
                 errorClass: 'error',
@@ -372,6 +384,12 @@
                     },
                     state_id: {
                         required: true
+                    },
+                    excess: {
+                        required: true
+                    },
+                    shortage: {
+                        required: true
                     }
                 },
                 messages: {
@@ -397,7 +415,13 @@
                     },
                     state_id: {
                         required: "Please select a State"
-                    }
+                    },
+                    excess: {
+                        required: "Please enter excess %"
+                    },
+                    shortage: {
+                        required: "Please enter shortage %"
+                    },
                 },
                 errorElement: 'span',
                 errorClass: 'error',

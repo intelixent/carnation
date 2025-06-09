@@ -263,7 +263,6 @@ class VendorController extends BaseController
             $request->validate([
                 'vendor_id' => 'required|exists:vendor_master,id',
                 'cartons' => 'required|array|min:1',
-                'cartons.*.name' => 'required|string|max:255',
                 'cartons.*.length' => 'required|numeric|min:0',
                 'cartons.*.breadth' => 'required|numeric|min:0',
                 'cartons.*.height' => 'required|numeric|min:0',
@@ -277,7 +276,6 @@ class VendorController extends BaseController
             foreach ($cartons as $cartonData) {
                 CartonMaster::create([
                     'vendor_id' => $vendorId,
-                    'name' => $cartonData['name'],
                     'length' => $cartonData['length'],
                     'breadth' => $cartonData['breadth'],
                     'height' => $cartonData['height'],
@@ -313,7 +311,6 @@ class VendorController extends BaseController
         try {
             $request->validate([
                 'id' => 'required|exists:carton_master,id',
-                'name' => 'required|string|max:255',
                 'length' => 'required|numeric|min:0',
                 'breadth' => 'required|numeric|min:0',
                 'height' => 'required|numeric|min:0',
@@ -322,7 +319,6 @@ class VendorController extends BaseController
 
             $carton = CartonMaster::find($request->id);
             $carton->update([
-                'name' => $request->name,
                 'length' => $request->length,
                 'breadth' => $request->breadth,
                 'height' => $request->height,

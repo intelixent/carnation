@@ -17,16 +17,6 @@
     .text-right {
         text-align: right !important;
     }
-
-    .po-details-link {
-        text-decoration: underline;
-        color: #0d6efd;
-        cursor: pointer;
-    }
-    
-    .po-details-link:hover {
-        color: #0a58ca;
-    }
 </style>
 <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
 
@@ -65,19 +55,17 @@
                                         <div class="col-sm-4">
                                             <div class="form-group">
                                                 <label for="company_id" class="form-label small">Vendor</label>
-                                                <select class="form-control select2" id="vendor_id" name="vendor_id">
-                                                    <option value="">Choose Vendor</option>
-                                                    <option value="Skechers">Skechers</option>
-                                                    <option value="JackJones">JackJones</option>
-                                                    <option value="Puma">Puma</option>
+                                                <select name="vendor_id" id="vendor_id" class="form-control select2" required>
+                                                    <option value="">Select Vendor</option>
+                                                    @foreach($vendors as $vendor)
+                                                    <option value="{{ $vendor->id }}" {{ request('vendor_id') == $vendor->name ? 'selected' : '' }}>
+                                                        {{ $vendor->name }}
+                                                    </option>
+                                                    @endforeach
                                                 </select>
                                             </div>
                                         </div>
-
-
                                     </div>
-
-
                                     <div class="row mb-2">
                                         <div class="col-sm-12 d-flex justify-content-end align-items-end">
                                             <button id="apply-filters" class="btn btn-sm btn-primary">Go</button>
@@ -105,18 +93,27 @@
                     <div class="d-flex flex-wrap gap-2 mt-1" id="activeFilters"></div>
                 </div>
                 <div class="card-body">
-                    <table class="table table-bordered text-nowrap w-100 dataTable">
-                        <thead>
-                            <tr>
-                                <th>S.No</th>
-                                <th>CC Ref No</th>
-                                <th>Po No</th>
-                                <th>PO Date</th>
-                                <th>GRD</th>
-                                <th>PO Qty</th>
-                            </tr>
-                        </thead>
-                    </table>
+                    <nav class="nav nav-style-6 nav-pills mb-3 nav-justified d-sm-flex d-block" role="tablist">
+                        <a class="nav-link" href="{{route('pdf_extract_amended_master')}}">AMENDED</a>
+                        <a class="nav-link active" data-bs-toggle="tab" role="tab" href="#nav-all" aria-selected="true">ALL</a>
+                    </nav>
+                    <div class="tab-content">
+                        <input type="hidden" name="type" id="type" value="all">
+                        <div class="tab-pane show active text-muted" id="nav-bedroom" role="tabpanel">
+                            <table class="table table-bordered text-nowrap w-100 dataTable">
+                                <thead>
+                                    <tr>
+                                        <th>S.No</th>
+                                        <th>CC Ref No</th>
+                                        <th>Vendor</th>
+                                        <th>Po No</th>
+                                        <th>PO Date</th>
+                                        <th>Created</th>
+                                    </tr>
+                                </thead>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -135,6 +132,8 @@
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
             }
         });
+
+        $('.select2').select2();
 
         $('#date_range').daterangepicker({
             ranges: {
@@ -172,10 +171,8 @@
                 url: "{{ route('get_po_table') }}",
                 type: 'GET',
                 data: function(d) {
-                    // d.company_id = $('#company_id').val();
-                    // d.project_id = $('#project_id').val();
-                    // d.created_by = $('#created_by').val();
-                    // d.customer_id = $('#customer_id').val();
+                    d.type = $('#type').val();
+                    d.vendor_id = $('#vendor_id').val();
 
                     // var dateRange = $('#date_range').val();
                     // if (dateRange) {
@@ -199,23 +196,21 @@
                     name: 'po_ref_num'
                 },
                 {
-                    data: 'po_num',
-                    name: 'po_num'
+                    data: 'vendor',
+                    name: 'vendor'
                 },
                 {
-                    data: 'goods_ready_date',
-                    name: 'goods_ready_date'
+                    data: 'po_num',
+                    name: 'po_num'
                 },
                 {
                     data: 'po_date',
                     name: 'po_date'
                 },
                 {
-                    data: 'po_qty',
-                    name: 'po_qty',
-                    className: 'text-right'
+                    data: 'created',
+                    name: 'created'
                 }
-
             ],
             pageLength: 50,
             order: [
@@ -224,8 +219,63 @@
             responsive: true,
             stateSave: true,
             drawCallback: function(settings) {
-
+                updateFilterSummary();
             }
+        });
+
+        function updateFilterSummary() {
+            const filters = {
+                vendor: {
+                    element: $('#vendor_id'),
+                    text: 'Vendor'
+                }
+            };
+
+            let activeFilters = [];
+            let hasActiveFilters = false;
+
+            Object.entries(filters).forEach(([key, filter]) => {
+                const $element = filter.element;
+                const value = $element.val();
+
+                if (value) {
+                    hasActiveFilters = true;
+                    const selectedText = $element.find('option:selected').text();
+                    activeFilters.push(`
+                    <span class="badge bg-light text-dark border">
+                        ${filter.text}: ${selectedText}
+                        <i class="fas fa-times ms-1 clear-filter" data-filter="${key}" style="cursor: pointer;"></i>
+                    </span>
+                `);
+                }
+            });
+
+            const $filterSummary = $('.filter-summary');
+            const $activeFilters = $('#activeFilters');
+
+            if (hasActiveFilters) {
+                $activeFilters.html(activeFilters.join(''));
+                $filterSummary.show();
+            } else {
+                $filterSummary.hide();
+            }
+        }
+
+        $('#apply-filters').on('click', function() {
+            table.ajax.reload();
+            updateFilterSummary();
+        });
+
+        $(document).on('click', '.clear-filter', function() {
+            const filterType = $(this).data('filter');
+            const filterMap = {
+                'vendor': '#vendor_id'
+            };
+
+            $(filterMap[filterType]).val('').trigger('change');
+
+            table.ajax.reload();
+            updateFilterSummary();
         });
 
         $(document).on('click', '.po-details-link', function() {
@@ -240,6 +290,69 @@
                 success: function(response) {
                     $("#detail_modal").html(response);
                     $("#detail_modal").modal('show');
+                }
+            });
+        });
+
+        $(document).on('click', '.po-amend', function() {
+            var poId = $(this).data('id');
+            $.ajax({
+                url: "{{route('get_amend_details')}}",
+                method: 'POST',
+                data: {
+                    po_id: poId,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    $("#detail_modal").html(response);
+                    $("#detail_modal").modal('show');
+                }
+            });
+        });
+
+        $(document).on('submit', '#amendForm', function(e) {
+            e.preventDefault();
+            var formData = $(this).serialize();
+
+            $.ajax({
+                url: "{{ route('po_amended') }}",
+                method: 'POST',
+                data: formData,
+                success: function(response) {
+                    if (response.success) {
+                        $("#detail_modal").modal('hide');
+                        Swal.fire({
+                            title: 'Success',
+                            title: 'Success',
+                            text: response.message,
+                            icon: 'success',
+                            timer: 2000,
+                            confirmButtonColor: '#3085d6'
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                table.ajax.reload();
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: response.message || 'Could not amend PO.'
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    console.log(xhr.responseText);
+                    let errorMsg = 'Something went wrong. Please try again.';
+                    if (xhr.status === 422) {
+                        let errors = xhr.responseJSON.errors;
+                        errorMsg = Object.values(errors).flat().join('<br>');
+                    }
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Oops...',
+                        html: errorMsg
+                    });
                 }
             });
         });
