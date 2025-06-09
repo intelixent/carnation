@@ -17,7 +17,6 @@ class CartonMaster extends Model
 
     protected $fillable = [
         'vendor_id',
-        'name',
         'length',
         'breadth',
         'height',

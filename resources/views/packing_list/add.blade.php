@@ -2,6 +2,12 @@
 
 @section('pagetitle', $page_title)
 @section('content')
+<style>
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+        background-color: #007bff;
+        color: white;
+    }
+</style>
 <div class="container-fluid">
     <!-- row -->
 
@@ -30,6 +36,12 @@
                                 </select>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Color</label>
+                            <select class="form-control select2" id="colorSelect" required disabled>
+                                <option value="">Select Color</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- PO Details Display -->
@@ -49,12 +61,12 @@
                         </div>
                     </div>
 
-                    <!-- Add this after the PO details display -->
-                    <div class="row mt-4">
+                    <!-- Items Table Section -->
+                    <div class="row mt-4" id="items_section" style="display: none;">
                         <div class="col-md-12">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5>Carton Items</h5>
-                                <button type="button" class="btn btn-success btn-sm add-item">
+                                <button type="button" class="btn btn-success btn-sm add-item" disabled>
                                     <i class="fas fa-plus"></i> Add Item
                                 </button>
                             </div>
@@ -80,59 +92,83 @@
     </div>
 </div>
 @endsection
-
-@push('styles')
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
-<style>
-    .select2-container--default .select2-results__option--highlighted[aria-selected] {
-        background-color: #007bff;
-        color: white;
-    }
-</style>
-@endpush
-
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(document).ready(function() {
+        // helper to toggle PO-search enabled state
+        function togglePOSearch(enabled) {
+            $('#po_search').prop('disabled', !enabled);
+            // redraw Select2 so it reflects the disabled state
+            $('#po_search').trigger('change.select2');
+        }
+
         $.ajaxSetup({
             headers: {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
             }
         });
 
-        // Initialize Select2
-        $('.select2-po-search').select2({
-            placeholder: "Search by PO Number or Vendor Name",
-            minimumInputLength: 2,
-            ajax: {
-                url: '{{ route("packing_list_search") }}',
-                dataType: 'json',
-                delay: 250,
-                data: function(params) {
-                    return {
-                        q: params.term
-                    };
-                },
-                processResults: function(data) {
-                    return {
-                        results: $.map(data, function(item) {
-                            return {
-                                id: item.id,
-                                text: item.po_num + ' || ' + item.vendor_name
-                            }
-                        })
-                    };
-                },
-                cache: true
-            }
-        });
+        // Initialize Select2 functions
+        function initializeSelect2() {
+            $('.select2').select2();
+
+            // Initialize PO Search Select2
+            $('.select2-po-search').select2({
+                placeholder: "Search by PO Number or Vendor Name",
+                minimumInputLength: 2,
+                ajax: {
+                    url: '{{ route("packing_list_search") }}',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function(params) {
+                        return {
+                            q: params.term
+                        };
+                    },
+                    processResults: function(data) {
+                        return {
+                            results: $.map(data, function(item) {
+                                return {
+                                    id: item.id,
+                                    text: item.po_job_num + ' || ' + item.vendor_name
+                                };
+                            })
+                        };
+                    },
+                    cache: true
+                }
+            });
+        }
+
+        // Function to reinitialize PO search Select2
+        function reinitializePOSearch() {
+            $('#po_search').select2('destroy');
+            initializeSelect2();
+        }
+
+        // Initial initialization
+        initializeSelect2();
+
+        // Hook into modal events to disable/enable PO search
+        $('#add_modal')
+            .on('show.bs.modal', function() {
+                togglePOSearch(false);
+            })
+            .on('hidden.bs.modal', function() {
+                togglePOSearch(true);
+            });
 
         $('#po_search').on('change', function() {
             var poId = $(this).val();
             if (poId) {
+                // Reset dependent fields
+                $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
+                $('.add-item').prop('disabled', true);
+                $('#items_section').hide();
+                $('#itemsTable tbody').empty();
+
                 $.ajax({
                     url: '{{ route("get_packing_po_details") }}',
                     type: 'GET',
@@ -144,7 +180,6 @@
                         $('#po_date').text(data.po_date_formatted);
                         $('#vendor_name').text(data.vendor_name);
 
-                        // Store vendor_id in a hidden field for later use
                         if (!$('#vendor_id').length) {
                             $('body').append('<input type="hidden" id="vendor_id" value="' + data.vendor_id + '">');
                         } else {
@@ -152,39 +187,76 @@
                         }
 
                         $('#po_details').show();
-
-                        // Load existing packing list items
-                        loadPackingListItems(poId);
+                        loadColors(poId);
                     },
                     error: function(xhr) {
                         console.error('Error fetching PO details');
-                        $('#po_details').hide();
+                        $('#po_details, #items_section').hide();
                     }
                 });
             } else {
-                $('#po_details').hide();
+                $('#po_details, #items_section').hide();
                 $('#itemsTable tbody').empty();
+                $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
+                $('.add-item').prop('disabled', true);
             }
         });
 
-        function loadPackingListItems(poId) {
+        // Load colors for selected PO
+        function loadColors(poId) {
             $.ajax({
-                url: '{{ route("packing_list_items") }}',
+                url: '{{ route("get_po_colors") }}',
                 type: 'GET',
                 data: {
                     po_id: poId
                 },
+                success: function(colors) {
+                    var options = '<option value="">Select Color</option>';
+                    colors.forEach(function(color) {
+                        options += '<option value="' + color + '">' + color + '</option>';
+                    });
+                    $('#colorSelect').html(options).prop('disabled', false);
+                }
+            });
+        }
+
+        // Handle color selection - Load table and reinitialize PO search
+        $('#colorSelect').on('change', function() {
+            var color = $(this).val();
+            var poId = $('#po_search').val();
+
+            if (color && poId) {
+                $('.add-item').prop('disabled', false);
+                $('#items_section').show();
+                loadPackingListItems(poId, color);
+
+                // Refresh PO-search so dropdown stays usable but empty
+                setTimeout(reinitializePOSearch, 100);
+            } else {
+                $('.add-item').prop('disabled', true);
+                $('#items_section').hide();
+                $('#itemsTable tbody').empty();
+            }
+        });
+
+        function loadPackingListItems(poId, color = null) {
+            var requestData = {
+                po_id: poId
+            };
+            if (color) requestData.color = color;
+
+            $.ajax({
+                url: '{{ route("packing_list_items") }}',
+                type: 'GET',
+                data: requestData,
                 success: function(items) {
-                    $('#itemsTable tbody').empty();
-
-                    if (items.length > 0) {
+                    var $tbody = $('#itemsTable tbody').empty();
+                    if (items.length) {
                         items.forEach(function(item) {
-                            const deleteButton = items.length > 1 ?
-                                `<button class="btn btn-danger btn-sm me-1 remove-item" data-id="${item.id}">
-                                    <i class="fas fa-trash"></i>
-                                </button>` : '';
-
-                            $('#itemsTable tbody').append(`
+                            const delBtn = items.length > 1 ?
+                                `<button class="btn btn-danger btn-sm me-1 remove-item" data-id="${item.id}"><i class="fas fa-trash"></i></button>` :
+                                '';
+                            $tbody.append(`
                                 <tr data-id="${item.id}">
                                     <td>${item.carton_name}</td>
                                     <td>${item.article_number}</td>
@@ -194,25 +266,32 @@
                                         <button class="btn btn-primary btn-sm me-1 edit-item" data-id="${item.id}">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        ${deleteButton}
+                                        ${delBtn}
                                     </td>
                                 </tr>
                             `);
                         });
+                    } else {
+                        $tbody.append(`<tr><td colspan="5" class="text-center">No items found</td></tr>`);
                     }
+                },
+                error: function() {
+                    $('#itemsTable tbody').html(`<tr><td colspan="5" class="text-center text-danger">Error loading items</td></tr>`);
                 }
             });
         }
 
+        // Add Item button
         $(document).on('click', '.add-item', function() {
-            const poId = $('#po_search').val();
-            const vendorId = $('#vendor_id').val();
+            var poId = $('#po_search').val(),
+                vendorId = $('#vendor_id').val(),
+                color = $('#colorSelect').val();
 
-            if (!poId) {
+            if (!poId || !color) {
                 Swal.fire({
                     icon: 'warning',
-                    title: 'PO Required',
-                    text: 'Please select a PO first',
+                    title: poId ? 'Color Required' : 'PO Required',
+                    text: poId ? 'Please select a color first' : 'Please select a PO first',
                     confirmButtonColor: '#3085d6'
                 });
                 return;
@@ -224,10 +303,12 @@
                 data: {
                     id: poId,
                     vendor_id: vendorId,
+                    color: color
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
-                    $('.select2').select2({
+                    // init any select2 inside modal
+                    $('.select2', '#add_modal').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
                     });
@@ -236,9 +317,10 @@
             });
         });
 
+        // Edit Item button
         $(document).on('click', '.edit-item', function() {
-            const itemId = $(this).data('id');
-            const poId = $('#po_search').val();
+            var itemId = $(this).data('id'),
+                poId = $('#po_search').val();
 
             $.ajax({
                 url: "{{ route('packing_list_item_edit') }}",
@@ -249,7 +331,7 @@
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
-                    $('.select2').select2({
+                    $('.select2', '#add_modal').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
                     });
@@ -258,10 +340,9 @@
             });
         });
 
+        // Delete Item
         $(document).on('click', '.remove-item', function() {
-            const itemId = $(this).data('id');
-            const row = $(this).closest('tr');
-
+            var itemId = $(this).data('id');
             Swal.fire({
                 title: 'Are you sure?',
                 text: "You won't be able to revert this!",
@@ -269,68 +350,102 @@
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
                 cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Yes, delete it!',
-                cancelButtonText: 'Cancel'
+                confirmButtonText: 'Yes, delete it!'
             }).then((result) => {
-                if (result.isConfirmed) {
-                    $.ajax({
-                        url: "{{ route('packing_list_item_delete') }}",
-                        method: 'DELETE',
-                        data: {
-                            id: itemId
-                        },
-                        success: function(response) {
-                            Swal.fire({
-                                title: 'Deleted!',
-                                text: 'Item has been deleted successfully.',
-                                icon: 'success',
-                                timer: 2000,
-                                showConfirmButton: false
-                            });
-
-                            // Reload items to update delete button visibility
-                            const poId = $('#po_search').val();
-                            if (poId) {
-                                loadPackingListItems(poId);
-                            }
-                        },
-                        error: function(xhr) {
-                            Swal.fire({
-                                title: 'Error!',
-                                text: xhr.responseJSON?.error || 'Something went wrong',
-                                icon: 'error',
-                                confirmButtonColor: '#3085d6'
-                            });
-                        }
-                    });
-                }
+                if (!result.isConfirmed) return;
+                $.ajax({
+                    url: "{{ route('packing_list_item_delete') }}",
+                    method: 'DELETE',
+                    data: {
+                        id: itemId
+                    },
+                    success: function() {
+                        Swal.fire({
+                            title: 'Deleted!',
+                            text: 'Item has been deleted.',
+                            icon: 'success',
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                        loadPackingListItems($('#po_search').val(), $('#colorSelect').val());
+                    },
+                    error: function(xhr) {
+                        Swal.fire({
+                            title: 'Error!',
+                            text: xhr.responseJSON?.error || 'Something went wrong',
+                            icon: 'error',
+                            confirmButtonColor: '#3085d6'
+                        });
+                    }
+                });
             });
         });
 
         $(document).on('change', '#articleSelect', function() {
             const poId = $('#po_id').val();
+            const color = $('#color').val();
             const article = $(this).val();
 
-            $.ajax({
-                url: '{{ route("packing_list_sizes") }}',
-                data: {
-                    po_id: poId,
-                    article_number: article
-                },
-                success: function(data) {
-                    $('#sizeSelect').html(data.options).prop('disabled', false);
-                }
-            });
+            if (article) {
+                $.ajax({
+                    url: '{{ route("get_sizes_with_qty") }}',
+                    data: {
+                        po_id: poId,
+                        color: color,
+                        article_number: article
+                    },
+                    success: function(data) {
+                        let options = '<option value="">Select Size</option>';
+                        data.forEach(function(item) {
+                            if (item.remaining_qty > 0) {
+                                options += `<option value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
+                                    ${item.size} (Available: ${item.remaining_qty})
+                                </option>`;
+                            }
+                        });
+                        $('#sizeSelect').html(options).prop('disabled', false);
+                        $('#quantityInput').val('').prop('max', 0);
+                    }
+                });
+            } else {
+                $('#sizeSelect').html('<option value="">Select Size</option>').prop('disabled', true);
+                $('#quantityInput').val('').prop('max', 0);
+            }
+        });
+
+        $(document).on('change', '#sizeSelect', function() {
+            const maxQty = parseInt($(this).find(':selected').data('max-qty')) || 0;
+            $('#quantityInput').attr('max', maxQty).val('');
+            if (maxQty > 0) {
+                $('#quantityInput').prop('disabled', false);
+            }
+        });
+
+        $(document).on('input', '#quantityInput', function() {
+            const maxQty = parseInt($('#sizeSelect').find(':selected').data('max-qty')) || 0;
+            const currentQty = parseInt($(this).val()) || 0;
+
+            if (currentQty > maxQty) {
+                $(this).val(maxQty);
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Quantity Limit',
+                    text: `Maximum available quantity is ${maxQty}`,
+                    confirmButtonColor: '#3085d6'
+                });
+            }
         });
 
         $(document).on('click', '#saveItemBtn', function() {
             const isEdit = $('#itemId').length > 0;
             const data = {
                 po_id: $('#po_id').val(),
-                carton_id: $('#cartonSelect').val(),
+                carton_id: $('#carton_id').val(),
                 article_number: $('#articleSelect').val(),
+                color: $('#color').val(),
                 size: $('#sizeSelect').val(),
-                quantity: $('#quantityInput').val()
+                quantity: $('#quantityInput').val(),
+                config_item_id: $('#sizeSelect').find(':selected').data('config-id')
             };
 
             if (isEdit) {
@@ -339,7 +454,6 @@
 
             const url = isEdit ? '{{ route("packing_list_item_update") }}' : '{{ route("packing_list_item_store") }}';
 
-            // Show loading
             Swal.fire({
                 title: isEdit ? 'Updating...' : 'Saving...',
                 text: 'Please wait',
@@ -369,7 +483,8 @@
                     });
 
                     if (response.po_id) {
-                        loadPackingListItems(response.po_id);
+                        const color = $('#colorSelect').val();
+                        loadPackingListItems(response.po_id, color);
                     }
                 },
                 error: function(xhr) {

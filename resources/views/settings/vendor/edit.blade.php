@@ -56,6 +56,21 @@
                     </div>
                 </div>
 
+                <div class="row  mb-3">
+                    <div class="col-sm-6">
+                        <div class="form-floating ">
+                            <input type="text" class="form-control form-control-sm" id="excess" name="excess" value="{{ $vendor_details['excess'] }}" placeholder="Excess">
+                            <label for="excess">Excess</label>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="form-floating ">
+                            <input type="text" class="form-control form-control-sm" id="shortage" name="shortage" value="{{ $vendor_details['shortage'] }}" placeholder="Shortage">
+                            <label for="shortage">Shortage</label>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="row mb-3">
                     <div class="col-sm-6 ">
                         <div class="form-floating">

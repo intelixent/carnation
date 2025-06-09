@@ -62,12 +62,14 @@
                                 <select name="vendor_id" id="vendor_id" class="form-control select2" required>
                                     <option value="">Select Vendor</option>
                                     @foreach($vendors as $vendor)
-                                    <option value="{{ $vendor->name }}" {{ request('vendor_id') == $vendor->name ? 'selected' : '' }}>
+                                    <option value="{{ $vendor->id }}" {{ request('vendor_id') == $vendor->name ? 'selected' : '' }}>
                                         {{ $vendor->name }}
                                     </option>
                                     @endforeach
                                 </select>
                             </div>
+                            <input type="hidden" name="custom_field_no" id="custom_field_no" value="">
+                            <input type="hidden" name="extraction_no" id="extraction_no" value="">
                             <div class="col-sm-6">
                                 <label for="pdf_file" class="form-label">Pdf File</label>
                                 <input class="form-control" type="file" id="pdf_file" name="pdf_file">
@@ -106,16 +108,43 @@
 
         $('.select2').select2();
 
+        $('#vendor_id').on('change', function() {
+            var vendor_id = $(this).val();
+
+            if (vendor_id) {
+                $.ajax({
+                    url: "{{ route('get_vendor_custom_field') }}",
+                    method: 'POST',
+                    data: {
+                        'vendor_id': vendor_id,
+                        '_token': '{{ csrf_token() }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            $('#custom_field_no').val(response.custom_field_no);
+                            $('#extraction_no').val(response.extraction_no);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error fetching vendor custom field:', error);
+                    }
+                });
+            } else {
+                $('#custom_field_no').val('');
+                $('#extraction_no').val('');
+            }
+        });
+
         $('#pdfExtractAddForm').validate({
             rules: {
-                vendor_id: 'required',
+                extraction_no: 'required',
                 pdf_file: {
                     required: true,
                     extension: "pdf"
                 }
             },
             messages: {
-                vendor_id: {
+                extraction_no: {
                     required: "Please select a Vendor"
                 },
                 pdf_file: {
@@ -153,8 +182,7 @@
 
                 reader.onload = function(e) {
                     const base64Pdf = e.target.result.split(',')[1];
-                    const vendorId = $('#vendor_id').val();
-                    const companyName = $('#vendor_id option:selected').text();
+                    const extractionNo = $('#extraction_no').val();
 
                     Swal.fire({
                         title: 'Loading...',
@@ -170,7 +198,7 @@
                         url: '{{ route("pdf_process") }}',
                         type: "POST",
                         data: {
-                            'company': vendorId,
+                            'extraction_no': extractionNo,
                             'pdf_base64': base64Pdf
                         },
                         //contentType: "application/json",
@@ -227,15 +255,20 @@
     });
 
     $(document).on('click', '#saveButton', function() {
+        var vendor_name = $("#vendor_name").val();
+        var custom_field_no = $("#custom_field_no").val();
+        var hsn_code = $("#hsn_code").val();
+        var vendor_id = $('#vendor_id').val();
 
-        Swal.fire({
-            title: 'Loading...',
-            html: 'Please wait while we store the details',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
+        if (custom_field_no === "1" && (!hsn_code || hsn_code.trim() === "")) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'HSN Code Required',
+                text: 'Please enter HSN Code before proceeding.',
+                confirmButtonText: 'OK'
+            });
+            return false;
+        }
 
         var po_data = $(".po_data").val();
         var po_details = $(".po_details").val();
@@ -243,44 +276,93 @@
         var po_items = $(".po_items").val();
         var po_unit_price = $(".po_unit_price").val();
         var po_qty = $(".po_qty").val();
-        var vendor_name = $("#vendor_name").val();
 
         $.ajax({
-            url: "{{route('pdf_extract_store')}}",
+            url: "{{route('check_po_exists')}}",
             method: 'POST',
             data: {
                 'po_data': po_data,
                 'po_details': po_details,
-                'article_details': article_details,
-                'po_items': po_items,
-                'po_unit_price': po_unit_price,
-                'po_qty': po_qty,
-                'vendor_name': vendor_name,
+                'vendor_id': vendor_id,
                 _token: '{{ csrf_token() }}'
             },
             success: function(response) {
-                Swal.close();
-                //location.reload();
-                $.toast({
-                    heading: 'Success',
-                    text: response.message,
-                    position: 'top-center',
-                    bgColor: '#000',
-                    textColor: 'white',
-                    hideAfter: 3000,
-                    stack: 6
-                });
-
+                if (response.exists) {
+                    Swal.fire({
+                        title: 'PO Already Exists!',
+                        text: `Purchase Order "${response.po_num}" already exists in the database. Do you want to proceed anyway?`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33',
+                        confirmButtonText: 'Yes, Save Anyway!',
+                        cancelButtonText: 'Cancel'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            proceedWithSave();
+                        }
+                    });
+                } else {
+                    proceedWithSave();
+                }
             },
             error: function(xhr, status, error) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error',
-                    text: 'Failed to load details. Please try again.'
-                });
-                console.error(error);
+                console.error('Error checking PO existence:', error);
+                proceedWithSave();
             }
         });
+
+        function proceedWithSave() {
+            Swal.fire({
+                title: 'Loading...',
+                html: 'Please wait while we store the details',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            $.ajax({
+                url: "{{route('pdf_extract_store')}}",
+                method: 'POST',
+                data: {
+                    'po_data': po_data,
+                    'po_details': po_details,
+                    'article_details': article_details,
+                    'po_items': po_items,
+                    'po_unit_price': po_unit_price,
+                    'po_qty': po_qty,
+                    'vendor_name': vendor_name,
+                    'vendor_id': vendor_id,
+                    'hsn_code': hsn_code,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    Swal.close();
+                    $.toast({
+                        heading: 'Success',
+                        text: response.message,
+                        position: 'top-center',
+                        bgColor: '#000',
+                        textColor: 'white',
+                        hideAfter: 3000,
+                        stack: 6
+                    });
+                    setTimeout(function() {
+                        location.reload();
+                    }, 3000);
+                },
+                error: function(xhr, status, error) {
+                    Swal.close();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Failed to load details. Please try again.'
+                    });
+                    console.error(error);
+                }
+            });
+        }
     });
 </script>
 @endpush

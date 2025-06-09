@@ -40,6 +40,9 @@
                                     <strong>Delivery Address:</strong><br>
                                     <div style="white-space: pre-line;">{{ $data['po_details']['delivery_address'] ?? 'No delivery address found' }}</div>
                                 </li>
+                                <li class="list-group-item">
+                                    <input type="text" class="form-control hsn-code" name="hsn_code" id="hsn_code" placeholder="Enter HSN Code" required>
+                                </li>
                             </ul>
                         </div>
                     </div>

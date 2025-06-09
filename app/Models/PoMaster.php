@@ -18,6 +18,7 @@ class PoMaster extends Model
     protected $fillable = [
         'vendor_id',
         'po_ref_num',
+        'po_job_num',
         'po_num',
         'po_date',
         'goods_ready_date',
@@ -31,6 +32,7 @@ class PoMaster extends Model
         'article_info',
         'po_unit_price',
         'po_qty',
+        'remarks',
         'created_by',
         'updated_at',
         'deleted_at',
@@ -38,8 +40,18 @@ class PoMaster extends Model
         'status',
     ];
 
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function vendor()
     {
         return $this->belongsTo(VendorMaster::class, 'vendor_id');
+    }
+
+    public function packingListConfigs()
+    {
+        return $this->hasMany(PackingListConfigMaster::class, 'po_id');
     }
 }

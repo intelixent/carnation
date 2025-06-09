@@ -335,8 +335,9 @@ def extract_jackjones_o(pdf_path):
         with pdfplumber.open(pdf_path) as pdf:
             print(f"PDF opened successfully. Total pages: {len(pdf.pages)}")
             
-            # Initialize data dictionary
+            # Initialize data dictionary and a set to collect colors
             podata = {}
+            colors_set = set()
             
             if len(pdf.pages) == 0:
                 print("Error: PDF has no pages")
@@ -415,11 +416,8 @@ def extract_jackjones_o(pdf_path):
             for i, table in enumerate(tables):
                 try:
                     print(f"Analyzing Table {i} ({len(table)} rows)")
-                    
-                    # Check if this looks like an address table
                     flat_table = [str(cell) for row in table for cell in row if cell is not None]
                     address_keywords = ["Delivery Address", "Communication address"]
-                    
                     if any(keyword in ' '.join(flat_table) for keyword in address_keywords):
                         address_table = table
                         print(f"Found address table (Table {i})")
@@ -442,36 +440,27 @@ def extract_jackjones_o(pdf_path):
                             break
                     
                     if header_row_index is not None and header_row_index + 1 < len(address_table):
-                        # Get addresses from the row following the header row
                         address_row = address_table[header_row_index + 1]
                         print(f"Address row has {len(address_row)} columns")
                         
+                        # Extract and clean Delivery Address
                         if len(address_row) >= 1 and address_row[0]:
-                            # Extract delivery address
                             delivery_text = str(address_row[0])
                             print("Processing delivery address")
-                            
-                            # Remove GSTIN from delivery address
                             gstin_index = delivery_text.find("GSTIN")
                             if gstin_index > 0:
                                 delivery_text = delivery_text[:gstin_index].strip()
-                            
-                            # Format the delivery address
                             delivery_lines = [line.strip() for line in delivery_text.split('\n')]
                             podata['Delivery Address'] = ' '.join(delivery_lines)
                             print(f"Extracted Delivery Address: {podata['Delivery Address']}")
                         
+                        # Extract and clean Communication Address
                         if len(address_row) >= 2 and address_row[1]:
-                            # Extract communication address
                             comm_text = str(address_row[1])
                             print("Processing communication address")
-                            
-                            # Remove CIN from communication address
                             cin_index = comm_text.find("CIN")
                             if cin_index > 0:
                                 comm_text = comm_text[:cin_index].strip()
-                            
-                            # Format the communication address
                             comm_lines = [line.strip() for line in comm_text.split('\n')]
                             podata['Communication Address'] = ' '.join(comm_lines)
                             print(f"Extracted Communication Address: {podata['Communication Address']}")
@@ -480,11 +469,9 @@ def extract_jackjones_o(pdf_path):
             else:
                 print("No address table found")
             
-            # Extract GSTIN
+            # Extract GSTIN (table first, then full text)
             print("Searching for GSTIN")
             gstin_match = None
-            
-            # First check tables
             if address_table:
                 for row in address_table:
                     for cell in row:
@@ -497,8 +484,6 @@ def extract_jackjones_o(pdf_path):
                                     break
                             except Exception as e:
                                 print(f"Error extracting GSTIN from table: {e}")
-            
-            # If not found in tables, try full text
             if 'GSTIN' not in podata:
                 try:
                     gstin_patterns = [r'GSTIN\.?:?\s*(\w+)', r'GSTIN\.?\s*(\d+\w+)']
@@ -508,17 +493,14 @@ def extract_jackjones_o(pdf_path):
                             podata['GSTIN'] = gstin_match.group(1)
                             print(f"Extracted GSTIN from text: {podata['GSTIN']}")
                             break
-                    
                     if 'GSTIN' not in podata:
                         print("Warning: GSTIN not found")
                 except Exception as e:
                     print(f"Error extracting GSTIN from text: {e}")
             
-            # Extract CIN
+            # Extract CIN (table first, then full text)
             print("Searching for CIN")
             cin_match = None
-            
-            # First check tables
             if address_table:
                 for row in address_table:
                     for cell in row:
@@ -531,8 +513,6 @@ def extract_jackjones_o(pdf_path):
                                     break
                             except Exception as e:
                                 print(f"Error extracting CIN from table: {e}")
-            
-            # If not found in tables, try full text
             if 'CIN' not in podata:
                 try:
                     cin_match = re.search(r'CIN\s*:?\s*(\w+)', first_page_text)
@@ -544,67 +524,61 @@ def extract_jackjones_o(pdf_path):
                 except Exception as e:
                     print(f"Error extracting CIN from text: {e}")
 
-            # Extract MRP and VCP
+            # ─── Re-introduced: Extract MRP and VCP ────────────────────────────────────────────
             print("Searching for MRP and VCP")
             try:
+                # Common patterns for MRP
                 mrp_patterns = [
-                    r'MRP to be:?\s*([^\n]+)',
-                    r'MRP:?([\d,]+)/?-?'
+                    r'MRP to be:?\s*([^\n]+)',     # e.g. "MRP to be 123.45"
+                    r'MRP:?([\d,]+\.\d+)',         # e.g. "MRP:123,456.78"
+                    r'M.R.P\.?:?\s*([\d,]+\.\d+)', # e.g. "M.R.P. 1,234.56"
+                    r'MRP:?([\d,]+(?:/-)?)'        # e.g. "MRP:2,999/-"
                 ]
                 
+                mrp_found = False
                 for pattern in mrp_patterns:
                     mrp_match = re.search(pattern, first_page_text)
                     if mrp_match:
                         podata['MRP'] = mrp_match.group(1).strip()
                         print(f"Extracted MRP: {podata['MRP']}")
+                        mrp_found = True
                         break
+                if not mrp_found:
+                    print("Warning: MRP not found")
                 
+                # For VCP, look for "VCP to be"
                 vcp_match = re.search(r'VCP to be\s*([^\n]+)', first_page_text)
                 if vcp_match:
                     podata['VCP'] = vcp_match.group(1).strip()
                     print(f"Extracted VCP: {podata['VCP']}")
+                else:
+                    print("Warning: VCP not found")
             except Exception as e:
                 print(f"Error extracting MRP/VCP: {e}")
-
-            # Extract Colors
-            print("Searching for Colors")
-            try:
-                colors_match = re.search(r'Colors:?\s*(.*?)(?:\n|$)', first_page_text)
-                if colors_match:
-                    podata['Colors'] = colors_match.group(1).strip()
-                    print(f"Extracted Colors: {podata['Colors']}")
-            except Exception as e:
-                print(f"Error extracting Colors: {e}")
-           
-            # Find article information - NEW APPROACH
+            # ─────────────────────────────────────────────────────────────────────────────────────
+            
+            # Find article information (same as before)…
             print("Searching for article information across pages")
             article_info = {}
             article_found = False
             article_header_page = -1
             article_header_line = -1
             
-            # Add vendor number and colors to article_info
+            # Add vendor number to article_info (keep colors out for now)
             if 'Vendor Number' in podata:
                 article_info["Vendor"] = podata['Vendor Number']
                 print(f"Added Vendor to article_info: {article_info['Vendor']}")
             
-            if 'Colors' in podata:
-                article_info["Colors"] = podata['Colors']
-                print(f"Added Colors to article_info: {article_info['Colors']}")
-            
-            # First, locate the article header
-            for page_idx in range(min(len(pdf.pages), 10)):  # Limit to first 10 pages
+            # Locate article header
+            for page_idx in range(min(len(pdf.pages), 10)):
                 if article_header_page >= 0:
                     break
-                    
                 try:
                     page = pdf.pages[page_idx]
                     print(f"Checking page {page_idx+1} for article header")
                     page_text = page.extract_text()
                     page_lines = page_text.split('\n')
-                    
                     for idx, line in enumerate(page_lines):
-                        # Look for article description header markers
                         article_markers = ["ARTICLE Article description", "______________"]
                         if any(marker in line for marker in article_markers):
                             print(f"Found article header at line {idx} on page {page_idx+1}")
@@ -614,96 +588,66 @@ def extract_jackjones_o(pdf_path):
                 except Exception as e:
                     print(f"Error checking page {page_idx+1} for article header: {e}")
             
-            # If we found the article header, look for the article content on the next page
+            # If found, extract article details (same logic as before)…
             if article_header_page >= 0:
-                # Look at the current page first (if we're not at the end of the page)
                 start_page = article_header_page
-                
                 for page_idx in range(start_page, min(start_page + 2, len(pdf.pages))):
                     if article_found:
                         break
-                        
                     try:
                         page = pdf.pages[page_idx]
                         print(f"Checking page {page_idx+1} for article content")
                         page_text = page.extract_text()
                         page_lines = page_text.split('\n')
-                        
-                        # Start from the beginning if we're on a new page,
-                        # otherwise start after the header line
                         start_line = 0 if page_idx > article_header_page else article_header_line + 1
-                        
                         for idx in range(start_line, len(page_lines)):
                             line = page_lines[idx]
-                            
-                            # Check for article number and description pattern
                             article_match = re.match(r'^(\d{7})\s+(.+)', line)
                             if article_match:
                                 print(f"Found article details at line {idx}")
-                                
                                 article_number = article_match.group(1)
                                 first_desc_line = article_match.group(2)
-                                
-                                # Check if there are price digits at the end of the description
                                 price_match = re.search(r'\s+\d+\.\d+\s+\/\s+EA', first_desc_line)
                                 if price_match:
-                                    # If we found price info, remove it from the description
                                     first_desc_line = first_desc_line[:price_match.start()]
-                                
-                                # Initialize full description with the first line
                                 full_description = first_desc_line
                                 
-                                # Check if there's a second line for the description
                                 next_line_idx = idx + 1
                                 if next_line_idx < len(page_lines):
                                     next_line = page_lines[next_line_idx].strip()
-                                    
-                                    # If the next line doesn't start with a number (except for price info),
-                                    # it's likely a continuation of the description
                                     if not re.match(r'^\d{8,}', next_line) and not re.match(r'^\d+\.\d+\s+\/\s+EA', next_line):
-                                        # This is a continuation of the description
                                         second_desc_line = next_line
-                                        
-                                        # Check if there are price digits in this line as well
                                         price_match = re.search(r'\s+\d+\.\d+\s+\/\s+EA', second_desc_line)
                                         if price_match:
                                             second_desc_line = second_desc_line[:price_match.start()]
-                                        
                                         full_description += " " + second_desc_line
-                                        next_line_idx += 1  # Move to the next line after the description
+                                        next_line_idx += 1
                                 
-                                # Set the full description
                                 article_info["ARTICLE"] = article_number
                                 article_info["Article description"] = full_description.strip()
                                 print(f"Extracted Article: {article_number} - {full_description}")
                                 
-                                # Now look for the customs code in the next line(s)
+                                # Customs code
                                 customs_code_idx = next_line_idx
                                 if customs_code_idx < len(page_lines):
                                     customs_line = page_lines[customs_code_idx].strip()
-                                    
-                                    # Look for a line that contains only digits (customs code)
                                     if re.match(r'^\d{8,}$', customs_line):
                                         article_info["Customs code"] = customs_line
                                         print(f"Extracted Customs code: {article_info['Customs code']}")
                                         customs_code_idx += 1
                                     else:
-                                        # If we didn't find it immediately, check the next few lines
-                                        for i in range(1, 3):  # Look at up to 3 more lines
-                                            if customs_code_idx + i >= len(page_lines):
+                                        for i2 in range(1, 3):
+                                            if customs_code_idx + i2 >= len(page_lines):
                                                 break
-                                                
-                                            customs_line = page_lines[customs_code_idx + i].strip()
+                                            customs_line = page_lines[customs_code_idx + i2].strip()
                                             if re.match(r'^\d{8,}$', customs_line):
                                                 article_info["Customs code"] = customs_line
                                                 print(f"Extracted Customs code: {article_info['Customs code']}")
-                                                customs_code_idx = customs_code_idx + i + 1
+                                                customs_code_idx = customs_code_idx + i2 + 1
                                                 break
                                 
-                                # Continue with the other fields, starting after the customs code
+                                # Fabric composition
                                 start_idx = customs_code_idx
-                                
-                                # Extract fabric composition
                                 if start_idx < len(page_lines):
                                     fabric_line = page_lines[start_idx].strip()
                                     if "%" in fabric_line:
@@ -711,36 +655,37 @@ def extract_jackjones_o(pdf_path):
                                         print(f"Extracted Fabric composition: {article_info['Fabric composition']}")
                                         start_idx += 1
                                 
-                                # Extract construction type
+                                # Construction type
                                 if start_idx < len(page_lines):
                                     const_line = page_lines[start_idx].strip()
                                     article_info["Construction type"] = const_line
                                     print(f"Extracted Construction type: {article_info['Construction type']}")
                                     start_idx += 1
                                 
-                                # Extract gender
+                                # Gender
                                 if start_idx < len(page_lines):
                                     gender_line = page_lines[start_idx].strip()
                                     article_info["Gender"] = gender_line
                                     print(f"Extracted Gender: {article_info['Gender']}")
                                     start_idx += 1
                                 
-                                # Extract article group
+                                # Article group
                                 if start_idx < len(page_lines):
                                     group_line = page_lines[start_idx].strip()
-                                    # Check if this line follows the pattern of article groups (often in ALL-CAPS with hyphens)
                                     if group_line and (group_line.isupper() or '-' in group_line) and not re.match(r'^\d', group_line):
-                                        # This is likely an article group based on format, not specific content
                                         article_info["Article group"] = group_line
                                         print(f"Extracted Article group: {article_info['Article group']}")
                                         start_idx += 1
                                 
-                                # Extract country of origin (usually not explicitly stated in the examples)
-                                article_info["Country of origin"] = "India"  # Default assumption
+                                # Country of origin (default)
+                                article_info["Country of origin"] = "India"
                                 
-                                # Try to extract pricing from the lines containing price information
+                                # Pricing info (attempt)
                                 try:
-                                    price_pattern = re.search(r"(\d+\.\d+)\s*/\s*(\w+)\s+(\d+\.\d+)\s+(\w+/\w+)\s+([\d,]+\.\d+)\s+([A-Z]+)", page_text)
+                                    price_pattern = re.search(
+                                        r"(\d+\.\d+)\s*/\s*(\w+)\s+(\d+\.\d+)\s+(\w+/\w+)\s+([\d,]+\.\d+)\s+([A-Z]+)",
+                                        page_text
+                                    )
                                     if price_pattern:
                                         article_info["Price per unit"] = price_pattern.group(1) + " / " + price_pattern.group(2)
                                         article_info["Total unit"] = price_pattern.group(3) + " " + price_pattern.group(4)
@@ -758,10 +703,8 @@ def extract_jackjones_o(pdf_path):
             if not article_found:
                 print("Warning: No article information found")
             
-            # Process items from all pages
+            # Process items from all pages and collect colors
             print("Scanning for item rows across all pages")
-            all_items = []
-            
             for page_idx in range(len(pdf.pages)):
                 try:
                     page = pdf.pages[page_idx]
@@ -770,12 +713,11 @@ def extract_jackjones_o(pdf_path):
                     print(f"Scanning page {page_idx+1} with {len(lines)} lines for items")
                     
                     i = 0
-                    while i < len(lines): # Adjusted loop condition slightly, main check is inside
-                        line = lines[i].strip() # Ensure current line is stripped
+                    while i < len(lines):
+                        line = lines[i].strip()
                         
                         # Match the item row pattern
                         try:
-                            # Original item_match pattern
                             item_match = re.match(
                                 r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+([\w/]+)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.\d+)\s+([\d.]+)\s+([\d,]+\.\d+)\s+(\d{11})\s+(\d+)',
                                 line
@@ -791,12 +733,12 @@ def extract_jackjones_o(pdf_path):
                                 size_from_line1 = item_match.group(4).strip()
                                 print(f"Initial size from first line: '{size_from_line1}'")
                                 
-                                # Initialize other variables
+                                # Initialize defaults
                                 color = "Unknown"
                                 ean_suffix = ""
                                 current_item_size = size_from_line1 
                                 
-                                # Check for next line with additional information
+                                # Check for next line with additional information (color / size suffix / ean suffix)
                                 if i + 1 < len(lines):
                                     next_line = lines[i + 1].strip()
                                     print(f"Next line content: '{next_line}'")
@@ -813,11 +755,9 @@ def extract_jackjones_o(pdf_path):
                                     # Check for size suffix in last token (ending with 'Y' or digit+'Y')
                                     tokens = base_str.split()
                                     size_suffix = None
-                                    color = "Unknown"
                                     
                                     if tokens:
                                         last_token = tokens[-1]
-                                        # Check if last token is a size suffix (ends with Y or is digit+Y)
                                         if last_token.endswith('Y') or re.fullmatch(r'\d+Y', last_token):
                                             size_suffix = last_token
                                             color = " ".join(tokens[:-1]).strip() or "Unknown"
@@ -826,7 +766,7 @@ def extract_jackjones_o(pdf_path):
                                     else:
                                         color = "Unknown"
                                     
-                                    # Process size suffix if found
+                                    # If size suffix found, combine sizes
                                     if size_suffix:
                                         current_item_size = size_from_line1 + size_suffix
                                         print(f"Extracted color: '{color}', size suffix: '{size_suffix}', combined size: '{current_item_size}', EAN suffix: '{ean_suffix}'")
@@ -835,6 +775,10 @@ def extract_jackjones_o(pdf_path):
                                         print(f"Extracted color: '{color}', size unchanged: '{size_from_line1}', EAN suffix: '{ean_suffix}'")
                                         i += 1  # Still consume the next line
                                 
+                                # If a real color (not "Unknown"), add it to our set
+                                if color and color.lower() != "unknown":
+                                    colors_set.add(color)
+                                
                                 # Get remaining fields from item_match
                                 quantity_value = item_match.group(5)
                                 nos_pcs = item_match.group(6)
@@ -842,20 +786,20 @@ def extract_jackjones_o(pdf_path):
                                 igst_rate = item_match.group(8)
                                 mrp = item_match.group(9)
                                 ean_partial = item_match.group(10)
-                                hsn = item_match.group(11) # HSN is group 11
+                                hsn = item_match.group(11)
                                 
                                 # Create full EAN code
                                 full_ean = ean_partial + ean_suffix
                                 
                                 # Prepare data row
                                 quantity = f"{quantity_value} {nos_pcs}"
-                                id_colour = f"{variant_id}/{color}" # Color is stripped above
+                                id_colour = f"{variant_id}/{color}"
                                 
                                 row = {
                                     "item_sno": item_number,
                                     "article_number": article_variant,
                                     "artcicle_id_color": id_colour,
-                                    "size_years": current_item_size, # Use the combined or initial size
+                                    "size_years": current_item_size,
                                     "quatity_uom": quantity,
                                     "igst_taxable_value": igst,
                                     "igst_percentage": igst_rate,
@@ -867,8 +811,8 @@ def extract_jackjones_o(pdf_path):
                                 data_rows.append(row)
                                 print(f"Added item row: {row}\n---")
                                 
-                                i += 1 # Increment for the current line (item_match line)
-                                continue # Continue to the next iteration of the while loop
+                                i += 1
+                                continue
                             
                         except Exception as e:
                             print(f"Error parsing item row components at line {i} ('{line}'): {e}")
@@ -905,6 +849,14 @@ def extract_jackjones_o(pdf_path):
                     print(f"Error processing page {page_idx+1} for items: {e}")
             
             print(f"Extraction complete. Found {len(data_rows)} item rows")
+            
+            # Now assign podata['Colors'] to the comma-separated unique colors
+            if colors_set:
+                podata['Colors'] = ', '.join(sorted(colors_set))
+                print(f"Final grouped Colors: {podata['Colors']}")
+            else:
+                podata['Colors'] = "Not found"
+                print("Warning: No colors extracted from item rows")
             
             final_result = {
                 "po_details": podata,
@@ -1688,12 +1640,12 @@ def extract_benetton(pdf_path):
 
 @app.post("/process")
 async def process_pdf(request: dict = Body(...)):
-    company = request.get("company", "")
+    extraction_no = request.get("extraction_no", "")
     pdf_base64 = request.get("pdf_base64", "")
 
-    if not pdf_base64 or not company:
+    if not pdf_base64 or not extraction_no:
         return JSONResponse(
-            content={"success": False, "message": "Missing PDF data or company name"},
+            content={"success": False, "message": "Missing PDF data or extraction no"},
             status_code=400
         )
     
@@ -1704,13 +1656,13 @@ async def process_pdf(request: dict = Body(...)):
             temp_path = temp_pdf.name
         
         try:
-            if "Jack Jones" in company:
+            if "1" in extraction_no:
                 result = extract_jackjones_o(temp_path)
-            elif "Skecher" in company:
+            elif "2" in extraction_no:
                 result = extract_skechers(temp_path)
-            elif "Puma" in company:
+            elif "3" in extraction_no:
                 result = extract_puma(temp_path)
-            elif "Benetton" in company:
+            elif "4" in extraction_no:
                 result = extract_benetton(temp_path)    
             else:
                 result = None
@@ -1726,7 +1678,7 @@ async def process_pdf(request: dict = Body(...)):
                     "success": True,
                     "data": result,
                     # "html_table": result,
-                    "company": company
+                    "extraction_no": extraction_no
                 }
             )
 

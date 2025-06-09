@@ -47,6 +47,9 @@
                                     <strong>Address:</strong> {{ $data['ship_to_address'] ?? 'Not available' }}
                                 </li>
                                 @endif
+                                <li class="list-group-item">
+                                    <input type="text" class="form-control hsn-code" name="hsn_code" id="hsn_code" placeholder="Enter HSN Code" required>
+                                </li>
                             </ul>
                         </div>
                     </div>
@@ -69,7 +72,7 @@
                     {{-- PO Items Table --}}
                     <div class="table-responsive">
                         <table class="table table-bordered">
-                            <thead class="table-dark">
+                            <thead>
                                 <tr>
                                     <th>S.No</th>
                                     <th>HSN Code</th>
@@ -165,7 +168,7 @@
                         <h5>Size Breakdown - Style {{ $data['style'] ?? '' }}</h5>
                         <div class="table-responsive">
                             <table class="table table-bordered">
-                                <thead class="table-light">
+                                <thead>
                                     <tr>
                                         <th>Color</th>
                                         @foreach(explode(' ', $sizeTable[0][1] ?? '') as $size)
@@ -196,7 +199,7 @@
                         <h5>Size Breakdown</h5>
                         <div class="table-responsive">
                             <table class="table table-bordered">
-                                <thead class="table-light">
+                                <thead>
                                     <tr>
                                         <th>Color</th>
                                         @if(isset($sizeTable['headers']))
