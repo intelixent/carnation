@@ -8,8 +8,11 @@ use App\Models\VendorMaster;
 use App\Models\PoMaster;
 use App\Models\PoItems;
 use App\Models\PrefixSetting;
+use App\Models\PoSizes;
 use App\Utils\POutils;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Yajra\DataTables\Facades\DataTables;
 
 class PdfExtractController extends BaseController
@@ -71,6 +74,9 @@ class PdfExtractController extends BaseController
                     $displayText = $row->po_ref_num;
                 }
 
+                $row->pdf_file_exists = $row->pdf_file && Storage::exists('public/po/' . $row->pdf_file);
+                $row->pdf_file_url = $row->pdf_file_exists ? url('storage/app/public/po/' . $row->pdf_file) : null;
+
                 $viewDetails = '';
                 $viewDetails .= '<li><a class="dropdown-item po-details-link" data-id="' . $row->id . '" href="javascript:void(0);">View</a></li>';
 
@@ -78,28 +84,55 @@ class PdfExtractController extends BaseController
                     $viewDetails .= '<li><a class="dropdown-item po-amend" data-id="' . $row->id . '" href="javascript:void(0);">Amend PO</a></li>';
                 }
 
+                if ($row->status == 0 && $row->pdf_file_exists) {
+                    $viewDetails .= '<li><a class="dropdown-item" href="' . $row->pdf_file_url . '" target="_blank" download>
+                <i class="fas fa-download me-1"></i>Download PO
+            </a></li>';
+                }
+
                 return '<div class="dropdown">
-                        <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">' . $displayText . '</button>
-                        <ul class="dropdown-menu">
-                        ' . $viewDetails . '
-                        </ul>
-                    </div>';
+                <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">' . $displayText . '</button>
+                <ul class="dropdown-menu">
+                ' . $viewDetails . '
+                </ul>
+            </div>';
+            })
+            ->addColumn('status', function ($row) {
+                if ($row->status == 0) {
+                    return '<span class="badge bg-warning text-dark">Not Amended</span>';
+                } elseif ($row->status == 1) {
+                    return '<span class="badge bg-success">Amended</span>';
+                } else {
+                    return '<span class="badge bg-secondary">Unknown</span>';
+                }
             })
             ->addColumn('vendor', function ($row) {
                 $vendor_name = $row->vendor->name ?? 'N/A';
 
                 return "<strong>{$vendor_name}</strong>";
             })
-            ->addColumn('created', function ($row) {
-                $created_date = \Carbon\Carbon::parse($row->created_at)->format('d-m-Y h:i A');
-                $time_elapsed = \Carbon\Carbon::parse($row->created_at)->diffForHumans();
-                $creator_name = $row->creator->full_name ?? 'N/A';
+            ->addColumn('created', function ($row) use ($request) {
+                if ($request->type  === 'amended') {
+                    $amended_date = \Carbon\Carbon::parse($row->amended_at)->format('d-m-Y h:i A');
+                    $amended_elapsed = \Carbon\Carbon::parse($row->amended_at)->diffForHumans();
+                    $amender_name = $row->amend->full_name ?? 'N/A';
 
-                return "<div>{$created_date}<br>
-            <span class='text-muted'>($time_elapsed)</span></div>
-            <small class='text-muted'>Created By: {$creator_name}</small>";
+                    $output = "<div>{$amended_date}<br>
+                    <span class='text-muted'>($amended_elapsed)</span></div>
+                    <small class='text-muted'>Created By: {$amender_name}</small>";
+                } else {
+                    $created_date = \Carbon\Carbon::parse($row->created_at)->format('d-m-Y h:i A');
+                    $time_elapsed = \Carbon\Carbon::parse($row->created_at)->diffForHumans();
+                    $creator_name = $row->creator->full_name ?? 'N/A';
+
+                    $output = "<div>{$created_date}<br>
+                    <span class='text-muted'>($time_elapsed)</span></div>
+                    <small class='text-muted'>Created By: {$creator_name}</small>";
+                }
+
+                return $output;
             })
-            ->rawColumns(['po_ref_num', 'po_num', 'created', 'po_date', 'vendor'])
+            ->rawColumns(['po_ref_num', 'po_num', 'created', 'po_date', 'vendor', 'status'])
             ->make(true);
     }
 
@@ -234,6 +267,20 @@ class PdfExtractController extends BaseController
                 throw new \Exception('PO prefix setting not found');
             }
 
+            // Handle PDF file upload with random name
+            $pdfFileName = null;
+            if ($request->hasFile('pdf_file')) {
+                $file = $request->file('pdf_file');
+
+                // Generate random filename with original extension
+                $randomName = Str::random(40);
+                $extension = $file->getClientOriginalExtension();
+                $pdfFileName = $randomName . '.' . $extension;
+
+                // Store file in storage/app/public/po directory
+                $file->storeAs('public/po', $pdfFileName);
+            }
+
             $currentNumber = $prefixSetting->number;
             $poNo = $prefixSetting->format . str_pad($currentNumber, 5, '0', STR_PAD_LEFT);
 
@@ -262,7 +309,7 @@ class PdfExtractController extends BaseController
             }
 
             // Create PO Master
-            $pomaster = $this->createPoMaster($vendor_id, $poNo, $po_details, $article_details, $request, $article_details_input);
+            $pomaster = $this->createPoMaster($vendor_id, $poNo, $po_details, $article_details, $request, $article_details_input, $pdfFileName);
 
             // Update prefix number
             $prefixSetting->number = $currentNumber + 1;
@@ -283,13 +330,14 @@ class PdfExtractController extends BaseController
         }
     }
 
-    private function createPoMaster($vendor_id, $poNo, $po_details, $article_details, $request, $article_details_input)
+    private function createPoMaster($vendor_id, $poNo, $po_details, $article_details, $request, $article_details_input, $pdfFileName)
     {
         $actualVendorId = $this->getVendorIdByName($vendor_id);
 
         $poData = [
             'vendor_id' => $actualVendorId,
             'po_ref_num' => $poNo,
+            'pdf_file' => $pdfFileName,
             'created_by' => auth()->user()->id,
             'created_at' => now(),
         ];
@@ -320,6 +368,7 @@ class PdfExtractController extends BaseController
                 $poData = array_merge($poData, [
                     'po_num' => $skecherDetails['order_no'],
                     'po_date' => $skecherDetails['order_date'],
+                    'vendor_customer_name' => $skecherDetails['customer_name'],
                     'vendor_com_adr' => $skecherDetails['customer_address'],
                     'vendor_gst' => $skecherDetails['customer_gstin'],
                     'vendor_del_adr' => json_encode($skecherDetails['ship_to_address']),
@@ -377,7 +426,7 @@ class PdfExtractController extends BaseController
                 break;
 
             case "4":
-                $this->createBenettonItems($po_id, $po_items, $po_details, $hsn_code);
+                $this->createBenettonItems($po_id, $po_items, $po_details, $vendor_id);
                 break;
         }
     }
@@ -509,86 +558,85 @@ class PdfExtractController extends BaseController
         }
     }
 
-    private function createBenettonItems($po_id, $po_items, $po_details, $hsn_code)
+    private function createBenettonItems($po_id, $po_items, $po_details, $vendor_id)
     {
+        $size_tables     = $po_details['size_tables'] ?? [];
+        $processedColors = [];
+
         foreach ($po_items as $po_item) {
-            // Get size breakdown from size_tables if available
-            if (empty($po_item['Col']) || $po_item['Col'] === 'Total') {
+            $color = $po_item['Col'] ?? null;
+            // skip totals or blank color for PoItems
+            if (empty($color) || $color === 'Total') {
                 continue;
             }
 
-            $size_tables = $po_details['size_tables'] ?? [];
-            $sizes = [];
-            $sizeData = [];
+            // create master PoItems
+            $masterQty  = (int) str_replace(',', '', $po_item['Qty'] ?? 0);
+            $masterCost = (float) str_replace(',', '', $po_item['Basic Cost'] ?? 0);
+            $master     = PoItems::create([
+                'po_id'              => $po_id,
+                'sno'                => $po_item['S.N o'] ?? 0,
+                'article_number'     => $po_item['Part No'] ?? null,
+                'part_description'   => $po_item['Part Description'] ?? null,
+                'id_color'           => $color,
+                'color'              => $color,
+                'qty'                => $masterQty,
+                'unit_price'         => $masterCost,
+                'material_value'     => $masterQty * $masterCost,
+                'igst_per'           => $po_item['IGST %'] ?? 0,
+                'igst_taxable_value' => $masterQty * $masterCost * (($po_item['IGST %'] ?? 0) / 100),
+                'total_value'        => $masterQty * $masterCost * (1 + (($po_item['IGST %'] ?? 0) / 100)),
+                'due_date'           => $po_item['Due Date'] ?? null,
+                'mrp'                => $po_item['MRP/UNIT'] ?? 0,
+                'hsn_code'           => $po_item['HSN Code'] ?? null,
+                'created_at'         => now(),
+                'created_by'         => auth()->user()->id,
+            ]);
 
-            // Find matching size table data for this color
+            // skip config entries if already processed this color
+            if (in_array($color, $processedColors, true)) {
+                continue;
+            }
+
+            // Find size breakdown for this color
+            $sizes   = [];
+            $qtyData = [];
             foreach ($size_tables as $table) {
-                $headers = $table['headers'] ?? [];
-                $rows = $table['rows'] ?? [];
-
-                foreach ($rows as $row) {
-                    if ($row[0] == $po_item['Col']) {
-                        $sizes = $headers;
-                        $sizeData = explode(' ', $row[1]); // Split quantities by space
-                        break 2; // Exit both loops
+                foreach ($table['rows'] ?? [] as $row) {
+                    if ($row[0] == $color) {
+                        $sizes   = $table['headers'];
+                        $qtyData = explode(' ', $row[1]);
+                        break 2;
                     }
                 }
             }
 
-            // Create items for each size
-            if (!empty($sizes) && !empty($sizeData)) {
-                foreach ($sizes as $index => $size) {
-                    $qty = isset($sizeData[$index]) ? (int) str_replace(',', '', $sizeData[$index]) : 0;
-
-                    if ($qty > 0) {
-                        $poitemData = [
-                            'po_id' => $po_id,
-                            'sno' => $po_item['S.N o'] ?? 0,
-                            'article_number' => $po_item['Part No'] ?? null,
-                            'part_description' => $po_item['Part Description'] ?? null,
-                            'id_color' => $po_item['Col'] ?? null,
-                            'color_code' => $po_item['Col'] ?? null,
-                            'size' => $size,
-                            'qty' => $qty,
-                            'unit_price' => $po_item['Basic Cost'] ?? 0,
-                            'material_value' => ($qty * ($po_item['Basic Cost'] ?? 0)),
-                            'igst_per' => $po_item['IGST %'] ?? 0,
-                            'igst_taxable_value' => ($qty * ($po_item['Basic Cost'] ?? 0) * ($po_item['IGST %'] ?? 0) / 100),
-                            'total_value' => ($qty * ($po_item['Basic Cost'] ?? 0) * (1 + ($po_item['IGST %'] ?? 0) / 100)),
-                            'due_date' => $po_item['Due Date'] ?? null,
-                            'mrp' => $po_item['MRP/UNIT'] ?? 0,
-                            'hsn_code' => $hsn_code,
-                            'created_at' => now(),
-                            'created_by' => auth()->user()->id,
-                        ];
-
-                        PoItems::create($poitemData);
-                    }
-                }
-            } else {
-                // Fallback: create single item if no size breakdown
-                $poitemData = [
-                    'po_id' => $po_id,
-                    'item_sno' => $po_item['S.N o'] ?? 0,
-                    'item_article_number' => $po_item['Part No'] ?? null,
-                    'part_description' => $po_item['Part Description'] ?? null,
-                    'id_color' => $po_item['Col'] ?? null,
-                    'color_code' => $po_item['Col'] ?? null,
-                    'qty' => $po_item['Qty'] ?? 0,
-                    'unit_price' => $po_item['Basic Cost'] ?? 0,
-                    'material_value' => $po_item['Material Value'] ?? 0,
-                    'igst_per' => $po_item['IGST %'] ?? 0,
-                    'igst_taxable_value' => $po_item['IGST Amount'] ?? 0,
-                    'total_value' => $po_item['Total Value'] ?? 0,
-                    'due_date' => $po_item['Due Date'] ?? null,
-                    'mrp' => $po_item['MRP/UNIT'] ?? 0,
-                    'hsn_code' => $po_item['HSN Code'] ?? null,
-                    'created_at' => now(),
-                    'created_by' => auth()->user()->id,
-                ];
-
-                PoItems::create($poitemData);
+            // no breakdown: mark and skip
+            if (empty($sizes) || empty($qtyData)) {
+                $processedColors[] = $color;
+                continue;
             }
+
+            // insert size configuration items
+            foreach ($sizes as $idx => $size) {
+                $qty = isset($qtyData[$idx]) ? (int) str_replace(',', '', $qtyData[$idx]) : 0;
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                PoSizes::create([
+                    'po_id'       => $po_id,
+                    'vendor_id'   => $vendor_id,
+                    'color'       => $color,
+                    'size'        => $size,
+                    'qty'      => $qty,
+                    'created_at'  => now(),
+                    'created_by'  => auth()->user()->id,
+                ]);
+            }
+
+            // mark this color done for config only
+            $processedColors[] = $color;
         }
     }
 
@@ -597,34 +645,88 @@ class PdfExtractController extends BaseController
         $po_id = $request->input('po_id');
         $po_master = PoMaster::findOrFail($po_id);
         $po_items = PoItems::where('po_id', $po_id)->get();
+        $article_info = json_decode($po_master->article_info, true);
 
-        // Get vendor_id to determine which view to show
         $vendor_id = $po_master->vendor_id;
-
-        // Get HSN code (assuming it's the same for all items, take from first item)
         $hsn_code = $po_items->isNotEmpty() ? $po_items->first()->hsn_code : '';
 
-        $data = [
-            'po_master' => $po_master,
-            'po_items' => $po_items,
-            'hsn_code' => $hsn_code
-        ];
+        // For Benetton (vendor 4), fetch config items for size breakdown
+        $size_breakdown = [];
+        if ($vendor_id == 4) {
+            $colors = $po_items->pluck('id_color')->unique()->values();
+            $configItems = PoSizes::where('vendor_id', $vendor_id)
+                ->whereIn('color', $colors)
+                ->get();
 
-        // Determine which view to show based on vendor_id
-        $view = 'pdf_extract.details'; // default view
+            $sizes = $configItems->pluck('size')->unique()->sort()->values()->toArray();
 
+            $breakdown = [];
+            foreach ($colors as $color) {
+                $row = ['Color' => $color];
+                $total = 0;
+                foreach ($sizes as $size) {
+                    $qty = $configItems->where('color', $color)
+                        ->where('size', $size)
+                        ->sum('qty');
+                    $row[$size] = $qty ?: '-';
+                    if ($qty) $total += $qty;
+                }
+                $row['TOTAL'] = $total;
+                $breakdown[] = $row;
+            }
+
+            $size_breakdown = [
+                'data' => $breakdown,
+                'sizes' => $sizes,
+            ];
+        }
+
+        // Format PO items for Jack Jones (vendor 1)
+        $formatted_po_items = [];
         if ($vendor_id == 1) {
-            // Jack Jones view
-            $view = 'pdf_extract.jack_jones_details';
-        } elseif ($vendor_id == 2) {
-            // Skechers view
-            $view = 'pdf_extract.skechers_details';
-        } elseif ($vendor_id == 3) {
-            // Puma view
-            $view = 'pdf_extract.puma_details';
-        } elseif ($vendor_id == 4) {
-            // Benetton view
-            $view = 'pdf_extract.benetton_details';
+            foreach ($po_items as $item) {
+                $formatted_po_items[] = [
+                    'sno' => $item->sno,
+                    'article_number' => $item->article_number,
+                    'color' => $item->id_color,
+                    'size' => $item->size,
+                    'quatity_uom' => $item->qty,
+                    'uom' => $item->uom,
+                    'igst_taxable_value' => $item->igst_taxable_value,
+                    'igst_per' => $item->igst_per,
+                    'mrp' => $item->mrp,
+                    'ean_code' => $item->ean_code
+                ];
+            }
+        }
+
+        $data = compact(
+            'po_master',
+            'article_info',
+            'po_items',
+            'hsn_code',
+            'formatted_po_items',
+            'size_breakdown'
+        );
+
+        // Choose view by vendor
+        switch ($vendor_id) {
+            case 1:
+            case 5:
+            case 6:
+                $view = 'pdf_extract.jack_jones_details';
+                break;
+            case 2:
+                $view = 'pdf_extract.skechers_details';
+                break;
+            case 3:
+                $view = 'pdf_extract.puma_details';
+                break;
+            case 4:
+                $view = 'pdf_extract.benetton_details';
+                break;
+            default:
+                $view = 'pdf_extract.details';
         }
 
         return view($view, compact('data'));
@@ -649,6 +751,8 @@ class PdfExtractController extends BaseController
         $po->status     = 1;
         $po->po_job_num = $request->job_number;
         $po->remarks    = $request->remarks;
+        $po->amended_at    =  now();
+        $po->amended_by    = auth()->user()->id;
         $po->save();
 
         return response()->json([

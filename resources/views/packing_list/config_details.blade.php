@@ -78,7 +78,7 @@
             <select name="carton_id" id="carton_select" class="form-control select2" required>
                 <option value="">Select Carton</option>
                 @foreach($cartons as $carton)
-                <option value="{{ $carton->id }}">
+                <option value="{{ $carton->id }}" {{ $selectedCartonId == $carton->id ? 'selected' : '' }}>
                     {{ $carton->length }} x {{ $carton->breadth }} x {{ $carton->height }}
                 </option>
                 @endforeach

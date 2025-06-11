@@ -21,11 +21,23 @@ class PackingListItem extends Model
         'carton_id',
         'carton_name',
         'article_number',
+        'color',
         'size',
         'quantity',
+        'created_at',
         'created_by',
         'status'
     ];
+
+    public function packed()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function vendor()
+    {
+        return $this->belongsTo(VendorMaster::class, 'vendor_id');
+    }
 
     public function carton()
     {

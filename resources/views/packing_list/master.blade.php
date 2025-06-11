@@ -68,23 +68,19 @@
                             <thead>
                                 <tr>
                                     <th>S.No</th>
+                                    <th>Job Number</th>
                                     <th>PO Number</th>
-                                    <th>PO Date</th>
                                     <th>Vendor Name</th>
-                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach($packingLists as $key => $packingList)
                                 <tr>
                                     <td>{{ $key + 1 }}</td>
-                                    <td>{{ $packingList->po_no }}</td>
-                                    <td>{{ \Carbon\Carbon::parse($packingList->po_date)->format('d-m-Y') }}</td>
-                                    <td>{{ $packingList->po->vendor->name ?? 'N/A' }}</td>
                                     <td>
                                         <div class="dropdown">
                                             <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false">
-                                                Action
+                                                {{ $packingList->po->po_job_num }}
                                             </button>
                                             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
                                                 <li><a class="dropdown-item view-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">View</a></li>
@@ -94,6 +90,8 @@
                                             </ul>
                                         </div>
                                     </td>
+                                    <td>{{ $packingList->po_no }}</td>
+                                    <td>{{ $packingList->po->vendor->name ?? 'N/A' }}</td>
                                 </tr>
                                 @endforeach
                             </tbody>

@@ -313,6 +313,29 @@
         });
 
         function proceedWithSave() {
+            // Get the PDF file
+            var pdfFile = $('#pdf_file')[0].files[0];
+
+            // Create FormData object to handle file upload
+            var formData = new FormData();
+            if (po_data && po_data.trim() !== "" && po_data !== "undefined") {
+                formData.append('po_data', po_data);
+            }
+            formData.append('po_details', po_details);
+            formData.append('article_details', article_details);
+            formData.append('po_items', po_items);
+            formData.append('po_unit_price', po_unit_price);
+            formData.append('po_qty', po_qty);
+            formData.append('vendor_name', vendor_name);
+            formData.append('vendor_id', vendor_id);
+            formData.append('hsn_code', hsn_code);
+            formData.append('_token', '{{ csrf_token() }}');
+
+            // Append PDF file if exists
+            if (pdfFile) {
+                formData.append('pdf_file', pdfFile);
+            }
+
             Swal.fire({
                 title: 'Loading...',
                 html: 'Please wait while we store the details',
@@ -325,39 +348,43 @@
             $.ajax({
                 url: "{{route('pdf_extract_store')}}",
                 method: 'POST',
-                data: {
-                    'po_data': po_data,
-                    'po_details': po_details,
-                    'article_details': article_details,
-                    'po_items': po_items,
-                    'po_unit_price': po_unit_price,
-                    'po_qty': po_qty,
-                    'vendor_name': vendor_name,
-                    'vendor_id': vendor_id,
-                    'hsn_code': hsn_code,
-                    _token: '{{ csrf_token() }}'
-                },
+                data: formData,
+                processData: false,
+                contentType: false,
                 success: function(response) {
                     Swal.close();
-                    $.toast({
-                        heading: 'Success',
-                        text: response.message,
-                        position: 'top-center',
-                        bgColor: '#000',
-                        textColor: 'white',
-                        hideAfter: 3000,
-                        stack: 6
-                    });
-                    setTimeout(function() {
-                        location.reload();
-                    }, 3000);
+
+                    if (response.success) {
+                        $.toast({
+                            heading: 'Success',
+                            text: response.message,
+                            position: 'top-center',
+                            bgColor: '#000',
+                            textColor: 'white',
+                            hideAfter: 3000,
+                            stack: 6
+                        });
+                        setTimeout(function() {
+                            window.location.href = "{{ route('pdf_extract_all_master') }}";
+                        }, 3000);
+                    } else {
+                        $.toast({
+                            heading: 'Error',
+                            text: response.message,
+                            position: 'top-center',
+                            bgColor: '#FF0000',
+                            textColor: 'white',
+                            hideAfter: 3000,
+                            stack: 6
+                        });
+                    }
                 },
                 error: function(xhr, status, error) {
                     Swal.close();
                     Swal.fire({
                         icon: 'error',
                         title: 'Error',
-                        text: 'Failed to load details. Please try again.'
+                        text: 'Failed to save details. Please try again.'
                     });
                     console.error(error);
                 }

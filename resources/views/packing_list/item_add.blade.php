@@ -11,7 +11,7 @@
 
             <div class="mb-3">
                 <label class="form-label">Article Number</label>
-                <select class="form-control" id="articleSelect" required>
+                <select class="form-control select2m" id="articleSelect" required>
                     <option value="">Select Article</option>
                     @foreach($articles as $article)
                     <option value="{{ $article }}">{{ $article }}</option>
@@ -20,7 +20,7 @@
             </div>
             <div class="mb-3">
                 <label class="form-label">Size</label>
-                <select class="form-control" id="sizeSelect" required disabled>
+                <select class="form-control select2m" id="sizeSelect" required disabled>
                     <option value="">Select Size</option>
                 </select>
             </div>

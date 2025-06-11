@@ -1,7 +1,7 @@
 <div class="modal-dialog modal-xl">
     <div class="modal-content">
         @php
-        $po = $data['po_details'];
+        $po = $data['po_master'];
         @endphp
         <div class="modal-header">
             <h5 class="modal-title">Purchase Order Details - #{{ $po['po_ref_num'] ?? '' }}</h5>
@@ -22,7 +22,7 @@
                                 <div class="row">
                                     <!-- Section 1: General PO Details -->
                                     @php
-                                    $po = $data['po_details'];
+                                    $po = $data['po_master'];
                                     @endphp
                                     <div class="col-md-6">
                                         <h5>PO Information</h5>
@@ -41,8 +41,8 @@
                                     <div class="col-md-6">
                                         <h5>Address Information</h5>
                                         <ul class="list-group mb-3">
-                                            <li class="list-group-item"><strong>Delivery Address:</strong> {{ $po['Delivery Address'] ?? '' }}</li>
-                                            <li class="list-group-item"><strong>Communication Address:</strong> {{ $po['Communication Address'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>Delivery Address:</strong> {{ $po['vendor_del_adr'] ?? '' }}</li>
+                                            <li class="list-group-item"><strong>Communication Address:</strong> {{ $po['vendor_com_adr'] ?? '' }}</li>
                                         </ul>
                                     </div>
                                 </div>
@@ -103,7 +103,7 @@
                                     <table class="table table-bordered table-striped table-hover">
                                         <thead class="table-dark">
                                             <tr>
-                                                @foreach(array_keys($data['po_items'][0]) as $header)
+                                                @foreach(array_keys($data['formatted_po_items'][0]) as $header)
                                                 <th>{{ ucwords(str_replace('_', ' ', $header)) }}</th>
                                                 @endforeach
                                             </tr>
@@ -116,7 +116,7 @@
                                             preg_match('/\d+(\.\d+)?/', $article_info['Price per unit'], $matchess);
                                             $per_unit_price = $matchess[0];
                                             @endphp
-                                            @foreach($data['po_items'] as $item)
+                                            @foreach($data['formatted_po_items'] as $item)
                                             <?php
 
                                             preg_match('/\d+/', $item['quatity_uom'], $matches);
@@ -169,6 +169,57 @@
                             </div>
                         </div>
                     </div>
+
+                    {{-- AMENDMENT DETAILS --}}
+                    @if($po->status == 1)
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingAmendment">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseAmendment" aria-expanded="false"
+                                aria-controls="collapseAmendment">
+                                Amendment Details
+                            </button>
+                        </h2>
+                        <div id="collapseAmendment" class="accordion-collapse collapse"
+                            aria-labelledby="headingAmendment" data-bs-parent="#pdfAccordion">
+                            <div class="accordion-body">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="alert alert-warning" role="alert">
+                                            <i class="fas fa-exclamation-triangle me-2"></i>
+                                            <strong>This Purchase Order has been amended</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h5>Amendment Information</h5>
+                                        <ul class="list-group mb-3">
+                                            <li class="list-group-item">
+                                                <strong>Job Number:</strong> {{ $po->po_job_num ?? 'N/A' }}
+                                            </li>
+                                            <li class="list-group-item">
+                                                <strong>Amended By:</strong> {{ $po->amend->full_name ?? 'N/A' }}
+                                            </li>
+                                            <li class="list-group-item">
+                                                <strong>Amended At:</strong>
+                                                {{ $po->amended_at ? \Carbon\Carbon::parse($po->amended_at)->format('d-m-Y H:i:s') : 'N/A' }}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h5>Amendment Remarks</h5>
+                                        <ul class="list-group mb-3">
+                                            <li class="list-group-item">
+                                                <strong>Remarks:</strong> {{ $po->remarks ?? 'N/A' }}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
                 </div>
             </div>
         </div>

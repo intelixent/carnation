@@ -90,8 +90,8 @@
                 </div>
                 <div class="card-body">
                     <nav class="nav nav-style-6 nav-pills mb-3 nav-justified d-sm-flex d-block" role="tablist">
-                        <a class="nav-link active" data-bs-toggle="tab" role="tab" href="#nav-amended" aria-selected="true">AMENDED</a>
                         <a class="nav-link" href="{{route('pdf_extract_all_master')}}">ALL</a>
+                        <a class="nav-link active" data-bs-toggle="tab" role="tab" href="#nav-amended" aria-selected="true">AMENDED</a>
                     </nav>
                     <div class="tab-content">
                         <input type="hidden" name="type" id="type" value="amended">
