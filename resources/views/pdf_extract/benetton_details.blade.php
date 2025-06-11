@@ -1,7 +1,7 @@
 <div class="modal-dialog modal-xl">
     <div class="modal-content">
         @php
-        $po = $data['po_details'];
+        $po = $data['po_master'];
         @endphp
         <div class="modal-header">
             <h5 class="modal-title">Purchase Order Details - #{{ $po['po_ref_num'] ?? '' }}</h5>
@@ -28,16 +28,16 @@
                                         <h5>PO Information</h5>
                                         <ul class="list-group mb-3">
                                             <li class="list-group-item">
-                                                <strong>PO Number:</strong> {{ $po['PO Number'] ?? '' }}
+                                                <strong>Order Number:</strong> {{ $po->po_num ?? '' }}
                                             </li>
                                             <li class="list-group-item">
-                                                <strong>PO Date:</strong> {{ $po['PO Date'] ?? '' }}
+                                                <strong>Order Date:</strong> {{ $po->po_date ?? '' }}
                                             </li>
                                             <li class="list-group-item">
-                                                <strong>Delivery Date:</strong> {{ $po['Goods Ready Date'] ?? '' }}
+                                                <strong>Delivery Date:</strong> {{ $po->goods_ready_date ?? '' }}
                                             </li>
                                             <li class="list-group-item">
-                                                <strong>GSTIN:</strong> {{ $po['GSTIN'] ?? '' }}
+                                                <strong>Delivery Date:</strong> {{ $po->season ?? '' }}
                                             </li>
                                         </ul>
                                     </div>
@@ -45,16 +45,16 @@
                                     <div class="col-md-6">
                                         <h5>Delivery Address</h5>
                                         <ul class="list-group mb-3">
-                                            @if(isset($po['Delivery Address']) && is_array($po['Delivery Address']))
+                                            @if(isset($po->vendor_del_adr) && is_array(json_decode($po->vendor_del_adr, true)))
                                             <li class="list-group-item">
                                                 <strong>Address:</strong><br>
-                                                @foreach($po['Delivery Address'] as $addressLine)
+                                                @foreach(json_decode($po->vendor_del_adr, true) as $addressLine)
                                                 {{ $addressLine }}<br>
                                                 @endforeach
                                             </li>
                                             @else
                                             <li class="list-group-item">
-                                                <strong>Address:</strong> {{ $po['Delivery Address'] ?? 'Not available' }}
+                                                <strong>Address:</strong> {{ $po->vendor_del_adr ?? 'Not available' }}
                                             </li>
                                             @endif
                                         </ul>
@@ -76,100 +76,104 @@
                         <div id="collapsePoItems" class="accordion-collapse collapse"
                             aria-labelledby="headingPoItems" data-bs-parent="#pdfAccordion">
                             <div class="accordion-body">
-                                {{-- PO Items Table --}}
-                                <div class="table-responsive">
-                                    <table class="table table-bordered">
-                                        <thead>
-                                            <tr>
-                                                <th>S.No</th>
-                                                <th>HSN Code</th>
-                                                <th>Article No</th>
-                                                <th>Description</th>
-                                                <th>Color</th>
-                                                <th>Size</th>
-                                                <th>QTY</th>
-                                                <th>Unit Price</th>
-                                                <th>Material Value</th>
-                                                <th>GST %</th>
-                                                <th>GST Amount</th>
-                                                <th>Total Value</th>
-                                                <th>Due Date</th>
-                                                <th>MRP</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @php
-                                            $poItems = $data['po_items'] ?? [];
-                                            $totalMaterialValue = 0;
-                                            $totalGstAmount = 0;
-                                            $totalValue = 0;
-                                            @endphp
 
-                                            @foreach($poItems as $index => $item)
-                                            @php
-                                            $materialValue = floatval(str_replace(',', '', $item['Material Value'] ?? 0));
-                                            $gstAmount = floatval(str_replace(',', '', $item['IGST\nAmount'] ?? 0));
-                                            $itemTotalValue = floatval(str_replace(',', '', $item['Total Value'] ?? 0));
-                                            
-                                            $totalMaterialValue += $materialValue;
-                                            $totalGstAmount += $gstAmount;
-                                            $totalValue += $itemTotalValue;
-                                            @endphp
-
-                                            <tr>
-                                                <td>{{ $item['S.N\no'] ?? ($index + 1) }}</td>
-                                                <td>{{ $item['HSN\nCode'] ?? '' }}</td>
-                                                <td>{{ $item['Part No'] ?? '' }}</td>
-                                                <td>{{ $item['Part Description'] ?? '' }}</td>
-                                                <td>{{ $item['Col'] ?? '' }}</td>
-                                                <td>{{ $item['Sz\nGr\np'] ?? '' }}</td>
-                                                <td>{{ number_format(floatval(str_replace(',', '', $item['Qty'] ?? 0))) }}</td>
-                                                <td>{{ number_format(floatval(str_replace(',', '', $item['Basic Cost'] ?? 0)), 2) }}</td>
-                                                <td>{{ number_format($materialValue, 2) }}</td>
-                                                <td>{{ $item['IGST\n%'] ?? 0 }}%</td>
-                                                <td>{{ number_format($gstAmount, 2) }}</td>
-                                                <td>{{ number_format($itemTotalValue, 2) }}</td>
-                                                <td>{{ $item['Due Date'] ?? '' }}</td>
-                                                <td>{{ number_format(floatval(str_replace(',', '', $item['MRP/UNIT'] ?? 0)), 2) }}</td>
-                                            </tr>
-                                            @endforeach
-
-                                            <tr class="table-secondary">
-                                                <td colspan="8" class="text-end"><strong>Total</strong></td>
-                                                <td><strong>{{ number_format($totalMaterialValue, 2) }}</strong></td>
-                                                <td></td>
-                                                <td><strong>{{ number_format($totalGstAmount, 2) }}</strong></td>
-                                                <td><strong>{{ number_format($totalValue, 2) }}</strong></td>
-                                                <td colspan="2"></td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                {{-- Size Breakdown Table --}}
-                                @if(isset($data['size_breakdown']) && count($data['size_breakdown']) > 0)
+                                {{-- Detailed PO Items Table --}}
                                 <div class="mt-4">
-                                    <h5>Size Breakdown - Style {{ $data['style'] ?? '' }}</h5>
+                                    <h5>Detailed Items</h5>
                                     <div class="table-responsive">
                                         <table class="table table-bordered">
                                             <thead>
                                                 <tr>
+                                                    <th>S.No</th>
+                                                    <th>HSN Code</th>
+                                                    <th>Article No</th>
+                                                    <th>Description</th>
                                                     <th>Color</th>
-                                                    <th>XS</th>
-                                                    <th>S</th>
-                                                    <th>M</th>
-                                                    <th>L</th>
-                                                    <th>XL</th>
-                                                    <th>EL</th>
+                                                    <th>Size</th>
+                                                    <th>QTY</th>
+                                                    <th>Unit Price</th>
+                                                    <th>Material Value</th>
+                                                    <th>GST %</th>
+                                                    <th>GST Amount</th>
+                                                    <th>Total Value</th>
+                                                    <th>Due Date</th>
+                                                    <th>MRP</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @php
+                                                $totalMaterialValue = 0;
+                                                $totalGstAmount = 0;
+                                                $totalValue = 0;
+                                                @endphp
+
+                                                @foreach($data['po_items'] as $item)
+                                                @php
+                                                $qty = floatval($item->qty ?? 0);
+                                                $unitPrice = floatval(str_replace(',', '', $item->unit_price ?? 0));
+                                                $materialValue = $qty * $unitPrice;
+                                                $gstAmount = floatval(str_replace(',', '', $item->igst_taxable_value ?? 0));
+                                                $lineTotal = floatval(str_replace(',', '', $item->total_value ?? 0));
+
+                                                $totalMaterialValue += $materialValue;
+                                                $totalGstAmount += $gstAmount;
+                                                $totalValue += $lineTotal;
+                                                @endphp
+                                                <tr>
+                                                    <td>{{ $item->sno }}</td>
+                                                    <td>{{ $item->hsn_code }}</td>
+                                                    <td>{{ $item->article_number }}</td>
+                                                    <td>{{ $item->part_description }}</td>
+                                                    <td><strong>{{ $item->id_color }}</strong></td>
+                                                    <td>{{ $item->size_grp }}</td>
+                                                    <td><strong>{{ number_format($qty) }}</strong></td>
+                                                    <td>{{ number_format($unitPrice, 2) }}</td>
+                                                    <td>{{ number_format($materialValue, 2) }}</td>
+                                                    <td>{{ $item->igst_per }}%</td>
+                                                    <td>{{ number_format($gstAmount, 2) }}</td>
+                                                    <td>{{ number_format($lineTotal, 2) }}</td>
+                                                    <td>{{ $item->due_date }}</td>
+                                                    <td>{{ number_format(floatval(str_replace(',', '', $item->mrp ?? 0)), 2) }}</td>
+                                                </tr>
+                                                @endforeach
+
+                                                {{-- Grand Total Row --}}
+                                                <tr class="table-secondary">
+                                                    <td colspan="8" class="text-end"><strong>Grand Total</strong></td>
+                                                    <td><strong>{{ number_format($totalMaterialValue, 2) }}</strong></td>
+                                                    <td></td>
+                                                    <td><strong>{{ number_format($totalGstAmount, 2) }}</strong></td>
+                                                    <td><strong>{{ number_format($totalValue, 2) }}</strong></td>
+                                                    <td colspan="2"></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {{-- Size Breakdown Table --}}
+                                @if(!empty($data['size_breakdown']['data']))
+                                <div class="mt-4">
+                                    <h5>Size Breakdown</h5>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-sm">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Color</th>
+                                                    @foreach($data['size_breakdown']['sizes'] as $size)
+                                                    <th>{{ $size }}</th>
+                                                    @endforeach
                                                     <th>TOTAL</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                @foreach($data['size_breakdown'] as $row)
+                                                @foreach($data['size_breakdown']['data'] as $row)
                                                 <tr>
-                                                    @foreach($row as $cell)
-                                                    <td>{{ $cell }}</td>
+                                                    <td><strong>{{ $row['Color'] }}</strong></td>
+                                                    @foreach($data['size_breakdown']['sizes'] as $size)
+                                                    <td>{{ $row[$size] }}</td>
                                                     @endforeach
+                                                    <td><strong>{{ number_format($row['TOTAL']) }}</strong></td>
                                                 </tr>
                                                 @endforeach
                                             </tbody>
@@ -180,6 +184,57 @@
                             </div>
                         </div>
                     </div>
+
+                    {{-- AMENDMENT DETAILS --}}
+                    @if($po->status == 1)
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingAmendment">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseAmendment" aria-expanded="false"
+                                aria-controls="collapseAmendment">
+                                Amendment Details
+                            </button>
+                        </h2>
+                        <div id="collapseAmendment" class="accordion-collapse collapse"
+                            aria-labelledby="headingAmendment" data-bs-parent="#pdfAccordion">
+                            <div class="accordion-body">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <div class="alert alert-warning" role="alert">
+                                            <i class="fas fa-exclamation-triangle me-2"></i>
+                                            <strong>This Purchase Order has been amended</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h5>Amendment Information</h5>
+                                        <ul class="list-group mb-3">
+                                            <li class="list-group-item">
+                                                <strong>Job Number:</strong> {{ $po->po_job_num ?? 'N/A' }}
+                                            </li>
+                                            <li class="list-group-item">
+                                                <strong>Amended By:</strong> {{ $po->amend->full_name ?? 'N/A' }}
+                                            </li>
+                                            <li class="list-group-item">
+                                                <strong>Amended At:</strong>
+                                                {{ $po->amended_at ? \Carbon\Carbon::parse($po->amended_at)->format('d-m-Y H:i:s') : 'N/A' }}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h5>Amendment Remarks</h5>
+                                        <ul class="list-group mb-3">
+                                            <li class="list-group-item">
+                                                <strong>Remarks:</strong> {{ $po->remarks ?? 'N/A' }}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
                 </div>
             </div>
         </div>

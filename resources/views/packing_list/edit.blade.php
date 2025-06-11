@@ -48,7 +48,10 @@
                                     <p class="mb-1"><strong>PO Number:</strong> <span id="po_num">{{ $packingList->po_no }}</span></p>
                                 </div>
                                 <div class="col-md-3">
-                                    <p class="mb-1"><strong>PO Date:</strong> <span id="po_date">{{ \Carbon\Carbon::parse($packingList->po_date)->format('d-m-Y') }}</span></p>
+                                    <p class="mb-1"><strong>Job Number:</strong> <span id="po_job_num">{{ $packingList->po->po_job_num }}</span></p>
+                                </div>
+                                <div class="col-md-3">
+                                    <p class="mb-1"><strong>PO Date:</strong> <span id="po_date">{{ $packingList->po_date }}</span></p>
                                 </div>
                                 <div class="col-md-3">
                                     <p class="mb-1"><strong>Vendor:</strong> <span id="vendor_name">{{ $packingList->vendor->name }}</span></p>
@@ -71,6 +74,7 @@
                                     <tr>
                                         <th>Carton Name</th>
                                         <th>Article Number</th>
+                                        <th>Color</th>
                                         <th>Size</th>
                                         <th>Quantity</th>
                                         <th>Action</th>
@@ -148,6 +152,7 @@
                                 <tr data-id="${item.id}">
                                     <td>${item.carton_name}</td>
                                     <td>${item.article_number}</td>
+                                    <td>${item.color}</td>
                                     <td>${item.size}</td>
                                     <td>${item.quantity}</td>
                                     <td>
@@ -172,6 +177,16 @@
             const vendorId = $('#vendor_id').val();
             const color = $('#colorSelect').val();
 
+            if (!poId || !color) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: poId ? 'Color Required' : 'PO Required',
+                    text: poId ? 'Please select a color first' : 'Please select a PO first',
+                    confirmButtonColor: '#3085d6'
+                });
+                return;
+            }
+
             $.ajax({
                 url: "{{ route('packing_list_item_add') }}",
                 method: 'POST',
@@ -183,7 +198,7 @@
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
-                    $('.select2').select2({
+                    $('.select2m').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
                     });
@@ -205,7 +220,7 @@
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
-                    $('.select2').select2({
+                    $('.select2m').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
                     });
@@ -221,7 +236,7 @@
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
-                    $('.select2', '#add_modal').select2({
+                    $('.select2m', '#add_modal').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
                     });
@@ -291,8 +306,16 @@
                         let options = '<option value="">Select Size</option>';
                         data.forEach(function(item) {
                             if (item.remaining_qty > 0) {
+                                let qtyText = '';
+
+                                if (item.packed_qty && item.packed_qty > 0) {
+                                    qtyText = `(Rem Qty:${item.remaining_qty})`;
+                                } else {
+                                    qtyText = `(Packed Qty: ${item.remaining_qty})`;
+                                }
+
                                 options += `<option value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
-                                    ${item.size} (Available: ${item.remaining_qty})
+                                    ${item.size} ${qtyText}
                                 </option>`;
                             }
                         });

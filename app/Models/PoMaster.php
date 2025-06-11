@@ -25,6 +25,8 @@ class PoMaster extends Model
         'mrp',
         'vcp',
         'colors',
+        'season',
+        'vendor_customer_name',
         'vendor_del_adr',
         'vendor_com_adr',
         'vendor_gst',
@@ -33,16 +35,24 @@ class PoMaster extends Model
         'po_unit_price',
         'po_qty',
         'remarks',
+        'pdf_file',
         'created_by',
+        'amended_by',
         'updated_at',
         'deleted_at',
         'created_at',
+        'amended_at',
         'status',
     ];
 
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function amend()
+    {
+        return $this->belongsTo(User::class, 'amended_by');
     }
 
     public function vendor()

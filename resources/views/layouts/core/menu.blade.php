@@ -63,8 +63,8 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                 <!-- End::slide -->
 
                 <!-- Start::slide -->
-                <li class="slide has-sub {{ request()->is('extract*') ? 'active open' : '' }}">
-                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('extract*') ? 'active' : '' }}">
+                <li class="slide has-sub {{ request()->is('po*') ? 'active open' : '' }}">
+                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('po*') ? 'active' : '' }}">
                         <i class="side-menu__icon fa-solid fa-file-pdf"></i>
                         <span class="side-menu__label ">Purchase Order</span>
                         <i class="fe fe-chevron-right side-menu__angle"></i>
@@ -74,14 +74,14 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                             <a href="{{ route('pdf_extract_add') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_add') ? 'active' : '' }}">Upload</a>
                         </li>
                         <li class="slide">
-                            <a href="{{ route('pdf_extract_amended_master') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_amended_master') || request()->routeIs('pdf_extract_all_master')? 'active' : '' }}">Master</a>
+                            <a href="{{ route('pdf_extract_all_master') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_all_master') || request()->routeIs('pdf_extract_amended_master')? 'active' : '' }}">Master</a>
                         </li>
                     </ul>
                 </li>
                 <!-- End::slide -->
 
-                <li class="slide has-sub ">
-                    <a href="javascript:void(0);" class="side-menu__item ">
+                <li class="slide has-sub {{ request()->is('packing_list*') ? 'active open' : '' }}">
+                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('packing_list*') ? 'active open' : '' }}">
                         <i class="side-menu__icon fa-solid fa-list-check"></i>
                         <span class="side-menu__label ">Packing Lists</span>
                         <i class="fe fe-chevron-right side-menu__angle"></i>
