@@ -1,4 +1,4 @@
-<div class="modal-dialog">
+<div class="modal-dialog modal-lg">
     <div class="modal-content">
         <div class="modal-header">
             <h5 class="modal-title">Add Packing List Item - # {{ $job_num }} | {{ $color }}</h5>
@@ -18,20 +18,15 @@
                     @endforeach
                 </select>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Size</label>
-                <select class="form-control select2m" id="sizeSelect" required disabled>
-                    <option value="">Select Size</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Quantity</label>
-                <input type="number" class="form-control" id="quantityInput" min="1" required disabled>
+
+            <div class="mb-3" id="sizesTableContainer" style="display: none;">
+                <label class="form-label">Select Sizes and Quantities</label>
+                <!-- Sizes table will be loaded here -->
             </div>
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary" id="saveItemBtn">Save Item</button>
+            <button type="button" class="btn btn-primary" id="saveItemBtn">Save Items</button>
         </div>
     </div>
 </div>
