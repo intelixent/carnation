@@ -48,13 +48,16 @@
                     <div class="row mt-3" id="po_details" style="display: none;">
                         <div class="col-md-12">
                             <div class="row">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <p class="mb-1"><strong>PO Number:</strong> <span id="po_num"></span></p>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
+                                    <p class="mb-1"><strong>Job Number:</strong> <span id="po_job_num"></span></p>
+                                </div>
+                                <div class="col-md-3">
                                     <p class="mb-1"><strong>PO Date:</strong> <span id="po_date"></span></p>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <p class="mb-1"><strong>Vendor:</strong> <span id="vendor_name"></span></p>
                                 </div>
                             </div>
@@ -75,6 +78,7 @@
                                     <tr>
                                         <th>Carton Name</th>
                                         <th>Article Number</th>
+                                        <th>Color</th>
                                         <th>Size</th>
                                         <th>Quantity</th>
                                         <th>Action</th>
@@ -177,6 +181,7 @@
                     },
                     success: function(data) {
                         $('#po_num').text(data.po_num);
+                        $('#po_job_num').text(data.po_job_num);
                         $('#po_date').text(data.po_date_formatted);
                         $('#vendor_name').text(data.vendor_name);
 
@@ -260,6 +265,7 @@
                                 <tr data-id="${item.id}">
                                     <td>${item.carton_name}</td>
                                     <td>${item.article_number}</td>
+                                    <td>${item.color}</td>
                                     <td>${item.size}</td>
                                     <td>${item.quantity}</td>
                                     <td>
@@ -308,7 +314,7 @@
                 success: function(response) {
                     $("#add_modal").html(response);
                     // init any select2 inside modal
-                    $('.select2', '#add_modal').select2({
+                    $('.select2m', '#add_modal').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
                     });
@@ -331,7 +337,7 @@
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
-                    $('.select2', '#add_modal').select2({
+                    $('.select2m', '#add_modal').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
                     });
@@ -398,8 +404,16 @@
                         let options = '<option value="">Select Size</option>';
                         data.forEach(function(item) {
                             if (item.remaining_qty > 0) {
+                                let qtyText = '';
+
+                                if (item.packed_qty && item.packed_qty > 0) {
+                                    qtyText = `(Rem Qty:${item.remaining_qty})`;
+                                } else {
+                                    qtyText = `(Packed Qty: ${item.remaining_qty})`;
+                                }
+
                                 options += `<option value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
-                                    ${item.size} (Available: ${item.remaining_qty})
+                                    ${item.size} ${qtyText}
                                 </option>`;
                             }
                         });

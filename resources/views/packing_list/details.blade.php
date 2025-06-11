@@ -1,21 +1,25 @@
 <div class="modal-dialog modal-lg">
     <div class="modal-content">
-        <div class="modal-header bg-primary">
-            <h5 class="modal-title text-white">Packing List Details</h5>
+        <div class="modal-header">
+            <h5 class="modal-title">Packing List Details</h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
             <!-- PO Details -->
             <div class="row mb-4">
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <p class="mb-1"><strong>Job Number:</strong></p>
+                    <p>{{ $packingList->po->po_job_num }}</p>
+                </div>
+                <div class="col-md-3">
                     <p class="mb-1"><strong>PO Number:</strong></p>
-                    <p class="text-primary">{{ $packingList->po_no }}</p>
+                    <p>{{ $packingList->po_no }}</p>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <p class="mb-1"><strong>PO Date:</strong></p>
-                    <p>{{ \Carbon\Carbon::parse($packingList->po_date)->format('d-m-Y') }}</p>
+                    <p>{{ $packingList->po_date }}</p>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <p class="mb-1"><strong>Vendor:</strong></p>
                     <p>{{ $packingList->vendor->name ?? $packingList->vendor_id }}</p>
                 </div>
@@ -30,19 +34,23 @@
                 <table class="table table-bordered">
                     <thead>
                         <tr>
-                            <th>Carton Name</th>
+                            <th>Carton Number</th>
                             <th>Article Number</th>
                             <th>Size</th>
                             <th>Quantity</th>
+                            <th>Packed By</th>
+                            <th>Packed At</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($packingList->items as $item)
                         <tr>
-                            <td>{{ $item->carton->name ?? 'N/A' }}</td>
+                            <td>{{ $item->carton_name ?? 'N/A' }}</td>
                             <td>{{ $item->article_number }}</td>
                             <td>{{ $item->size }}</td>
                             <td>{{ $item->quantity }}</td>
+                            <td>{{ $item->packed->full_name }}</td>
+                            <td>{{ \Carbon\Carbon::parse($item->created_at)->format('d-m-Y H:i:s') }}</td>
                         </tr>
                         @endforeach
                     </tbody>

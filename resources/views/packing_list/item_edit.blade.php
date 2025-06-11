@@ -15,7 +15,7 @@
                     <div class="col-md-6">
                         <div class="form-group mb-3">
                             <label for="articleSelect">Article Number</label>
-                            <select class="form-control" id="articleSelect" required>
+                            <select class="form-control select2m" id="articleSelect" required>
                                 <option value="">Select Article</option>
                                 @foreach($articles as $article)
                                 <option value="{{ $article }}" {{ $article == $item->article_number ? 'selected' : '' }}>
@@ -28,14 +28,19 @@
                     <div class="col-md-6">
                         <div class="form-group mb-3">
                             <label for="sizeSelect">Size</label>
-                            <select class="form-control" id="sizeSelect" required>
+                            <select class="form-control select2m" id="sizeSelect" required>
                                 <option value="">Select Size</option>
                                 @foreach($sizesWithQty as $sizeData)
                                 <option value="{{ $sizeData['size'] }}"
                                     data-max-qty="{{ $sizeData['remaining_qty'] + ($sizeData['size'] == $item->size ? $item->quantity : 0) }}"
                                     data-config-id="{{ $sizeData['config_item_id'] }}"
                                     {{ $sizeData['size'] == $item->size ? 'selected' : '' }}>
-                                    {{ $sizeData['size'] }} (Available: {{ $sizeData['remaining_qty'] - $item->quantity  }})
+                                    {{ $sizeData['size'] }}
+                                    @if($sizeData['packed_qty'] && $sizeData['packed_qty'] > 0)
+                                    (Rem Qty {{ $sizeData['remaining_qty'] }})
+                                    @else
+                                    (Packed Qty: {{ $sizeData['remaining_qty'] }})
+                                    @endif
                                 </option>
                                 @endforeach
                             </select>

@@ -47,9 +47,6 @@
                                     <strong>Address:</strong> {{ $data['ship_to_address'] ?? 'Not available' }}
                                 </li>
                                 @endif
-                                <li class="list-group-item">
-                                    <input type="text" class="form-control hsn-code" name="hsn_code" id="hsn_code" placeholder="Enter HSN Code" required>
-                                </li>
                             </ul>
                         </div>
                     </div>

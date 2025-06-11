@@ -94,8 +94,8 @@
                 </div>
                 <div class="card-body">
                     <nav class="nav nav-style-6 nav-pills mb-3 nav-justified d-sm-flex d-block" role="tablist">
-                        <a class="nav-link" href="{{route('pdf_extract_amended_master')}}">AMENDED</a>
                         <a class="nav-link active" data-bs-toggle="tab" role="tab" href="#nav-all" aria-selected="true">ALL</a>
+                        <a class="nav-link" href="{{route('pdf_extract_amended_master')}}">AMENDED</a>
                     </nav>
                     <div class="tab-content">
                         <input type="hidden" name="type" id="type" value="all">
@@ -109,6 +109,7 @@
                                         <th>Po No</th>
                                         <th>PO Date</th>
                                         <th>Created</th>
+                                        <th>Status</th>
                                     </tr>
                                 </thead>
                             </table>
@@ -210,6 +211,12 @@
                 {
                     data: 'created',
                     name: 'created'
+                },
+                {
+                    data: 'status',
+                    name: 'status',
+                    orderable: true,
+                    searchable: false
                 }
             ],
             pageLength: 50,
