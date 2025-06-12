@@ -7,6 +7,14 @@
         background-color: #007bff;
         color: white;
     }
+
+    .sizes-table {
+        overflow: visible;
+    }
+
+    .quantity-input {
+        width: 80px;
+    }
 </style>
 <div class="container-fluid">
     <!-- row -->
@@ -387,6 +395,7 @@
             });
         });
 
+        // Handle article selection - load sizes table
         $(document).on('change', '#articleSelect', function() {
             const poId = $('#po_id').val();
             const color = $('#color').val();
@@ -401,42 +410,94 @@
                         article_number: article
                     },
                     success: function(data) {
-                        let options = '<option value="">Select Size</option>';
-                        data.forEach(function(item) {
-                            if (item.remaining_qty > 0) {
-                                let qtyText = '';
-
-                                if (item.packed_qty && item.packed_qty > 0) {
-                                    qtyText = `(Rem Qty:${item.remaining_qty})`;
-                                } else {
-                                    qtyText = `(Packed Qty: ${item.remaining_qty})`;
-                                }
-
-                                options += `<option value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
-                                    ${item.size} ${qtyText}
-                                </option>`;
-                            }
-                        });
-                        $('#sizeSelect').html(options).prop('disabled', false);
-                        $('#quantityInput').val('').prop('max', 0);
+                        loadSizesTable(data);
                     }
                 });
             } else {
-                $('#sizeSelect').html('<option value="">Select Size</option>').prop('disabled', true);
-                $('#quantityInput').val('').prop('max', 0);
+                $('#sizesTableContainer').hide();
             }
         });
 
-        $(document).on('change', '#sizeSelect', function() {
-            const maxQty = parseInt($(this).find(':selected').data('max-qty')) || 0;
-            $('#quantityInput').attr('max', maxQty).val('');
-            if (maxQty > 0) {
-                $('#quantityInput').prop('disabled', false);
-            }
+        // Function to load sizes table
+        function loadSizesTable(sizes) {
+            let tableHtml = `
+        <div class="sizes-table">
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">
+                            <input type="checkbox" id="selectAllSizes" class="form-check-input">
+                        </th>
+                        <th style="width: 40%;">Size</th>
+                        <th style="width: 60%;">Quantity</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+            sizes.forEach(function(item) {
+                if (item.remaining_qty > 0) {
+                    let qtyText = '';
+                    if (item.packed_qty && item.packed_qty > 0) {
+                        qtyText = `Available: ${item.remaining_qty}`;
+                    } else {
+                        qtyText = `Pack Qty: ${item.remaining_qty}`;
+                    }
+
+                    tableHtml += `
+                <tr>
+                    <td>
+                        <input type="checkbox" class="form-check-input size-checkbox" value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
+                    </td>
+                    <td>
+                        <strong>${item.size}</strong><br>
+                        <small class="text-muted">${qtyText}</small>
+                    </td>
+                    <td>
+                        <input type="number" class="form-control quantity-input w-100" style="min-width: 120px;" min="1" max="${item.remaining_qty}" data-size="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}" disabled>
+                    </td>
+                </tr>
+            `;
+                }
+            });
+
+            tableHtml += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+            $('#sizesTableContainer').html(tableHtml).show();
+        }
+
+        // Handle select all sizes checkbox
+        $(document).on('change', '#selectAllSizes', function() {
+            const isChecked = $(this).is(':checked');
+            $('.size-checkbox').prop('checked', isChecked).trigger('change');
         });
 
-        $(document).on('input', '#quantityInput', function() {
-            const maxQty = parseInt($('#sizeSelect').find(':selected').data('max-qty')) || 0;
+        // Handle individual size checkbox
+        $(document).on('change', '.size-checkbox', function() {
+            const isChecked = $(this).is(':checked');
+            const size = $(this).val();
+            const quantityInput = $(`.quantity-input[data-size="${size}"]`);
+
+            quantityInput.prop('disabled', !isChecked);
+            if (!isChecked) {
+                quantityInput.val('');
+            } else {
+                quantityInput.focus();
+            }
+
+            // Update select all checkbox
+            const totalCheckboxes = $('.size-checkbox').length;
+            const checkedCheckboxes = $('.size-checkbox:checked').length;
+            $('#selectAllSizes').prop('checked', totalCheckboxes === checkedCheckboxes);
+        });
+
+        // Handle quantity input validation
+        $(document).on('input', '.quantity-input', function() {
+            const maxQty = parseInt($(this).data('max-qty')) || 0;
             const currentQty = parseInt($(this).val()) || 0;
 
             if (currentQty > maxQty) {
@@ -445,27 +506,71 @@
                     icon: 'warning',
                     title: 'Quantity Limit',
                     text: `Maximum available quantity is ${maxQty}`,
-                    confirmButtonColor: '#3085d6'
+                    timer: 2000,
+                    showConfirmButton: false
                 });
             }
         });
 
+        // Handle save item button
         $(document).on('click', '#saveItemBtn', function() {
             const isEdit = $('#itemId').length > 0;
-            const data = {
-                po_id: $('#po_id').val(),
-                carton_id: $('#carton_id').val(),
-                article_number: $('#articleSelect').val(),
-                color: $('#color').val(),
-                size: $('#sizeSelect').val(),
-                quantity: $('#quantityInput').val(),
-                config_item_id: $('#sizeSelect').find(':selected').data('config-id')
-            };
 
             if (isEdit) {
-                data.id = $('#itemId').val();
-            }
+                // Edit mode - unchanged
+                const data = {
+                    id: $('#itemId').val(),
+                    po_id: $('#po_id').val(),
+                    carton_id: $('#carton_id').val(),
+                    article_number: $('#articleSelect').val(),
+                    color: $('#color').val(),
+                    quantity: $('#quantityInput').val(),
+                    size: $('#currentSize').val(),
+                    config_item_id: $('#currentConfigId').val()
+                };
+                saveItem(data, true);
+            } else {
+                // Add mode - collect data from sizes table
+                const selectedSizes = [];
+                $('.size-checkbox:checked').each(function() {
+                    const size = $(this).val();
+                    const quantity = $(`.quantity-input[data-size="${size}"]`).val();
+                    const configId = $(this).data('config-id');
 
+                    if (quantity && parseInt(quantity) > 0) {
+                        selectedSizes.push({
+                            size: size,
+                            quantity: parseInt(quantity),
+                            config_item_id: configId
+                        });
+                    }
+                });
+
+                if (selectedSizes.length === 0) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'No Items Selected',
+                        text: 'Please select at least one size with quantity',
+                        confirmButtonColor: '#3085d6'
+                    });
+                    return;
+                }
+
+                // Prepare base data
+                const baseData = {
+                    po_id: $('#po_id').val(),
+                    carton_id: $('#carton_id').val(),
+                    article_number: $('#articleSelect').val(),
+                    color: $('#color').val()
+                };
+
+                // Call batch save
+                saveMultipleItems(baseData, selectedSizes);
+            }
+        });
+
+        // Unchanged single-item save
+        function saveItem(data, isEdit = false) {
             const url = isEdit ? '{{ route("packing_list_item_update") }}' : '{{ route("packing_list_item_store") }}';
 
             Swal.fire({
@@ -474,50 +579,96 @@
                 allowOutsideClick: false,
                 allowEscapeKey: false,
                 showConfirmButton: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
+                didOpen: () => Swal.showLoading()
             });
 
             $.ajax({
                 url: url,
                 method: 'POST',
                 data: data,
-                headers: {
-                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
                 success: function(response) {
                     $('#add_modal').modal('hide');
                     Swal.fire({
                         title: 'Success!',
-                        text: isEdit ? 'Item updated successfully!' : 'Item added successfully!',
+                        text: isEdit ? 'Item updated successfully!' : 'Item saved successfully!',
                         icon: 'success',
                         timer: 2000,
                         showConfirmButton: false
                     });
-
                     if (response.po_id) {
                         const color = $('#colorSelect').val();
                         loadPackingListItems(response.po_id, color);
                     }
                 },
                 error: function(xhr) {
-                    let errorMessage = 'Something went wrong';
-                    if (xhr.responseJSON && xhr.responseJSON.errors) {
-                        errorMessage = Object.values(xhr.responseJSON.errors).flat().join('<br>');
-                    } else if (xhr.responseJSON && xhr.responseJSON.error) {
-                        errorMessage = xhr.responseJSON.error;
-                    }
-
-                    Swal.fire({
-                        title: 'Error!',
-                        html: errorMessage,
-                        icon: 'error',
-                        confirmButtonColor: '#3085d6'
-                    });
+                    handleSaveError(xhr);
                 }
             });
-        });
+        }
+
+        // Updated batch save: one AJAX with arrays
+        function saveMultipleItems(baseData, selectedSizes) {
+            // Build arrays
+            const sizes = selectedSizes.map(s => s.size);
+            const quantities = selectedSizes.map(s => s.quantity);
+            const config_item_ids = selectedSizes.map(s => s.config_item_id);
+
+            // Combine into one payload
+            const postData = {
+                ...baseData,
+                sizes: sizes,
+                quantities: quantities,
+                config_item_ids: config_item_ids
+            };
+
+            Swal.fire({
+                title: 'Saving Items...',
+                text: 'Please wait',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            $.ajax({
+                url: '{{ route("packing_list_item_store") }}',
+                method: 'POST',
+                data: postData,
+                success: function(response) {
+                    $('#add_modal').modal('hide');
+                    Swal.fire({
+                        title: 'Success!',
+                        text: `${selectedSizes.length} items added successfully!`,
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    if (response.po_id) {
+                        const color = $('#colorSelect').val();
+                        loadPackingListItems(response.po_id, color);
+                    }
+                },
+                error: function(xhr) {
+                    handleSaveError(xhr);
+                }
+            });
+        }
+
+        // Error handler unchanged
+        function handleSaveError(xhr) {
+            let errorMessage = 'Something went wrong';
+            if (xhr.responseJSON && xhr.responseJSON.errors) {
+                errorMessage = Object.values(xhr.responseJSON.errors).flat().join('<br>');
+            } else if (xhr.responseJSON && xhr.responseJSON.error) {
+                errorMessage = xhr.responseJSON.error;
+            }
+            Swal.fire({
+                title: 'Error!',
+                html: errorMessage,
+                icon: 'error',
+                confirmButtonColor: '#3085d6'
+            });
+        }
     });
 </script>
 @endpush
