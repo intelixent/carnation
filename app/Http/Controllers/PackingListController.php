@@ -451,7 +451,7 @@ class PackingListController extends BaseController
         $poId = $request->input('po_id');
         $color = $request->input('color');
 
-        $packingList = PackingListMaster::where(array('po_id'=>$poId,"color"=>$color))->first();
+        $packingList = PackingListMaster::where(array('po_id' => $poId, "color" => $color))->first();
 
         if (!$packingList) {
             return response()->json([]);
@@ -469,11 +469,11 @@ class PackingListController extends BaseController
                     'size' => $item->size,
                     'quantity' => $item->quantity,
                     'carton_id' => $item->carton_id,
-                    
+
                 ];
             });
 
-        return response()->json(array("packing_status"=>$packingList->pack_status,"items"=>$items));
+        return response()->json(array("packing_status" => $packingList->pack_status, "items" => $items));
     }
 
     public function edit($id)
@@ -672,15 +672,15 @@ class PackingListController extends BaseController
                 }
             }
 
-            $existingCount = PackingListMaster::where(array('po_id'=>$request->po_id))
-                            ->count();
+            $existingCount = PackingListMaster::where(array('po_id' => $request->po_id))
+                ->count();
             $suffix = $existingCount + 1;
             $generatedPackRefNo = "{$po->po_job_num}/{$suffix}";
             // Create or fetch PackingListMaster
             $packingList = PackingListMaster::firstOrCreate(
-                ['po_id' => $request->po_id,'pack_status'=>0],
+                ['po_id' => $request->po_id, 'pack_status' => 0],
                 [
-                    'pack_ref_no'=>$generatedPackRefNo,
+                    'pack_ref_no' => $generatedPackRefNo,
                     'vendor_id'  => $po->vendor_id,
                     'po_no'      => $po->po_num,
                     'po_date'    => $po->po_date,
@@ -1961,5 +1961,32 @@ class PackingListController extends BaseController
             ->setPaper('a4', 'landscape');
 
         return $pdf->stream('Packing_list_print.pdf');
+    }
+
+    public function packing_list_complete(Request $request)
+    {
+        try {
+            $packingList = PackingListMaster::find($request->id);
+
+            if (! $packingList) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Packing List not found!',
+                ], 404);
+            }
+
+            $packingList->pack_status = 1;
+            $packingList->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Packing List marked complete!',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

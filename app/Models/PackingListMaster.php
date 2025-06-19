@@ -21,9 +21,10 @@ class PackingListMaster extends Model
         'vendor_id',
         'po_no',
         'po_date',
+        'created_at',
         'created_by',
         'status',
-        'pack_status' ,
+        'pack_status',
         'color'
     ];
 

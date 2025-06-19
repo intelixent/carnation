@@ -21,6 +21,7 @@ class VendorMaster extends Model
         'email',
         'address',
         'gst_no',
+        'pan_no',
         'state_id',
         'excess',
         'shortage',
