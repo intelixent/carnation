@@ -59,7 +59,7 @@
             <div class="card">
                 <div class="card-header justify-content-between bg-primary">
                     <div class="card-title text-white">
-                        Packing List Master
+                        Invoice Master
                     </div>
                 </div>
                 <div class="card-body">
@@ -69,48 +69,35 @@
                                 <tr>
                                     <th>S.No</th>
                                     <th>Ref no</th>
-                                    <th>Job Number</th>
+                                    <th>Date</th>
                                     <th>PO Number</th>
                                     <th>Vendor Name</th>
-                                    <th>Packed at</th>
-                                    <th>Status</th>
+                                    <th>Created at</th>
+                                    
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($packingLists as $key => $packingList)
+                                @foreach($InvoiceMaster as $key => $invoice)
                                 <tr>
                                     <td>{{ $key + 1 }}</td>
                                     <td>
                                         <div class="dropdown">
                                             <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false">
-                                                {{ $packingList->pack_ref_no }}
+                                                {{ $invoice->ref_no }}
                                             </button>
                                             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
-                                                <li><a class="dropdown-item view-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">View</a></li>
-                                                <li><a class="dropdown-item edit-pl" href="{{ route('packing_list_edit', ['id' => $packingList->id]) }}">Edit</a></li>
-                                                <li><a class="dropdown-item print-pl" target="_blank" href="{{ route('packing_list_print', ['id' => $packingList->id]) }}">Packing List Print</a></li>
-                                                <li><a class="dropdown-item delete-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">Delete</a></li>
+                                                <li><a class="dropdown-item view_invoice" data-id="{{ $invoice->id }}" href="javascript:void(0);">View</a></li>
+                                                <li><a class="dropdown-item update_invoice" >Update Invoice Details</a></li>
+                                                 <li><a class="dropdown-item" target="_blank" href="{{route('generateInvoice',['id' => $invoice->id])}}" >Print</a></li>
+                                                <li><a class="dropdown-item delete_invoice" data-id="{{ $invoice->id }}" href="javascript:void(0);">Delete</a></li>
                                             </ul>
                                         </div>
                                     </td>
-                                    <td>{{ $packingList->po->po_job_num }}</td>
-                                    <td>{{ $packingList->po_no }}</td>
-                                    <td>{{ $packingList->po->vendor->name ?? 'N/A' }}</td>
-                                    <td>{{  \Carbon\Carbon::parse($packingList->created_at)->format('d-m-Y h:i A'); }}</td>
-                                    <td>
-                                        @php 
-                                        if($packingList->pack_status==0)
-                                        {
-echo '<span class="badge bg-warning text-dark">In Packaging</span>';
-                                        }
-                                        elseif($packingList->pack_status==1){
-echo '<span class="badge bg-info text-dark">Packed & Ready for Invoice</span>';
-                                        }
-                                        elseif($packingList->pack_status==2){
-echo '<span class="badge bg-success text-dark">Invoiced</span>';
-                                        }
-                                        @endphp 
-                                    </td>
+                                    <td>{{  \Carbon\Carbon::parse($invoice->inv_date)->format('d-m-Y'); }}</td>
+                                    <td>{{ $invoice->po->po_num }}</td>
+                                    <td>{{ $invoice->po->vendor->name ?? 'N/A' }}</td>
+                                    <td>{{  \Carbon\Carbon::parse($invoice->created_at)->format('d-m-Y h:i A'); }}</td>
+                                    
                                 </tr>
                                 @endforeach
                             </tbody>

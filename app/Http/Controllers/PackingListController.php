@@ -449,8 +449,9 @@ class PackingListController extends BaseController
     public function get_packing_list_items(Request $request)
     {
         $poId = $request->input('po_id');
+        $color = $request->input('color');
 
-        $packingList = PackingListMaster::where('po_id', $poId)->first();
+        $packingList = PackingListMaster::where(array('po_id'=>$poId,"color"=>$color))->first();
 
         if (!$packingList) {
             return response()->json([]);
@@ -467,11 +468,12 @@ class PackingListController extends BaseController
                     'color' => $item->color,
                     'size' => $item->size,
                     'quantity' => $item->quantity,
-                    'carton_id' => $item->carton_id
+                    'carton_id' => $item->carton_id,
+                    
                 ];
             });
 
-        return response()->json($items);
+        return response()->json(array("packing_status"=>$packingList->pack_status,"items"=>$items));
     }
 
     public function edit($id)
@@ -670,10 +672,15 @@ class PackingListController extends BaseController
                 }
             }
 
+            $existingCount = PackingListMaster::where(array('po_id'=>$request->po_id))
+                            ->count();
+            $suffix = $existingCount + 1;
+            $generatedPackRefNo = "{$po->po_job_num}/{$suffix}";
             // Create or fetch PackingListMaster
             $packingList = PackingListMaster::firstOrCreate(
-                ['po_id' => $request->po_id],
+                ['po_id' => $request->po_id,'pack_status'=>0],
                 [
+                    'pack_ref_no'=>$generatedPackRefNo,
                     'vendor_id'  => $po->vendor_id,
                     'po_no'      => $po->po_num,
                     'po_date'    => $po->po_date,

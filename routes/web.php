@@ -9,6 +9,7 @@ use App\Http\Controllers\PdfExtractController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\POController;
 use App\Http\Controllers\PackingListController;
+use App\Http\Controllers\InvoiceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -98,6 +99,17 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/get_config_vendor_po', [PackingListController::class, 'get_config_vendor_po'])->name('get_config_vendor_po');
         Route::post('/get_config_po_details', [PackingListController::class, 'get_config_po_details'])->name('get_config_po_details');
         Route::post('/save_config_po_details', [PackingListController::class, 'save_config_po_details'])->name('save_config_po_details');
+    });
+
+    Route::group(['prefix' => 'invoice'], function () {
+    Route::get('/genrate', [InvoiceController::class, 'genrate'])->name('invoice_genrate');
+    Route::get('/master', [InvoiceController::class, 'master'])->name('invoice_master');
+    Route::post('/get_packging_list', [InvoiceController::class, 'get_packging_list'])->name('get_packging_list');
+
+    Route::post('/store_invoice', [InvoiceController::class, 'store_invoice'])->name('store_invoice');
+
+    Route::get('/download', [InvoiceController::class, 'generateInvoice'])->name('generateInvoice');
+            
     });
 
     Route::group(['prefix' => 'settings'], function () {

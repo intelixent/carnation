@@ -99,6 +99,23 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                     </ul>
                 </li>
 
+                <li class="slide has-sub {{ request()->is('invoice*') ? 'active open' : '' }}">
+                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('invoice*') ? 'active open' : '' }}">
+                        <i class="side-menu__icon fa-solid fa-file-invoice"></i>
+                        <span class="side-menu__label ">Invoice</span>
+                        <i class="fe fe-chevron-right side-menu__angle"></i>
+                    </a>
+                    <ul class="slide-menu child1">
+                        <li class="slide">
+                            <a href="{{ route('invoice_genrate') }}" class="side-menu__item {{ request()->routeIs('invoice_genrate') ? 'active' : '' }}">Generate</a>
+                        </li>
+                       
+                        <li class="slide">
+                            <a href="{{ route('invoice_master') }}" class="side-menu__item {{ request()->routeIs('invoice_master') ? 'active' : '' }}">Master</a>
+                        </li>
+                    </ul>
+                </li>
+
                 @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor', 'list-vendor', 'view-vendor']))
                 <li class="slide has-sub {{ request()->is('settings*') ? 'active open' : '' }}">
                     <a href="javascript:void(0);" class="side-menu__item {{ request()->is('settings*') ? 'active' : '' }}">
