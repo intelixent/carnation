@@ -34,11 +34,11 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label for="po_search">Search PO/Vendor</label>
+                                <label for="po_search">Search JobNo/PO No/Vendor</label>
                                 <select class="form-control select2-po-search"
                                     id="po_search"
                                     name="po_id"
-                                    data-placeholder="Search by PO Number or Vendor Name"
+                                    data-placeholder="Search by Job/PO Number / Vendor Name"
                                     required>
                                     <option value=""></option>
                                 </select>
@@ -75,11 +75,13 @@
                     <!-- Items Table Section -->
                     <div class="row mt-4" id="items_section" style="display: none;">
                         <div class="col-md-12">
+                            <div class="alert alert-info" id="status_display"></div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5>Carton Items</h5>
                                 <button type="button" class="btn btn-success btn-sm add-item" disabled>
                                     <i class="fas fa-plus"></i> Add Item
                                 </button>
+                                
                             </div>
                             <table class="table table-bordered" id="itemsTable">
                                 <thead>
@@ -262,7 +264,22 @@
                 url: '{{ route("packing_list_items") }}',
                 type: 'GET',
                 data: requestData,
-                success: function(items) {
+                success: function(response) {
+                var packing_status = response.packing_status;
+                var items = response.items;
+                var hidden_class = "";
+if(packing_status>0)
+{
+hidden_class = "d-none";
+$("#status_display").html("Packing Done and Ready For Invoice");
+ $('.add-item').prop('disabled', true);
+}
+else
+{
+    hidden_class = "";
+    $("#status_display").html("");
+     $('.add-item').prop('disabled', false);
+}
                     var $tbody = $('#itemsTable tbody').empty();
                     if (items.length) {
                         items.forEach(function(item) {
@@ -276,7 +293,7 @@
                                     <td>${item.color}</td>
                                     <td>${item.size}</td>
                                     <td>${item.quantity}</td>
-                                    <td>
+                                    <td class="${hidden_class}">
                                         <button class="btn btn-primary btn-sm me-1 edit-item" data-id="${item.id}">
                                             <i class="fas fa-edit"></i>
                                         </button>

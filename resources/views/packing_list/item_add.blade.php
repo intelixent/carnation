@@ -23,6 +23,11 @@
                 <label class="form-label">Select Sizes and Quantities</label>
                 <!-- Sizes table will be loaded here -->
             </div>
+
+             <div class="mb-3">
+                <label class="form-label">Net Weight</label>
+                 <input type="text" class="form-control" id="net_weight">
+            </div>
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
