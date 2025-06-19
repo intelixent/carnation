@@ -94,6 +94,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/item_update', [PackingListController::class, 'item_update'])->name('packing_list_item_update');
         Route::delete('/item_delete', [PackingListController::class, 'item_delete'])->name('packing_list_item_delete');
         Route::post('/delete', [PackingListController::class, 'delete'])->name('packing_list_delete');
+        Route::post('/complete', [PackingListController::class, 'packing_list_complete'])->name('packing_list_complete');
         Route::get('/print/{id}', [PackingListController::class, 'po_print'])->name('packing_list_print');
         Route::get('/config', [PackingListController::class, 'config'])->name('packing_list_config');
         Route::post('/get_config_vendor_po', [PackingListController::class, 'get_config_vendor_po'])->name('get_config_vendor_po');

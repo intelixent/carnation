@@ -88,6 +88,9 @@
                                             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
                                                 <li><a class="dropdown-item view-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">View</a></li>
                                                 <li><a class="dropdown-item edit-pl" href="{{ route('packing_list_edit', ['id' => $packingList->id]) }}">Edit</a></li>
+
+                                                <li><a class="dropdown-item complete-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">Mark as Complete</a></li>
+
                                                 <li><a class="dropdown-item print-pl" target="_blank" href="{{ route('packing_list_print', ['id' => $packingList->id]) }}">Packing List Print</a></li>
                                                 <li><a class="dropdown-item delete-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">Delete</a></li>
                                             </ul>
@@ -96,20 +99,20 @@
                                     <td>{{ $packingList->po->po_job_num }}</td>
                                     <td>{{ $packingList->po_no }}</td>
                                     <td>{{ $packingList->po->vendor->name ?? 'N/A' }}</td>
-                                    <td>{{  \Carbon\Carbon::parse($packingList->created_at)->format('d-m-Y h:i A'); }}</td>
+                                    <td>{{ \Carbon\Carbon::parse($packingList->created_at)->format('d-m-Y h:i A'); }}</td>
                                     <td>
-                                        @php 
+                                        @php
                                         if($packingList->pack_status==0)
                                         {
-echo '<span class="badge bg-warning text-dark">In Packaging</span>';
+                                        echo '<span class="badge bg-warning text-dark">In Packaging</span>';
                                         }
                                         elseif($packingList->pack_status==1){
-echo '<span class="badge bg-info text-dark">Packed & Ready for Invoice</span>';
+                                        echo '<span class="badge bg-info text-dark">Packed & Ready for Invoice</span>';
                                         }
                                         elseif($packingList->pack_status==2){
-echo '<span class="badge bg-success text-dark">Invoiced</span>';
+                                        echo '<span class="badge bg-success text-dark">Invoiced</span>';
                                         }
-                                        @endphp 
+                                        @endphp
                                     </td>
                                 </tr>
                                 @endforeach
@@ -200,6 +203,41 @@ echo '<span class="badge bg-success text-dark">Invoiced</span>';
                                 'Could not delete the packing list. Please try again later.',
                                 'error'
                             );
+                        }
+                    });
+                }
+            });
+        });
+
+        $(document).on('click', '.complete-pl', function() {
+            const id = $(this).data('id');
+
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "Mark this packing list as complete?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, complete it!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: "{{ route('packing_list_complete') }}",
+                        method: 'POST',
+                        data: {
+                            id,
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                Swal.fire('Done!', response.message, 'success')
+                                    .then(() => window.location.reload());
+                            } else {
+                                Swal.fire('Error', response.message, 'error');
+                            }
+                        },
+                        error: function(xhr) {
+                            Swal.fire('Error', 'Could not update status. Please try again.', 'error');
                         }
                     });
                 }
