@@ -78,7 +78,7 @@
 
             if (vendorId) {
                 $.ajax({
-                    url: '{{ route("get_config_vendor_po") }}',
+                    url: '{{ route("get_complete_vendor_packing_list") }}',
                     method: 'POST',
                     data: {
                         vendor_id: vendorId,

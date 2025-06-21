@@ -236,7 +236,7 @@
 
                 {{-- Size columns --}}
                 @foreach($tableData['sizeOrder'] as $size)
-                <td>{{ $row['per_size'][$size] ?? 0 }}</td>
+                <td>{{ ($row['per_size'][$size] ?? 0) > 0 ? $row['per_size'][$size] : '' }}</td>
                 @endforeach
 
                 {{-- PCS/CTN --}}
@@ -266,7 +266,7 @@
 
                 {{-- Size-wise totals --}}
                 @foreach($tableData['sizeOrder'] as $size)
-                <td>{{ $tableData['totals']['per_size'][$size] }}</td>
+                <td>{{ $tableData['totals']['per_size'][$size] > 0 ? $tableData['totals']['per_size'][$size] : '' }}</td>
                 @endforeach
 
                 {{-- PCS/CTN blank --}}

@@ -7,9 +7,9 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\PdfExtractController;
 use App\Http\Controllers\VendorController;
-use App\Http\Controllers\POController;
 use App\Http\Controllers\PackingListController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\TransportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -105,8 +105,10 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
     Route::group(['prefix' => 'invoice'], function () {
     Route::get('/genrate', [InvoiceController::class, 'genrate'])->name('invoice_genrate');
     Route::get('/master', [InvoiceController::class, 'master'])->name('invoice_master');
+    Route::post('/get_complete_vendor_packing_list', [InvoiceController::class, 'get_complete_vendor_packing_list'])->name('get_complete_vendor_packing_list');
     Route::post('/get_packging_list', [InvoiceController::class, 'get_packging_list'])->name('get_packging_list');
-
+    Route::post('/invoice_details_edit', [InvoiceController::class, 'invoice_details_edit'])->name('invoice_details_edit');
+    Route::post('/invoice_details_update', [InvoiceController::class, 'invoice_details_update'])->name('invoice_details_update');
     Route::post('/store_invoice', [InvoiceController::class, 'store_invoice'])->name('store_invoice');
 
     Route::get('/download', [InvoiceController::class, 'generateInvoice'])->name('generateInvoice');
@@ -139,6 +141,16 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
                 Route::post('/update', [VendorController::class, 'carton_update'])->name('carton_update');
                 Route::post('/delete', [VendorController::class, 'carton_delete'])->name('carton_delete');
             });
+        });
+
+        Route::group(['prefix' => 'transport'], function () {
+            Route::get('/master', [TransportController::class, 'index'])->name('transport_master');
+            Route::post('/add', [TransportController::class, 'add'])->name('transport_add');
+            Route::post('/store', [TransportController::class, 'store'])->name('transport_store');
+            Route::post('/details', [TransportController::class, 'get_transport_details'])->name('get_transport_details');
+            Route::post('/edit', [TransportController::class, 'edit'])->name('transport_edit');
+            Route::post('/update', [TransportController::class, 'update'])->name('transport_update');
+            Route::post('/delete', [TransportController::class, 'delete'])->name('transport_delete');
         });
     });
 });

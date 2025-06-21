@@ -108,8 +108,7 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                     <ul class="slide-menu child1">
                         <li class="slide">
                             <a href="{{ route('invoice_genrate') }}" class="side-menu__item {{ request()->routeIs('invoice_genrate') ? 'active' : '' }}">Generate</a>
-                        </li>
-                       
+                        </li>  
                         <li class="slide">
                             <a href="{{ route('invoice_master') }}" class="side-menu__item {{ request()->routeIs('invoice_master') ? 'active' : '' }}">Master</a>
                         </li>
@@ -144,6 +143,9 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                             </ul>
                         </li>
                         @endif
+                        <li class="slide">
+                            <a href="{{ route('transport_master') }}" class="side-menu__item {{ request()->routeIs('transport_master') ? 'active' : '' }}">Transport</a>
+                        </li>
                     </ul>
                 </li>
                 @endif

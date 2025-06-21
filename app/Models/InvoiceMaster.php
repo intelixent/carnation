@@ -28,12 +28,12 @@ class InvoiceMaster extends Model
         'status',
     ];
 
-     public function vendor()
+    public function vendor()
     {
         return $this->belongsTo(VendorMaster::class, 'vendor_id');
     }
-  
-     public function po()
+
+    public function po()
     {
         return $this->belongsTo(PoMaster::class, 'po_id');
     }

@@ -79,35 +79,31 @@
     </table>
 
     <table>
-
         <tr>
             <td><strong>IRN No:</strong></td>
-            <td></td>
+            <td>{{ $irn_details['irn_no'] ?? '' }}</td>
         </tr>
     </table>
+
     <table>
         <tr>
             <td>
-                <strong>Acknowledgment No:</strong> <br />
-                <strong>Document No:</strong> <br />
-                <strong>Supply Type Code:</strong> <br />
-                <strong>E-WAY BILL NO.:</strong> <br />
-                <strong>E-WAY BILL DATE:</strong> <br />
+                <strong>Acknowledgment No:</strong> {{ $irn_details['acknowledgment_no'] ?? '' }}<br />
+                <strong>Document No:</strong> {{ $irn_details['document_no'] ?? '' }}<br />
+                <strong>Supply Type Code:</strong> {{ $irn_details['supply_type_code'] ?? '' }}<br />
+                <strong>E-WAY BILL NO.:</strong> {{ $irn_details['eway_bill_no'] ?? '' }}<br />
+                <strong>E-WAY BILL DATE:</strong> {{ $irn_details['eway_bill_date'] ?? '' }}<br />
             </td>
             <td>
-                <strong>Acknowledgment Date:</strong> <br />
-                <strong>Document Date:</strong> <br />
-                <strong>Reverse Charge:</strong> <br />
-                <strong>Preceeding Document No.:</strong> <br />
-                <strong>Preceeding Document Date:</strong> <br />
+                <strong>Acknowledgment Date:</strong> {{ $irn_details['acknowledgment_date'] ?? '' }}<br />
+                <strong>Document Date:</strong> {{ $irn_details['document_date'] ?? '' }}<br />
+                <strong>Reverse Charge:</strong> {{ $irn_details['reverse_charge'] ?? '' }}<br />
+                <strong>Preceeding Document No.:</strong> {{ $irn_details['preceeding_document_no'] ?? '' }}<br />
+                <strong>Preceeding Document Date:</strong> {{ $irn_details['preceeding_document_date'] ?? '' }}<br />
             </td>
         </tr>
     </table>
 
-    @php
-        $billAddr = $po_details->vendor_com_adr;
-        $shipAddr = $po_details->vendor_del_adr;
-    @endphp
     <table>
         <tr>
             <td width="50%">Details of Receiver (Billed to)</td>
@@ -118,47 +114,47 @@
                 <table class="inner_table">
                     <tr>
                         <td width="30%"><strong>Legal Name</strong></td>
-                        <td width="70%">:BEST UNITED INDIA COMFORTS PVT LTD</td>
+                        <td width="70%">: {{ $bill_to_details['billed_legal_name'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>Address 1</strong></td>
-                        <td>:{!! nl2br(e($billAddr)) !!}</td>
+                        <td>: {{ $bill_to_details['billed_address_1'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>Address 2</strong></td>
-                        <td>:</td>
+                        <td>: {{ $bill_to_details['billed_address_2'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>City/Town/Village</strong></td>
-                        <td>:</td>
+                        <td>: {{ $bill_to_details['billed_city'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>State Name/Code</strong></td>
-                        <td>:{{ $state->name }} ({{ $state->code }})</td>
+                        <td>: {{ ($bill_to_details['billed_state_name'] ?? '') . ' / ' . ($bill_to_details['billed_state_code'] ?? '') }}</td>
                     </tr>
                     <tr>
                         <td><strong>GST No</strong></td>
-                        <td>:{{ $po_details->vendor_gst  }}</td>
+                        <td>: {{ $bill_to_details['billed_gst_no'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>PAN No</strong></td>
-                        <td>:{{ $vendor->pan_no }}</td>
+                        <td>: {{ $bill_to_details['billed_pan_no'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>PIN Code</strong></td>
-                        <td>:</td>
+                        <td>: {{ $bill_to_details['billed_pincode'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>GST Type</strong></td>
-                        <td>:Local GST</td>
+                        <td>: {{ $bill_to_details['billed_gst_type'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>PO Number</strong></td>
-                        <td>:{{ $po_details->po_num }}</td>
+                        <td>: {{ $po_details->po_num }}</td>
                     </tr>
                     <tr>
                         <td><strong>PO Date</strong></td>
-                        <td>:{{ $po_details->po_date }}</td>
+                        <td>: {{ $po_details->po_date }}</td>
                     </tr>
                 </table>
             </td>
@@ -166,47 +162,39 @@
                 <table class="inner_table">
                     <tr>
                         <td width="30%"><strong>Legal Name</strong></td>
-                        <td width="70%">:BEST UNITED INDIA COMFORTS PVT LTD</td>
+                        <td width="70%">: {{ $ship_to_details['shipped_legal_name'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>Address 1</strong></td>
-                        <td>:{!! nl2br(e($shipAddr)) !!}</td>
+                        <td>: {{ $ship_to_details['shipped_address_1'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>Address 2</strong></td>
-                        <td>:</td>
+                        <td>: {{ $ship_to_details['shipped_address_2'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>City/Town/Village</strong></td>
-                        <td>:</td>
+                        <td>: {{ $ship_to_details['shipped_city'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>State Name/Code</strong></td>
-                        <td>:{{ $state->name }} ({{ $state->code }})</td>
+                        <td>: {{ ($ship_to_details['shipped_state_name'] ?? '') . ' / ' . ($ship_to_details['shipped_state_code'] ?? '') }}</td>
                     </tr>
                     <tr>
                         <td><strong>GST No</strong></td>
-                        <td>:{{ $po_details->vendor_gst  }}</td>
+                        <td>: {{ $ship_to_details['shipped_gst_no'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>PAN No</strong></td>
-                        <td>:{{ $vendor->pan_no }}</td>
+                        <td>: {{ $ship_to_details['shipped_pan_no'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>PIN Code</strong></td>
-                        <td>:</td>
+                        <td>: {{ $ship_to_details['shipped_pincode'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td><strong>Place of Supply</strong></td>
-                        <td>:{{ $state->name }}</td>
-                    </tr>
-                    <tr>
-                        <td></td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td></td>
-                        <td></td>
+                        <td>: {{ $ship_to_details['shipped_place_of_supply'] ?? '' }}</td>
                     </tr>
                 </table>
             </td>
@@ -289,11 +277,11 @@
                 <table class="inner_table">
                     <tr>
                         <td>Transporter Name</td>
-                        <td></td>
+                        <td>: {{ $transporter_details['transport_name_display'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td>Mode of Transportation</td>
-                        <td></td>
+                        <td>: {{ $transporter_details['mode_of_transport'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td>GR No</td>
@@ -301,11 +289,11 @@
                     </tr>
                     <tr>
                         <td>Vehicle No</td>
-                        <td></td>
+                        <td>: {{ $transporter_details['transport_vehicle_no'] ?? '' }}</td>
                     </tr>
                     <tr>
                         <td>Distance (KM)</td>
-                        <td></td>
+                        <td>: {{ $transporter_details['transport_distance'] ?? '' }}</td>
                     </tr>
                 </table>
             </td>

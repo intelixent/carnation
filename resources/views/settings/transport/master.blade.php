@@ -34,7 +34,6 @@
         position: relative;
     }
 </style>
-@endpush
 
 <div class="container-fluid">
     <!-- BreadCrumbs -->
@@ -51,17 +50,17 @@
     </div>
     <!-- BreadCrumbs -->
 
+    <div class="modal fade" id="add_modal"></div>
     <div class="modal fade" id="detail_modal"></div>
-    <div class="modal fade" id="invoice_modal"></div>
+    <div class="modal fade" id="edit_modal"></div>
 
     <!-- row -->
     <div class="row">
         <div class="col-xl-12">
             <div class="card">
-                <div class="card-header justify-content-between bg-primary">
-                    <div class="card-title text-white">
-                        Invoice Master
-                    </div>
+                <div class="card-header bg-primary d-flex justify-content-between align-items-center">
+                    <h5 class="card-title text-white mb-0">Transport Master</h5>
+                    <a class="btn btn-secondary add-transport"><i class="fa-solid fa-plus"></i> Add</a>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -69,36 +68,28 @@
                             <thead>
                                 <tr>
                                     <th>S.No</th>
-                                    <th>Ref no</th>
-                                    <th>Date</th>
-                                    <th>PO Number</th>
-                                    <th>Vendor Name</th>
-                                    <th>Created at</th>
-                                    
+                                    <th>Name</th>
+                                    <th>Description</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($InvoiceMaster as $key => $invoice)
+                                @foreach($transports as $key => $transport)
                                 <tr>
                                     <td>{{ $key + 1 }}</td>
+                                    <td>{{ $transport->name }}</td>
+                                    <td>{{ $transport->description }}</td>
                                     <td>
                                         <div class="dropdown">
                                             <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false">
-                                                {{ $invoice->ref_no }}
+                                                Action
                                             </button>
                                             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
-                                                <li><a class="dropdown-item view_invoice" data-id="{{ $invoice->id }}" href="javascript:void(0);">View</a></li>
-                                                <li><a class="dropdown-item update_invoice" data-id="{{ $invoice->id }}" href="javascript:void(0);">Update Invoice Details</a></li>
-                                                <li><a class="dropdown-item" target="_blank" href="{{route('generateInvoice',['id' => $invoice->id])}}" >Print</a></li>
-                                                <li><a class="dropdown-item delete_invoice" data-id="{{ $invoice->id }}" href="javascript:void(0);">Delete</a></li>
+                                                <li><a class="dropdown-item view-transport" data-id="{{ $transport->id }}" href="javascript:void(0);">View</a></li>
+                                                <li><a class="dropdown-item edit-transport" data-id="{{ $transport->id }}" href="javascript:void(0);">Edit</a></li>
                                             </ul>
                                         </div>
                                     </td>
-                                    <td>{{  \Carbon\Carbon::parse($invoice->inv_date)->format('d-m-Y'); }}</td>
-                                    <td>{{ $invoice->po->po_num }}</td>
-                                    <td>{{ $invoice->po->vendor->name ?? 'N/A' }}</td>
-                                    <td>{{  \Carbon\Carbon::parse($invoice->created_at)->format('d-m-Y h:i A'); }}</td>
-                                    
                                 </tr>
                                 @endforeach
                             </tbody>
@@ -129,10 +120,23 @@
             ]
         });
 
-        $(document).on('click', '.view-pl', function() {
+        $(document).on('click', '.add-transport', function() {
             var id = $(this).data('id');
             $.ajax({
-                url: "{{route('packing_list_details')}}",
+                url: "{{route('transport_add')}}",
+                method: 'POST',
+                success: function(response) {
+                    $("#add_modal").html(response);
+                    initValidation();
+                    $("#add_modal").modal('show');
+                }
+            });
+        });
+
+        $(document).on('click', '.view-transport', function() {
+            var id = $(this).data('id');
+            $.ajax({
+                url: "{{route('get_transport_details')}}",
                 method: 'POST',
                 data: {
                     id: id,
@@ -145,12 +149,29 @@
             });
         });
 
-        $(document).on('click', '.delete-pl', function() {
+        $(document).on('click', '.edit-transport', function() {
+            var id = $(this).data('id');
+            $.ajax({
+                url: "{{route('transport_edit')}}",
+                method: 'POST',
+                data: {
+                    id: id,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    $("#edit_modal").html(response);
+                    initValidation();
+                    $("#edit_modal").modal('show');
+                }
+            });
+        });
+
+        $(document).on('click', '.delete-transport', function() {
             var id = $(this).data('id');
 
             Swal.fire({
                 title: 'Are you sure?',
-                text: "This action will permanently delete the packing list!",
+                text: "This action will permanently delete the transport!",
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#3085d6',
@@ -159,7 +180,7 @@
             }).then((result) => {
                 if (result.isConfirmed) {
                     $.ajax({
-                        url: "{{ route('packing_list_delete') }}",
+                        url: "{{ route('transport_delete') }}",
                         method: 'POST',
                         data: {
                             id: id,
@@ -169,7 +190,7 @@
                             if (response.success) {
                                 Swal.fire(
                                     'Deleted!',
-                                    'Packing list has been deleted.',
+                                    'Transport has been deleted.',
                                     'success'
                                 ).then(() => {
                                     location.reload();
@@ -185,28 +206,11 @@
                         error: function() {
                             Swal.fire(
                                 'Error!',
-                                'Could not delete the packing list. Please try again later.',
+                                'Could not delete the transport. Please try again later.',
                                 'error'
                             );
                         }
                     });
-                }
-            });
-        });
-
-        $(document).on('click', '.update_invoice', function() {
-            var id = $(this).data('id');
-            $.ajax({
-                url: "{{route('invoice_details_edit')}}",
-                method: 'POST',
-                data: {
-                    id: id,
-                    _token: '{{ csrf_token() }}'
-                },
-                success: function(response) {
-                    $("#invoice_modal").html(response);
-                    initValidation();
-                    $("#invoice_modal").modal('show');
                 }
             });
         });
@@ -217,9 +221,29 @@
                 dropdownParent: $('.modal-body')
             });
 
-            $("#InvoiceUpdateForm").validate({
-                rules: {},
-                messages: {},
+            $.validator.addMethod("validName", function(value, element) {
+                return this.optional(element) || /^[A-Za-z]+(?: [A-Za-z]+)*$/.test(value);
+            }, "Please enter valid name (only letters and single spaces between words)");
+
+            $("#TransportAddForm").validate({
+                rules: {
+                    name: {
+                        required: true,
+                        validName: true
+                    },
+                    description: {
+                        required: true
+                    }
+                },
+                messages: {
+                    name: {
+                        required: "Please enter transport name",
+                        validName: "Please enter a valid name (only letters and single spaces between words)"
+                    },
+                    description: {
+                        required: "Please enter description"
+                    }
+                },
                 errorElement: 'span',
                 errorClass: 'error',
                 errorPlacement: function(error, element) {
@@ -234,14 +258,14 @@
                 submitHandler: function(form) {
                     var formData = new FormData(form);
                     $.ajax({
-                        url: "{{ route('invoice_details_update') }}",
+                        url: "{{ route('transport_store') }}",
                         type: "POST",
                         data: formData,
                         processData: false,
                         contentType: false,
                         success: function(response) {
                             if (response.success) {
-                                $("#invoice_modal").modal('hide');
+                                $("#add_modal").modal('hide');
                                 Swal.fire({
                                     icon: 'success',
                                     title: 'Success',
@@ -263,6 +287,75 @@
                                 icon: 'error',
                                 title: 'Error',
                                 text: 'An error occurred while submitting the form'
+                            });
+                        }
+                    });
+                    return false;
+                }
+            });
+
+            $("#TransportEditForm").validate({
+                rules: {
+                    name: {
+                        required: true,
+                        validName: true
+                    },
+                    description: {
+                        required: true
+                    }
+                },
+                messages: {
+                    name: {
+                        required: "Please enter transport name",
+                        validName: "Please enter a valid name (only letters and single spaces between words)"
+                    },
+                    description: {
+                        required: "Please enter description"
+                    }
+                },
+                errorElement: 'span',
+                errorClass: 'error',
+                errorPlacement: function(error, element) {
+                    error.insertAfter(element);
+                },
+                highlight: function(element) {
+                    $(element).addClass('error-border');
+                },
+                unhighlight: function(element) {
+                    $(element).removeClass('error-border');
+                },
+                submitHandler: function(form) {
+                    var formData = new FormData(form);
+                    $.ajax({
+                        url: "{{ route('transport_update') }}",
+                        type: "POST",
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        success: function(response) {
+                            if (response.success) {
+                                $("#edit_modal").modal('hide');
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Success',
+                                    text: 'Transport updated successfully',
+                                    timer: 3000
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error',
+                                    text: response.message || 'Could not update transport'
+                                });
+                            }
+                        },
+                        error: function() {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: 'An error occurred while updating the transport'
                             });
                         }
                     });

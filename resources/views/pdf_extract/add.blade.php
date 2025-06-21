@@ -288,21 +288,33 @@
             },
             success: function(response) {
                 if (response.exists) {
-                    Swal.fire({
-                        title: 'PO Already Exists!',
-                        text: `Purchase Order "${response.po_num}" already exists in the database. Do you want to proceed anyway?`,
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonColor: '#3085d6',
-                        cancelButtonColor: '#d33',
-                        confirmButtonText: 'Yes, Save Anyway!',
-                        cancelButtonText: 'Cancel'
-                    }).then((result) => {
-                        if (result.isConfirmed) {
-                            proceedWithSave();
-                        }
-                    });
+                    if (response.amended) {
+                        // PO exists with status = 1 (amended) - Cannot save
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Cannot Save PO',
+                            text: `Purchase Order "${response.po_num}" already exists with amended status. Cannot create duplicate PO.`,
+                            confirmButtonText: 'OK'
+                        });
+                    } else {
+                        // PO exists with status = 0 (not amended) - Show confirmation
+                        Swal.fire({
+                            title: 'PO Already Exists!',
+                            text: `Purchase Order "${response.po_num}" already exists in the database but is not amended. Do you want to proceed anyway?`,
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonColor: '#3085d6',
+                            cancelButtonColor: '#d33',
+                            confirmButtonText: 'Yes, Save Anyway!',
+                            cancelButtonText: 'Cancel'
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                proceedWithSave();
+                            }
+                        });
+                    }
                 } else {
+                    // PO doesn't exist - proceed normally
                     proceedWithSave();
                 }
             },
