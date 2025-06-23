@@ -311,8 +311,30 @@
                     _token: '{{ csrf_token() }}'
                 },
                 success: function(response) {
+                    if (typeof response === 'object' && response.success === false) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Cannot Amend PO',
+                            text: response.message,
+                            confirmButtonText: 'OK'
+                        }).then(() => {
+                            $("#detail_modal").modal('hide');
+                        });
+                        return;
+                    }
+
                     $("#detail_modal").html(response);
                     $("#detail_modal").modal('show');
+                },
+                error: function(xhr, status, error) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'An error occurred while loading the amend details.',
+                        confirmButtonText: 'OK'
+                    }).then(() => {
+                        $("#detail_modal").modal('hide');
+                    });
                 }
             });
         });

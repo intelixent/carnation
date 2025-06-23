@@ -141,23 +141,23 @@
     @php
     // Calculate totals in the view
     $totals = [
-        'carton_count' => 0,
-        'per_size' => array_fill_keys($tableData['sizeOrder'], 0),
-        'total_pieces' => 0,
-        'net_weight' => 0,
-        'gross_weight' => 0
+    'carton_count' => 0,
+    'per_size' => array_fill_keys($tableData['sizeOrder'], 0),
+    'total_pieces' => 0,
+    'net_weight' => 0,
+    'gross_weight' => 0
     ];
 
     // Calculate totals from data rows
     foreach($tableData['rows'] as $row) {
-        $totals['carton_count'] += $row['ttl_ctn'];
-        $totals['total_pieces'] += $row['total'];
-        $totals['net_weight'] += $row['net_wt_total'];
-        $totals['gross_weight'] += $row['grs_wt_total'];
-        
-        foreach($tableData['sizeOrder'] as $size) {
-            $totals['per_size'][$size] += $row['per_size'][$size] ?? 0;
-        }
+    $totals['carton_count'] += $row['ttl_ctn'];
+    $totals['total_pieces'] += $row['total'];
+    $totals['net_weight'] += $row['net_wt_total'];
+    $totals['gross_weight'] += $row['grs_wt_total'];
+
+    foreach($tableData['sizeOrder'] as $size) {
+    $totals['per_size'][$size] += $row['per_size'][$size] ?? 0;
+    }
     }
 
     // Count non-total rows to determine rowspan
@@ -189,13 +189,13 @@
                 <td>{{ $row['ctn_range'] }}</td>
                 <td>{{ $row['ttl_ctn'] }}</td>
                 @if(!$colorRowSpanUsed)
-                    <!-- First row gets the rowspan -->
-                    <td rowspan="{{ $nonTotalRows }}">{{ $color }}</td>
-                    @php $colorRowSpanUsed = true; @endphp
+                <!-- First row gets the rowspan -->
+                <td rowspan="{{ $nonTotalRows }}">{{ $color }}</td>
+                @php $colorRowSpanUsed = true; @endphp
                 @endif
                 <!-- Skip color cell for subsequent rows as it's handled by rowspan -->
                 @foreach($tableData['sizeOrder'] as $size)
-                <td>{{ $row['per_size'][$size] ?? 0 }}</td>
+                <td>{{ ($row['per_size'][$size] ?? 0) > 0 ? $row['per_size'][$size] : '' }}</td>
                 @endforeach
                 <td>{{ $row['per_ctn'] }}</td>
                 <td>{{ $row['total'] }}</td>
@@ -206,14 +206,14 @@
                 <td>{{ $row['ctn_dim'] }}</td>
             </tr>
             @endforeach
-            
+
             <!-- Add totals row -->
             <tr class="totals-row">
                 <td>TOTAL</td>
                 <td>{{ $totals['carton_count'] }}</td>
                 <td></td> <!-- Empty color cell for totals -->
                 @foreach($tableData['sizeOrder'] as $size)
-                <td>{{ $totals['per_size'][$size] }}</td>
+                <td>{{ $totals['per_size'][$size] > 0 ? $totals['per_size'][$size] : '' }}</td>
                 @endforeach
                 <td>Total</td>
                 <td>{{ $totals['total_pieces'] }}</td>

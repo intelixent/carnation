@@ -1,5 +1,8 @@
 <div class="modal-dialog modal-xl">
     <div class="modal-content">
+        @php
+        $po = $data['po_master'];
+        @endphp
         <div class="modal-header">
             <h5 class="modal-title">Purchase Order Details - #{{ $data['po_master']->po_ref_num ?? '' }}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>

@@ -244,10 +244,34 @@ class PdfExtractController extends BaseController
                 ]);
             }
 
-            $exists = PoMaster::where('po_num', $po_num)->exists();
+            // Check if PO exists with status = 1 (amended)
+            $amendedPo = PoMaster::where('po_num', $po_num)->where('status', 1)->first();
+
+            if ($amendedPo) {
+                return response()->json([
+                    'exists' => true,
+                    'amended' => true,
+                    'po_num' => $po_num,
+                    'po_id' => $amendedPo->id,
+                    'message' => 'PO number already exists with amended status'
+                ]);
+            }
+
+            // Check if PO exists with status = 0 (not amended)
+            $unamendedPo = PoMaster::where('po_num', $po_num)->where('status', 0)->first();
+
+            if ($unamendedPo) {
+                return response()->json([
+                    'exists' => true,
+                    'amended' => false,
+                    'po_num' => $po_num,
+                    'po_id' => $unamendedPo->id,
+                    'message' => 'PO number already exists but not amended'
+                ]);
+            }
 
             return response()->json([
-                'exists' => $exists,
+                'exists' => false,
                 'po_num' => $po_num
             ]);
         } catch (\Exception $e) {
@@ -683,7 +707,7 @@ class PdfExtractController extends BaseController
 
         // Format PO items for Jack Jones (vendor 1)
         $formatted_po_items = [];
-        if ($vendor_id == 1) {
+        if (in_array($vendor_id, [1, 5, 6])) {
             foreach ($po_items as $item) {
                 $formatted_po_items[] = [
                     'sno' => $item->sno,
@@ -736,6 +760,19 @@ class PdfExtractController extends BaseController
     {
         $po_id = $request->input('po_id');
         $po_master = PoMaster::findOrFail($po_id);
+
+        $existingAmendedPo = PoMaster::where('po_num', $po_master->po_num)
+            ->where('id', '!=', $po_id)
+            ->where('status', 1)
+            ->first();
+
+        if ($existingAmendedPo) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Another PO with the same PO number has already been amended. Cannot amend this PO.',
+                'amended_po_id' => $existingAmendedPo->id
+            ]);
+        }
 
         return view('pdf_extract.amend_details', compact('po_master'));
     }
