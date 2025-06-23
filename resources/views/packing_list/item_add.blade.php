@@ -26,7 +26,7 @@
 
              <div class="mb-3">
                 <label class="form-label">Net Weight</label>
-                 <input type="text" class="form-control" id="net_weight">
+                 <input type="text" class="form-control" id="net_weight" class="net_weight">
             </div>
         </div>
         <div class="modal-footer">

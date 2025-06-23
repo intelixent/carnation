@@ -558,7 +558,8 @@ else
                         selectedSizes.push({
                             size: size,
                             quantity: parseInt(quantity),
-                            config_item_id: configId
+                            config_item_id: configId,
+                             
                         });
                     }
                 });
@@ -578,9 +579,11 @@ else
                     po_id: $('#po_id').val(),
                     carton_id: $('#carton_id').val(),
                     article_number: $('#articleSelect').val(),
-                    color: $('#color').val()
+                    color: $('#color').val(),
+                    net_weight:$("#net_weight").val()
                 };
 
+                console.log(baseData);
                 // Call batch save
                 saveMultipleItems(baseData, selectedSizes);
             }
@@ -625,17 +628,24 @@ else
 
         // Updated batch save: one AJAX with arrays
         function saveMultipleItems(baseData, selectedSizes) {
+
+           
             // Build arrays
             const sizes = selectedSizes.map(s => s.size);
             const quantities = selectedSizes.map(s => s.quantity);
             const config_item_ids = selectedSizes.map(s => s.config_item_id);
+            const net_weight = baseData['net_weight'];
+            const color = baseData['color'];
+           
 
             // Combine into one payload
             const postData = {
                 ...baseData,
                 sizes: sizes,
                 quantities: quantities,
-                config_item_ids: config_item_ids
+                config_item_ids: config_item_ids,
+                net_weight:net_weight,
+                color:color
             };
 
             Swal.fire({

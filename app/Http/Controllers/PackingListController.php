@@ -616,6 +616,8 @@ class PackingListController extends BaseController
     {
         // Fetch PO early so we know vendor_id
         $po = PoMaster::with('vendor')->find($request->input('po_id'));
+
+        $selected_color = $request->color;
         if (! $po) {
             return response()->json(['error' => 'PO not found'], 404);
         }
@@ -684,6 +686,7 @@ class PackingListController extends BaseController
                     'vendor_id'  => $po->vendor_id,
                     'po_no'      => $po->po_num,
                     'po_date'    => $po->po_date,
+                    'color'=>$selected_color,
                     'created_by' => auth()->user()->id,
                     'created_at' => now(),
                 ]
@@ -770,6 +773,7 @@ class PackingListController extends BaseController
                     'color'           => $request->color,
                     'size'            => $size,
                     'quantity'        => $qty,
+                    'net_weight'=>$request->net_weight,
                     'created_by'      => auth()->user()->id,
                     'created_at'      => $createdAt,
                 ]);

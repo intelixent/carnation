@@ -27,7 +27,8 @@ class PackingListItem extends Model
         'quantity',
         'created_at',
         'created_by',
-        'status'
+        'status',
+        'net_weight',
     ];
 
     public function packed()
