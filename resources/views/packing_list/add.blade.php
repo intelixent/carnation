@@ -413,10 +413,15 @@ else
         });
 
         // Handle article selection - load sizes table
-        $(document).on('change', '#articleSelect', function() {
+       // $(document).on('change', '#articleSelect', function() {
+        $(document).on('change', '.articleSelect', function() {
+            const $block = $(this).closest('.article-block');
             const poId = $('#po_id').val();
             const color = $('#color').val();
             const article = $(this).val();
+            const $container = $block.find('.sizesTableContainer');
+console.log($container)
+
 
             if (article) {
                 $.ajax({
@@ -427,23 +432,24 @@ else
                         article_number: article
                     },
                     success: function(data) {
-                        loadSizesTable(data);
+                        loadSizesTable(data,$container);
                     }
                 });
             } else {
-                $('#sizesTableContainer').hide();
+               // $('#sizesTableContainer').hide();
+                 $container.hide().empty();
             }
         });
 
         // Function to load sizes table
-        function loadSizesTable(sizes) {
+        function loadSizesTable(sizes,$container) {
             let tableHtml = `
         <div class="sizes-table">
             <table class="table table-sm table-bordered">
                 <thead>
                     <tr>
                         <th style="width: 60px;">
-                            <input type="checkbox" id="selectAllSizes" class="form-check-input">
+                            <input type="checkbox" class="selectAllSizes" id="selectAllSizes" class="form-check-input">
                         </th>
                         <th style="width: 40%;">Size</th>
                         <th style="width: 60%;">Quantity</th>
@@ -484,32 +490,54 @@ else
         </div>
     `;
 
-            $('#sizesTableContainer').html(tableHtml).show();
+            //$('#sizesTableContainer').html(tableHtml).show();
+            $container.html(tableHtml).show();
         }
 
         // Handle select all sizes checkbox
-        $(document).on('change', '#selectAllSizes', function() {
-            const isChecked = $(this).is(':checked');
-            $('.size-checkbox').prop('checked', isChecked).trigger('change');
+        //$(document).on('change', '#selectAllSizes', function() {
+        $(document).on('change', '.selectAllSizes', function() {
+             const $block = $(this).closest('.article-block');
+    const isChecked = $(this).is(':checked');
+
+    $block.find('.size-checkbox').prop('checked', isChecked).trigger('change');
         });
 
         // Handle individual size checkbox
         $(document).on('change', '.size-checkbox', function() {
+            const $row = $(this).closest('tr');
             const isChecked = $(this).is(':checked');
-            const size = $(this).val();
-            const quantityInput = $(`.quantity-input[data-size="${size}"]`);
+            const $input = $row.find('.quantity-input');
 
-            quantityInput.prop('disabled', !isChecked);
+            $input.prop('disabled', !isChecked);
+
             if (!isChecked) {
-                quantityInput.val('');
+            $input.val('');
             } else {
-                quantityInput.focus();
+            $input.focus();
             }
 
-            // Update select all checkbox
-            const totalCheckboxes = $('.size-checkbox').length;
-            const checkedCheckboxes = $('.size-checkbox:checked').length;
-            $('#selectAllSizes').prop('checked', totalCheckboxes === checkedCheckboxes);
+            // const size = $(this).val();
+            // const quantityInput = $(`.quantity-input[data-size="${size}"]`);
+
+            // quantityInput.prop('disabled', !isChecked);
+            // if (!isChecked) {
+            //     quantityInput.val('');
+            // } else {
+            //     quantityInput.focus();
+            // }
+
+            // // Update select all checkbox
+            // const totalCheckboxes = $('.size-checkbox').length;
+            // const checkedCheckboxes = $('.size-checkbox:checked').length;
+            // $('#selectAllSizes').prop('checked', totalCheckboxes === checkedCheckboxes);
+
+            // Update the "select all" checkbox in this block
+            const $block = $(this).closest('.article-block');
+            const total = $block.find('.size-checkbox').length;
+            const checked = $block.find('.size-checkbox:checked').length;
+
+            $block.find('.selectAllSizes').prop('checked', total === checked);
         });
 
         // Handle quantity input validation
@@ -547,9 +575,16 @@ else
                 };
                 saveItem(data, true);
             } else {
+
+                const allArticlesData = [];
+            $('.article-block').each(function () {
+                const $block = $(this);
+
+                const article_number = $block.find('.articleSelect').val();
                 // Add mode - collect data from sizes table
                 const selectedSizes = [];
-                $('.size-checkbox:checked').each(function() {
+                //$('.size-checkbox:checked').each(function() {
+                $block.find('.size-checkbox:checked').each(function () {
                     const size = $(this).val();
                     const quantity = $(`.quantity-input[data-size="${size}"]`).val();
                     const configId = $(this).data('config-id');
@@ -562,9 +597,25 @@ else
                              
                         });
                     }
+
+                        
                 });
 
-                if (selectedSizes.length === 0) {
+                if (selectedSizes.length > 0) {
+                            allArticlesData.push({
+                                //po_id,
+                                //carton_id,
+                                article_number,
+                                color,
+                                net_weight,
+                                sizes: selectedSizes
+                            });
+                        }
+                    });
+
+
+               // if (selectedSizes.length === 0) {
+               if (allArticlesData.length === 0) {
                     Swal.fire({
                         icon: 'warning',
                         title: 'No Items Selected',
@@ -574,18 +625,11 @@ else
                     return;
                 }
 
-                // Prepare base data
-                const baseData = {
-                    po_id: $('#po_id').val(),
-                    carton_id: $('#carton_id').val(),
-                    article_number: $('#articleSelect').val(),
-                    color: $('#color').val(),
-                    net_weight:$("#net_weight").val()
-                };
+                
 
-                console.log(baseData);
+                
                 // Call batch save
-                saveMultipleItems(baseData, selectedSizes);
+                saveMultipleItems(allArticlesData);
             }
         });
 
@@ -627,26 +671,36 @@ else
         }
 
         // Updated batch save: one AJAX with arrays
-        function saveMultipleItems(baseData, selectedSizes) {
+        function saveMultipleItems(allArticlesData) {
 
-           
+           console.log(allArticlesData)
             // Build arrays
-            const sizes = selectedSizes.map(s => s.size);
-            const quantities = selectedSizes.map(s => s.quantity);
-            const config_item_ids = selectedSizes.map(s => s.config_item_id);
-            const net_weight = baseData['net_weight'];
-            const color = baseData['color'];
+            // const sizes = selectedSizes.map(s => s.size);
+            // const quantities = selectedSizes.map(s => s.quantity);
+            // const config_item_ids = selectedSizes.map(s => s.config_item_id);
+            // const net_weight = baseData['net_weight'];
+            // const color = baseData['color'];
+
+            // Prepare base data
+                const po_details = {
+                    po_id: $('#po_id').val(),
+                    carton_id: $('#carton_id').val(),
+                    //article_number: $('#articleSelect').val(),
+                    color: $('#color').val(),
+                    net_weight:$("#net_weight").val()
+                };
+             
            
 
-            // Combine into one payload
-            const postData = {
-                ...baseData,
-                sizes: sizes,
-                quantities: quantities,
-                config_item_ids: config_item_ids,
-                net_weight:net_weight,
-                color:color
-            };
+            // // Combine into one payload
+            // const postData = {
+            //     ...baseData,
+            //     sizes: sizes,
+            //     quantities: quantities,
+            //     config_item_ids: config_item_ids,
+            //     net_weight:net_weight,
+            //     color:color
+            // };
 
             Swal.fire({
                 title: 'Saving Items...',
@@ -660,12 +714,13 @@ else
             $.ajax({
                 url: '{{ route("packing_list_item_store") }}',
                 method: 'POST',
-                data: postData,
+                contentType: 'application/json',
+                data: JSON.stringify({ cartondata: allArticlesData , po_details : po_details}),
                 success: function(response) {
                     $('#add_modal').modal('hide');
                     Swal.fire({
                         title: 'Success!',
-                        text: `${selectedSizes.length} items added successfully!`,
+                        text: `Items added successfully!`,
                         icon: 'success',
                         timer: 2000,
                         showConfirmButton: false
@@ -696,6 +751,41 @@ else
                 confirmButtonColor: '#3085d6'
             });
         }
+
+        $(document).on('click','#addArticleBtn', function() {
+    
+                        // Destroy Select2 before cloning
+                const $original = $('.article-block').first();
+                $original.find('.select2m').select2('destroy');
+
+                // Clone the block
+                let newBlock = $original.clone();
+
+                // Reinitialize Select2 for the original block
+                $original.find('.select2m').select2({
+                    dropdownParent: $('#articlesWrapper')
+                });
+
+                // Reset values in cloned block
+                newBlock.find('input, select').val('');
+                newBlock.find('.sizesTableContainer').hide().empty();
+
+                // Append cloned block
+                $('#articlesWrapper').append(newBlock);
+
+                // Reinitialize Select2 in the new block
+                newBlock.find('.select2m').select2({
+                    dropdownParent: $('#articlesWrapper')
+                });
+        });
+
+         $(document).on('click', '.remove-article', function() {
+        if ($('.article-block').length > 1) {
+            $(this).closest('.article-block').remove();
+        } else {
+            alert("At least one article is required.");
+        }
+    });
     });
 </script>
 @endpush
