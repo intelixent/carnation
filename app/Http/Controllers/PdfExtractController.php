@@ -84,7 +84,7 @@ class PdfExtractController extends BaseController
                     $viewDetails .= '<li><a class="dropdown-item po-amend" data-id="' . $row->id . '" href="javascript:void(0);">Amend PO</a></li>';
                 }
 
-                if ($row->status == 0 && $row->pdf_file_exists) {
+                if ( $row->pdf_file_exists) {
                     $viewDetails .= '<li><a class="dropdown-item" href="' . $row->pdf_file_url . '" target="_blank" download>
                 <i class="fas fa-download me-1"></i>Download PO
             </a></li>';
