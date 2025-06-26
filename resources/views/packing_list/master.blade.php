@@ -87,7 +87,7 @@
                                             </button>
                                             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
                                                 <li><a class="dropdown-item view-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">View</a></li>
-                                                <li><a class="dropdown-item edit-pl" href="{{ route('packing_list_edit', ['id' => $packingList->id]) }}">Edit</a></li>
+                                                <!-- <li><a class="dropdown-item edit-pl" href="{{ route('packing_list_edit', ['id' => $packingList->id]) }}">Edit</a></li> -->
 
                                                 <li><a class="dropdown-item complete-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">Mark as Complete</a></li>
 

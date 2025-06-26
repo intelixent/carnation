@@ -614,175 +614,213 @@ class PackingListController extends BaseController
 
     public function item_store(Request $request)
     {
+        $carton_data = $request->input('cartondata');
+        $po_details = $request->input('po_details');
+
+        $po_id = $po_details['po_id'];
+        $color = $po_details['color'];
+        $net_weight = $po_details['net_weight'];
+        $carton_id = $po_details['carton_id'];
+
         // Fetch PO early so we know vendor_id
-        $po = PoMaster::with('vendor')->find($request->input('po_id'));
+        $po = PoMaster::with('vendor')->find($po_id);
+
+        $selected_color = $color;
         if (! $po) {
             return response()->json(['error' => 'PO not found'], 404);
         }
         $vendorId = $po->vendor_id;
 
         // Determine batch vs single
-        $isBatch = $request->has('sizes') && is_array($request->input('sizes'))
-            && $request->has('quantities') && is_array($request->input('quantities'))
-            && count($request->input('sizes')) === count($request->input('quantities'));
+        // $isBatch = $request->has('sizes') && is_array($request->input('sizes'))
+        //     && $request->has('quantities') && is_array($request->input('quantities'))
+        //     && count($request->input('sizes')) === count($request->input('quantities'));
+
+        //     print_r($isBatch);
 
         // Common validation rules
         $rules = [
-            'po_id'          => 'required|exists:po_masters,id',
-            'carton_id'      => 'required|exists:carton_master,id',
-            'article_number' => 'required|string',
-            'color'          => 'required|string',
+            'po_details.po_id'          => 'required|exists:po_masters,id',
+            'po_details.carton_id'      => 'required|exists:carton_master,id',
+            'cartondata.*.article_number' => 'required|string',
+            'po_details.color'          => 'required|string',
         ];
-        if ($isBatch) {
-            $rules['sizes'] = 'required|array|min:1';
-            $rules['sizes.*'] = 'required|string';
-            $rules['quantities'] = 'required|array|min:1';
-            $rules['quantities.*'] = 'required|integer|min:1';
-        } else {
-            $rules['size']     = 'required|string';
-            $rules['quantity'] = 'required|integer|min:1';
-        }
-        if ($vendorId != 4) {
-            if ($isBatch) {
-                $rules['config_item_ids'] = 'required|array|size:' . count($request->input('sizes', []));
-                $rules['config_item_ids.*'] = 'required|exists:packing_list_config_items,id';
-            } else {
-                $rules['config_item_id'] = 'required|exists:packing_list_config_items,id';
-            }
-        }
+        // if ($isBatch) {
+        //     $rules['cartondata.*.sizes'] = 'required|array|min:1';
+        //     $rules['cartondata.sizes.size,*'] = 'required|string';
+        //     $rules['cartondata.sizes.quantity.*'] = 'required|integer|min:1';
+        //     //$rules['quantity.*'] = 'required|integer|min:1';
+        // } else {
+        //     $rules['cartondata.*.sizes']     = 'required|array|min:1';
+        //     $rules['cartondata.sizes.size,*'] = 'required|string';
+        //     $rules['cartondata.sizes.quantity.*'] = 'required|integer|min:1';
+        // }
+
+        $rules['cartondata.*.sizes']     = 'required|array|min:1';
+        $rules['cartondata.sizes.size,*'] = 'required|string';
+        $rules['cartondata.sizes.quantity.*'] = 'required|integer|min:1';
+
+
+        // if ($vendorId != 4) {
+        //     if ($isBatch) {
+        //         $rules['config_item_ids'] = 'required|array|size:' . count($request->input('sizes', []));
+        //         $rules['config_item_ids.*'] = 'required|exists:packing_list_config_items,id';
+        //     } else {
+        //         $rules['config_item_id'] = 'required|exists:packing_list_config_items,id';
+        //     }
+        // }
         $validated = $request->validate($rules);
 
         try {
             // Prepare arrays
-            if ($isBatch) {
-                $sizes = $request->input('sizes');
-                $quantities = $request->input('quantities');
-                if ($vendorId != 4) {
-                    $configItemIds = $request->input('config_item_ids');
-                } else {
-                    $configItemIds = array_fill(0, count($sizes), null);
-                }
-            } else {
-                $sizes = [$request->input('size')];
-                $quantities = [$request->input('quantity')];
-                if ($vendorId != 4) {
-                    $configItemIds = [$request->input('config_item_id')];
-                } else {
-                    $configItemIds = [null];
-                }
-            }
+            // if ($isBatch) {
+            //     $sizes = $request->input('sizes');
+            //     $quantities = $request->input('quantities');
+            //     if ($vendorId != 4) {
+            //         $configItemIds = $request->input('config_item_ids');
+            //     } else {
+            //         $configItemIds = array_fill(0, count($sizes), null);
+            //     }
+            // } else {
+            //     $sizes = [$request->input('size')];
+            //     $quantities = [$request->input('quantity')];
+            //     if ($vendorId != 4) {
+            //         $configItemIds = [$request->input('config_item_id')];
+            //     } else {
+            //         $configItemIds = [null];
+            //     }
+            // }
 
-            $existingCount = PackingListMaster::where(array('po_id' => $request->po_id))
+            $existingCount = PackingListMaster::where(array('po_id' => $po_id))
                 ->count();
             $suffix = $existingCount + 1;
             $generatedPackRefNo = "{$po->po_job_num}/{$suffix}";
             // Create or fetch PackingListMaster
             $packingList = PackingListMaster::firstOrCreate(
-                ['po_id' => $request->po_id, 'pack_status' => 0],
+                ['po_id' => $po_id, 'pack_status' => 0],
                 [
                     'pack_ref_no' => $generatedPackRefNo,
                     'vendor_id'  => $po->vendor_id,
                     'po_no'      => $po->po_num,
                     'po_date'    => $po->po_date,
+                    'color'=>$selected_color,
                     'created_by' => auth()->user()->id,
                     'created_at' => now(),
                 ]
             );
 
             // For batch: compute cartonName and timestamp once
-            if ($isBatch) {
-                $firstCartonNumber = $this->getNextCartonNumber($vendorId, $packingList->id);
-                $sharedCartonName = $this->formatCartonName($vendorId, $firstCartonNumber);
-                $sharedTimestamp = now();
-            }
+            // if ($isBatch) {
+            //     $firstCartonNumber = $this->getNextCartonNumber($vendorId, $packingList->id);
+            //     $sharedCartonName = $this->formatCartonName($vendorId, $firstCartonNumber);
+            //     $sharedTimestamp = now();
+            // }
 
             // For single: prepare next carton number
-            if (! $isBatch) {
-                $currentCartonNumber = $this->getNextCartonNumber($vendorId, $packingList->id);
-            }
+            // if (! $isBatch) {
+            //     $currentCartonNumber = $this->getNextCartonNumber($vendorId, $packingList->id);
+            // }
 
+            // Determine cartonName and timestamp
+            // if ($isBatch) {
+            //     $cartonName = $sharedCartonName;
+            //     $createdAt = $sharedTimestamp;
+            // } else {
+            //     $cartonName = $this->formatCartonName($vendorId, $currentCartonNumber);
+            //     $createdAt = now();
+            // }
+
+             $currentCartonNumber = $this->getNextCartonNumber($vendorId, $packingList->id);
+             $cartonName = $this->formatCartonName($vendorId, $currentCartonNumber);
+            $createdAt = now();
+
+           foreach($carton_data as $carton): //Aricle Loop Starts
+
+            $sizes = $carton['sizes'];
+           
             // Loop each entry
             foreach ($sizes as $idx => $size) {
-                $qty = $quantities[$idx];
-                $configItemId = $configItemIds[$idx];
-
+                //$qty = $quantities[$idx];
+                $qty = $size['quantity'];
+                //$configItemId = $configItemIds[$idx];
+                $configItemId = $size['config_item_id'];
+ 
                 // Check remaining qty for this size/color
                 if ($vendorId == 4) {
-                    $poSize = PackingListConfigItem::where('po_id', $request->po_id)
+                    
+                    $poSize = PackingListConfigItem::where('po_id', $po_id)
                         ->where('vendor_id', 4)
-                        ->where('color', $request->color)
-                        ->where('size', $size)
+                        ->where('color', $color)
+                        ->where('size', $size['size'])
                         ->first();
                     if (! $poSize) {
-                        return response()->json(['error' => "Size {$size} not found in PoSizes"], 400);
+                        return response()->json(['error' => "Size {$size['size']} not found in PoSizes"], 400);
                     }
                     $maxQty = $poSize->pack_qty;
+                    
                     $alreadyPacked = PackingListItem::whereHas('packingList', function ($q) use ($request) {
                         $q->where('po_id', $request->po_id);
                     })
-                        ->where('color', $request->color)
-                        ->where('size', $size)
+                        ->where('color', $color)
+                        ->where('size', $size['size'])
                         ->sum('quantity');
                 } else {
                     $configItem = PackingListConfigItem::find($configItemId);
                     if (! $configItem) {
-                        return response()->json(['error' => "Configuration item not found for size {$size}"], 400);
+                        return response()->json(['error' => "Configuration item not found for size {$size['size']}"], 400);
                     }
                     $maxQty = $configItem->pack_qty;
+
+                   
                     $alreadyPacked = PackingListItem::whereHas('packingList', function ($q) use ($request) {
-                        $q->where('po_id', $request->po_id);
+                        $q->where('po_id',$request->po_id);
                     })
-                        ->where('article_number', $request->article_number)
-                        ->where('size', $size)
+                        ->where('article_number', $carton['article_number'])
+                        ->where('size', $size['size'])
                         ->sum('quantity');
                 }
                 $remaining = $maxQty - $alreadyPacked;
+                
                 if ($qty > $remaining) {
                     return response()->json([
-                        'error' => "Quantity for size {$size} exceeds available limit. Available: {$remaining}"
+                        'error' => "Quantity for size {$size['size']} exceeds available limit. Available: {$remaining}"
                     ], 400);
                 }
 
+               
                 // Find PoItem if exists
-                $poItem = PoItems::where('po_id', $request->po_id)
-                    ->where('article_number', $request->article_number)
-                    ->where('color', $request->color)
-                    ->where('size', $size)
+                $poItem = PoItems::where('po_id', $po_id)
+                    ->where('article_number', $carton['article_number'])
+                    ->where('color', $color)
+                    ->where('size', $size['size'])
                     ->first();
 
-                // Determine cartonName and timestamp
-                if ($isBatch) {
-                    $cartonName = $sharedCartonName;
-                    $createdAt = $sharedTimestamp;
-                } else {
-                    $cartonName = $this->formatCartonName($vendorId, $currentCartonNumber);
-                    $createdAt = now();
-                }
+              
 
                 // Create the PackingListItem
                 PackingListItem::create([
                     'packing_list_id' => $packingList->id,
                     'vendor_id'       => $po->vendor_id,
                     'po_item_id'      => $vendorId == 4 ? null : ($poItem->id ?? null),
-                    'carton_id'       => $request->carton_id,
+                    'carton_id'       => $carton_id,
                     'carton_name'     => $cartonName,
-                    'article_number'  => $request->article_number,
-                    'color'           => $request->color,
-                    'size'            => $size,
+                    'article_number'  => $carton['article_number'],
+                    'color'           => $color,
+                    'size'            => $size['size'],
                     'quantity'        => $qty,
+                    'net_weight'        =>  $net_weight,
                     'created_by'      => auth()->user()->id,
                     'created_at'      => $createdAt,
                 ]);
 
-                // Increment carton number if single
-                if (! $isBatch) {
-                    $currentCartonNumber++;
-                }
+              
             }
+
+        endforeach; // Article Multiple
 
             return response()->json([
                 'success' => true,
-                'po_id'   => $request->po_id,
+                'po_id'   => $po_id,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
