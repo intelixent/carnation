@@ -718,10 +718,29 @@ def extract_jackjones_o(pdf_path):
                         
                         # Match the item row pattern
                         try:
+                            # item_match = re.match(
+                            #     r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+([\w/]+)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.\d+)\s+([\d.]+)\s+([\d,]+\.\d+)\s+(\d{11})\s+(\d+)',
+                            #     line
+                            # )
                             item_match = re.match(
-                                r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+([\w/]+)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.\d+)\s+([\d.]+)\s+([\d,]+\.\d+)\s+(\d{11})\s+(\d+)',
+                                r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+([\w/]+\s?\w*)\s+([\d,]+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.\d+)\s+([\d.]+)\s+([\d,]+\.\d+)\s+(\d{11})\s+(\d+)',
                                 line
                             )
+                            # item_match = re.match(
+                            #     r'^(\d+)\s+'                      # Serial
+                            #     r'(\d+)\s+'                       # Article number
+                            #     r'(\d+)\s+/\s+'                   # ID and slash
+                            #     r'([\w\s/]+?)\s+'                 # Colour (with spaces/slashes)
+                            #     r'([\w/]+\s?\w*)\s+'              # Size (allows spaces like "4 Y", "11/12Y")
+                            #     r'(\d+)\s+'                       # Quantity
+                            #     r'(Nos/Pcs|Nos|Pcs)\s+'           # Unit
+                            #     r'([\d,]+\.\d+)\s+'              # IGST value
+                            #     r'([\d.]+)\s+'                   # IGST rate
+                            #     r'([\d,]+\.\d+)\s+'              # MRP
+                            #     r'(\d{11})\s+'                   # EAN
+                            #     r'(\d+)$',                        # HSN code
+                            #     line
+                            # )
                             
                             if item_match:
                                 print(f"Found item row at line {i} on page {page_idx+1}: '{line}'")

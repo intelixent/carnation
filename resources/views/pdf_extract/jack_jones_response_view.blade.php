@@ -99,27 +99,23 @@
                             </thead>
                             <tbody>
                                 @php
-                                $total_qty=0;
-                                $total_igst_value=0;
+                                $total_qty = 0;
+                                $total_igst_value = 0;
 
                                 preg_match('/\d+(\.\d+)?/', $article_info['Price per unit'], $matchess);
-                                $per_unit_price = $matchess[0];
+                                $per_unit_price = floatval(str_replace(',', '', $matchess[0]));
                                 @endphp
                                 @foreach($data['po_items'] as $item)
                                 <?php
-
-                                preg_match('/\d+/', $item['quatity_uom'], $matches);
-                                $number = $matches[0];
+                                preg_match('/[\d,]+/', $item['quatity_uom'], $matches);
+                                $number = floatval(str_replace(',', '', $matches[0]));
                                 $total_qty += $number;
 
                                 $igst_taxable_value = floatval(str_replace(',', '', $item['igst_taxable_value']));
                                 $total_igst_value += ($igst_taxable_value * $number);
-
                                 ?>
                                 <tr>
                                     @foreach($item as $value)
-                                    @php
-                                    @endphp
                                     <td>{{ $value }}</td>
                                     @endforeach
                                 </tr>
@@ -133,23 +129,23 @@
                                 $finalTotal = $total + $taxAmount;
                                 ?>
                                 <tr>
-                                    <td colspan=7>Total Value ( <?php echo $per_unit_price; ?> / EA)</td>
-                                    <td colspan=2><?php echo $total; ?></td>
+                                    <td colspan="7">Total Value (<?php echo number_format($per_unit_price, 2); ?> / EA)</td>
+                                    <td colspan="2"><?php echo number_format($total, 2); ?></td>
                                     <td></td>
                                 </tr>
                                 <tr>
-                                    <td colspan=7>Total IGST</td>
-                                    <td colspan=2><?php echo $taxAmount; ?></td>
+                                    <td colspan="7">Total IGST</td>
+                                    <td colspan="2"><?php echo number_format($taxAmount, 2); ?></td>
                                     <td></td>
                                 </tr>
                                 <tr>
-                                    <td colspan=7>Total Value Inc Tax</td>
-                                    <td colspan=2><?php echo $finalTotal; ?></td>
+                                    <td colspan="7">Total Value Inc Tax</td>
+                                    <td colspan="2"><?php echo number_format($finalTotal, 2); ?></td>
                                     <td></td>
                                 </tr>
                                 <tr>
-                                    <td colspan=7>Total Quantity</td>
-                                    <td colspan=2><?php echo $total_qty; ?></td>
+                                    <td colspan="7">Total Quantity</td>
+                                    <td colspan="2"><?php echo number_format($total_qty); ?></td>
                                     <td></td>
                                 </tr>
                             </tfoot>
