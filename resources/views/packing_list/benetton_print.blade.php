@@ -329,7 +329,7 @@
                     @endphp
                     <td>
                         @if($percentage > 0)
-                        {{ number_format($percentage, 2) }}%
+                        {{ round($percentage) }}%
                         @else
                         -
                         @endif
@@ -337,7 +337,7 @@
                     @endforeach
                     <td><strong>
                             @if($orderQty > 0)
-                            {{ number_format(($packQty / $orderQty) * 100, 2) }}%
+                            {{ round(($packQty / $orderQty) * 100) }}%
                             @else
                             -
                             @endif
