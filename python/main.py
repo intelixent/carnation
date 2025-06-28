@@ -656,11 +656,30 @@ def extract_jackjones_o(pdf_path):
                                         start_idx += 1
                                 
                                 # Construction type
-                                if start_idx < len(page_lines):
+                                construction_found = False
+                                while start_idx < len(page_lines):
                                     const_line = page_lines[start_idx].strip()
-                                    article_info["Construction type"] = const_line
-                                    print(f"Extracted Construction type: {article_info['Construction type']}")
+                                    if const_line:  # Only process non-empty lines
+                                        # Check if it's not a gender value (common gender values)
+                                        gender_keywords = ['male', 'female', 'unisex', 'men', 'women', 'man', 'woman', 'boy', 'girl', 'boys', 'girls', 'kids']
+                                        if const_line.lower() not in gender_keywords:
+                                            article_info["Construction type"] = const_line
+                                            print(f"Extracted Construction type: {article_info['Construction type']}")
+                                            start_idx += 1
+                                            construction_found = True
+                                            break
+                                        else:
+                                            # If it's a gender keyword, set construction type as "-"
+                                            article_info["Construction type"] = "-"
+                                            print(f"Extracted Construction type: {article_info['Construction type']} (gender keyword found)")
+                                            construction_found = True
+                                            break
                                     start_idx += 1
+
+                                # If no construction type found at all, set as "-"
+                                if not construction_found:
+                                    article_info["Construction type"] = "-"
+                                    print(f"Extracted Construction type: {article_info['Construction type']} (not found)")
                                 
                                 # Gender
                                 if start_idx < len(page_lines):
