@@ -189,10 +189,18 @@
             {{-- Group items by carton name --}}
             @php
             $byCarton = $packing_list->items->groupBy(fn($item) => $item->carton_name);
+
+            //dd($byCarton);
+            $total_net_weight=$total_gross_weight=0;
             @endphp
 
             @foreach($byCarton as $cartonName => $items)
             @foreach($items as $i => $item)
+            @php 
+            $cbm = $item->quantity*($item->carton->length*$item->carton->breadth*$item->carton->height/1000000) ;
+            $total_net_weight+=$item->net_weight ;
+            $total_gross_weight+=$item->net_weight + 1.2 ;
+            @endphp
             <tr>
                 {{-- only on the first row of the group: output the carton name with rowspan --}}
                 @if($i === 0)
@@ -211,9 +219,9 @@
                 <td>{{ $item->carton->breadth }}</td>
                 <td>{{ $item->carton->height }}</td>
 
-                <td>{{ number_format($item->quantity * 0.2, 1) }}</td>
-                <td>{{ number_format($item->quantity * 0.25, 1) }}</td>
-                <td></td>
+                <td>{{ $item->net_weight }}</td>
+                <td>{{ $item->net_weight + 1.2 }}</td>
+                <td>{{round($cbm,2)}}</td>
             </tr>
             @endforeach
             @endforeach
@@ -223,8 +231,8 @@
                 <td colspan="6"></td>
                 <td style="background-color:#bbb;"><strong>{{ $packing_list->items->sum('quantity') }}</strong></td>
                 <td colspan="3"></td>
-                <td style="background-color:#bbb;"><strong>{{ number_format($packing_list->items->sum(fn($i)=>$i->quantity*0.2),1) }}</strong></td>
-                <td style="background-color:#bbb;"><strong>{{ number_format($packing_list->items->sum(fn($i)=>$i->quantity*0.25),1) }}</strong></td>
+                <td style="background-color:#bbb;"><strong>{{ $total_net_weight }}</strong></td>
+                <td style="background-color:#bbb;"><strong>{{ $total_gross_weight }}</strong></td>
                 <td style="background-color:#bbb;"><strong></strong></td>
             </tr>
 
