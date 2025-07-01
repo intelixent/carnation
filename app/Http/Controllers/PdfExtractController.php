@@ -84,7 +84,7 @@ class PdfExtractController extends BaseController
                     $viewDetails .= '<li><a class="dropdown-item po-amend" data-id="' . $row->id . '" href="javascript:void(0);">Amend PO</a></li>';
                 }
 
-                if ( $row->pdf_file_exists) {
+                if ($row->pdf_file_exists) {
                     $viewDetails .= '<li><a class="dropdown-item" href="' . $row->pdf_file_url . '" target="_blank" download>
                 <i class="fas fa-download me-1"></i>Download PO
             </a></li>';
@@ -459,9 +459,10 @@ class PdfExtractController extends BaseController
     {
         foreach ($po_items as $po_item) {
             $quantityUom = $po_item['quatity_uom'];
-            preg_match('/^(\d+)\s*(.*)$/', $quantityUom, $matches);
 
-            $qty = isset($matches[1]) ? (int)$matches[1] : 0;
+            preg_match('/^([\d,]+)\s*(.*)$/', $quantityUom, $matches);
+
+            $qty = isset($matches[1]) ? (int)str_replace(',', '', $matches[1]) : 0;
             $uom = isset($matches[2]) ? trim($matches[2]) : null;
 
             $idColorField = $po_item['artcicle_id_color'] ?? '';
