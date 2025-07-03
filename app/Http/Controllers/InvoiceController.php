@@ -64,7 +64,7 @@ class InvoiceController extends BaseController
 
         $transformedPackingLists = $packingLists->map(function ($packingList) {
             return [
-                'id' => $packingList->id,
+                'id' => $packingList->po_id,
                 'po_num' => $packingList->po_no,
                 'po_ref_num' => $packingList->po->po_ref_num ?? 'N/A',
                 'po_job_num' => $packingList->po->po_job_num ?? 'N/A',

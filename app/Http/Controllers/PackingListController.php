@@ -1583,8 +1583,13 @@ class PackingListController extends BaseController
                 $firstItem = $rangeItems->first();
                 $carton = $firstItem->carton;
 
-                $netWeightPerCarton = $carton->net_weight ?? 0;
-                $grossWeightPerCarton = $carton->gross_weight ?? 0;
+                 //dd($firstItem->net_weight);
+
+                // $netWeightPerCarton = $carton->net_weight ?? 0;
+                // $grossWeightPerCarton = $carton->gross_weight ?? 0;
+                $netWeightPerCarton = $firstItem->net_weight ?? 0;
+                $grossWeightPerCarton = ($firstItem->net_weight+1.45) ?? 0;
+                
                 $totalNetWeight = $netWeightPerCarton * $cartonCount;
                 $totalGrossWeight = $grossWeightPerCarton * $cartonCount;
 
@@ -1916,10 +1921,12 @@ class PackingListController extends BaseController
 
                 $firstItem = $groupItems->first();
                 $carton    = $firstItem->carton;
-
+               // dd($firstItem);
                 // Weight/dimension if needed
-                $netWeightPerCarton   = $carton->net_weight ?? 0;
-                $grossWeightPerCarton = $carton->gross_weight ?? 0;
+                $netWeightPerCarton = $firstItem->net_weight ?? 0;
+                $grossWeightPerCarton = ($firstItem->net_weight+1.45) ?? 0;
+                // $netWeightPerCarton   = $carton->net_weight ?? 0;
+                // $grossWeightPerCarton = $carton->gross_weight ?? 0;
                 $dimension = '';
                 if (
                     ($carton->length ?? 0) > 0
@@ -2000,6 +2007,9 @@ class PackingListController extends BaseController
             'totalNetWeight'           => $totalNetWeight,
             'totalGrossWeight'         => $totalGrossWeight,
         ];
+
+        //echo "<pre>".print_r($viewData,true)."</pre>";
+       // dd($viewData);
 
         // Choose the correct view template
         if ($packingList->vendor_id == 4) {
