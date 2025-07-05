@@ -146,6 +146,9 @@ class InvoiceController extends BaseController
             ->groupBy('po_item_id', 'size', 'color')
             ->get();
 
+        // Fetch VCP (unit price) from PO master
+        $unitPriceFromPO = floatval($po_details->vcp);
+
         // Build invoice item details
         $articleInfo = json_decode($po_details->article_info, true);
         $items       = [];
@@ -156,80 +159,55 @@ class InvoiceController extends BaseController
             $style = '';
             $hsn_code = '';
             $color = $pi->color ?? '';
-            $uom = '';
-            $unit_price = 0;
+            $uom = 'PCS';
 
-            if ($vendor->id == 4) {
-                // For vendor 4 (Benetton), get data from PoSizes since po_item_id might not be available
-                $poSize = PoSizes::where('po_id', $po_details->id)
-                    ->where('color', $pi->color)
-                    ->where('size', $pi->size)
-                    ->first();
+            // Always use VCP from PO as unit price
+            $unit_price = $unitPriceFromPO;
 
-                if ($poSize) {
-                    $hsn_code = $poSize->hsn_code ?? '';
-                    $uom = $poSize->uom ?? 'PCS';
-                    $unit_price = $poSize->unit_price ?? 0;
-                }
+            // Determine description and style (existing logic unchanged)
+            $itemModel = PoItems::find($pi->po_item_id);
+            if ($itemModel) {
+                $hsn_code = $itemModel->hsn_code ?? '';
+                $uom = $itemModel->uom ?? 'PCS';
 
-                // For Benetton, use part_description from any PoItems with matching color
-                $itemModel = PoItems::where('po_id', $po_details->id)
-                    ->where('color', $pi->color)
-                    ->first();
-
-                if ($itemModel) {
-                    $description = $itemModel->part_description ?? '';
-                    $style = $itemModel->article_number ?? '';
-                    if (empty($hsn_code)) {
-                        $hsn_code = $itemModel->hsn_code ?? '';
-                    }
-                    if (empty($uom)) {
-                        $uom = $itemModel->uom ?? '';
-                    }
-                    if ($unit_price == 0) {
-                        $unit_price = $itemModel->unit_price ?? 0;
-                    }
-                }
-            } else {
-                // For other vendors, use the existing logic with po_item_id
-                $itemModel = PoItems::find($pi->po_item_id);
-
-                if ($itemModel) {
-                    $hsn_code = $itemModel->hsn_code ?? '';
-                    $uom = $itemModel->uom ?? 'PCS';
-
-                    // Determine unit price based on vendor ID
-                    if (in_array($vendor->id, [1, 5, 6])) {
-                        $unit_price = $po_details->po_unit_price ?? 0;
-                    } else {
-                        $unit_price = $itemModel->unit_price ?? 0;
-                    }
-
-                    // Determine description based on vendor ID
-                    switch ($vendor->id) {
-                        case 1:
-                        case 5:
-                        case 6:
-                            $description = $articleInfo['Article description'] ?? '';
-                            $style = $articleInfo['ARTICLE'] ?? '';
-                            break;
-                        case 2:
-                            $description = $itemModel->type ?? '';
-                            $style = $itemModel->article_number ?? '';
-                            break;
-                        case 3:
-                            $description = $itemModel->style_description ?? '';
-                            $style = $itemModel->article_number ?? '';
-                            break;
-                        default:
-                            $description = $articleInfo['Article description'] ?? '';
-                            $style = $articleInfo['ARTICLE'] ?? '';
-                            break;
-                    }
+                // Determine description based on vendor ID
+                switch ($vendor->id) {
+                    case 1:
+                    case 5:
+                    case 6:
+                        $description = $articleInfo['Article description'] ?? '';
+                        $style = $articleInfo['ARTICLE'] ?? '';
+                        break;
+                    case 2:
+                        $description = $itemModel->type ?? '';
+                        $style = $itemModel->article_number ?? '';
+                        break;
+                    case 3:
+                        $description = $itemModel->style_description ?? '';
+                        $style = $itemModel->article_number ?? '';
+                        break;
+                    default:
+                        $description = $articleInfo['Article description'] ?? '';
+                        $style = $articleInfo['ARTICLE'] ?? '';
+                        break;
                 }
             }
 
+            // Calculate amount
             $amount = $pi->total_quantity * $unit_price;
+
+            // Get discount percentage from vendor_master
+            $discountPercentage = $vendor->discount_percentage ?? 0;
+
+            // Calculate discount amount
+            $discountAmount = ($amount * $discountPercentage) / 100;
+
+            // Calculate taxable value (amount - discount)
+            $taxableValue = $amount - $discountAmount;
+
+            // Calculate IGST (5% of taxable value)
+            $igstRate = 5.00;
+            $igstAmount = ($taxableValue * $igstRate) / 100;
 
             $items[] = [
                 'description'    => $description,
@@ -242,16 +220,18 @@ class InvoiceController extends BaseController
                 'qty'            => $pi->total_quantity,
                 'rate'           => $unit_price,
                 'amount'         => $amount,
-                'discount'       => 0,
-                'taxable_value'  => $amount,
+                'discount'       => $discountAmount,
+                'taxable_value'  => $taxableValue,
+                'igst_rate'      => $igstRate,
+                'igst_amount'    => $igstAmount,
             ];
         }
 
         // Parse JSON details
-        $billToDetails = json_decode($invoice->bill_to_details, true);
-        $shipToDetails = json_decode($invoice->ship_to_details, true);
+        $billToDetails      = json_decode($invoice->bill_to_details, true);
+        $shipToDetails      = json_decode($invoice->ship_to_details, true);
         $transporterDetails = json_decode($invoice->transporter_details, true);
-        $irnDetails = json_decode($invoice->irn_details, true);
+        $irnDetails         = json_decode($invoice->irn_details, true);
 
         $billedState = null;
         $shippedState = null;
@@ -284,7 +264,7 @@ class InvoiceController extends BaseController
         }
 
         // Pass data to PDF view
-        return Pdf::loadView('invoice.pdftemplate', [
+        return Pdf::loadView('invoice.update_pdf', [
             'invoice'              => $invoice,
             'po_details'           => $po_details,
             'vendor'               => $vendor,
@@ -300,6 +280,7 @@ class InvoiceController extends BaseController
             ->setPaper('a4', 'portrait')
             ->stream('invoice.pdf');
     }
+
 
     public function master()
     {
@@ -418,6 +399,7 @@ class InvoiceController extends BaseController
                 'mode_of_transport' => $request->mode_of_transport,
                 'transport_vehicle_no' => $request->transport_vehicle_no,
                 'transport_distance' => $request->transport_distance,
+                'transport_date_time' => $request->transport_date_time,
             ];
 
             $invoice->update([

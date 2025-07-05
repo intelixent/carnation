@@ -737,29 +737,10 @@ def extract_jackjones_o(pdf_path):
                         
                         # Match the item row pattern
                         try:
-                            # item_match = re.match(
-                            #     r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+([\w/]+)\s+(\d+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.\d+)\s+([\d.]+)\s+([\d,]+\.\d+)\s+(\d{11})\s+(\d+)',
-                            #     line
-                            # )
                             item_match = re.match(
                                 r'^(\d+)\s+(\d+)\s+(\d+)\s+/\s+([\w/]+\s?\w*)\s+([\d,]+)\s+(Nos/Pcs|Nos|Pcs)\s+([\d,]+\.\d+)\s+([\d.]+)\s+([\d,]+\.\d+)\s+(\d{11})\s+(\d+)',
                                 line
                             )
-                            # item_match = re.match(
-                            #     r'^(\d+)\s+'                      # Serial
-                            #     r'(\d+)\s+'                       # Article number
-                            #     r'(\d+)\s+/\s+'                   # ID and slash
-                            #     r'([\w\s/]+?)\s+'                 # Colour (with spaces/slashes)
-                            #     r'([\w/]+\s?\w*)\s+'              # Size (allows spaces like "4 Y", "11/12Y")
-                            #     r'(\d+)\s+'                       # Quantity
-                            #     r'(Nos/Pcs|Nos|Pcs)\s+'           # Unit
-                            #     r'([\d,]+\.\d+)\s+'              # IGST value
-                            #     r'([\d.]+)\s+'                   # IGST rate
-                            #     r'([\d,]+\.\d+)\s+'              # MRP
-                            #     r'(\d{11})\s+'                   # EAN
-                            #     r'(\d+)$',                        # HSN code
-                            #     line
-                            # )
                             
                             if item_match:
                                 print(f"Found item row at line {i} on page {page_idx+1}: '{line}'")
@@ -767,16 +748,16 @@ def extract_jackjones_o(pdf_path):
                                 article_variant = item_match.group(2)
                                 variant_id = item_match.group(3)
                                 
-                                # Initialize size from first line
-                                size_from_line1 = item_match.group(4).strip()
-                                print(f"Initial size from first line: '{size_from_line1}'")
+                                # Get the color/size field from first line
+                                color_size_field = item_match.group(4).strip()
+                                print(f"Color/size field from first line: '{color_size_field}'")
                                 
                                 # Initialize defaults
                                 color = "Unknown"
+                                size = color_size_field
                                 ean_suffix = ""
-                                current_item_size = size_from_line1 
                                 
-                                # Check for next line with additional information (color / size suffix / ean suffix)
+                                # Check for next line with additional information
                                 if i + 1 < len(lines):
                                     next_line = lines[i + 1].strip()
                                     print(f"Next line content: '{next_line}'")
@@ -790,28 +771,83 @@ def extract_jackjones_o(pdf_path):
                                         ean_suffix = ""
                                         base_str = next_line
                                     
-                                    # Check for size suffix in last token (ending with 'Y' or digit+'Y')
-                                    tokens = base_str.split()
-                                    size_suffix = None
-                                    
-                                    if tokens:
-                                        last_token = tokens[-1]
-                                        if last_token.endswith('Y') or re.fullmatch(r'\d+Y', last_token):
-                                            size_suffix = last_token
-                                            color = " ".join(tokens[:-1]).strip() or "Unknown"
+                                    # If base_str has content, parse it for color and size suffix
+                                    if base_str:
+                                        # Split base_str into tokens
+                                        tokens = base_str.split()
+                                        
+                                        # Check if last token looks like a size suffix (Y, 2Y, 4Y, etc.)
+                                        if tokens and re.match(r'^\d*Y$', tokens[-1]):
+                                            # Last token is size suffix, rest is color
+                                            size_suffix = tokens[-1]
+                                            color = " ".join(tokens[:-1]) if len(tokens) > 1 else "Unknown"
+                                            
+                                            # Construct the complete size by combining the base size with suffix
+                                            # Handle cases like "11/1 2Y" -> "11/12Y"
+                                            if size_suffix.startswith(('2Y', '4Y')):
+                                                # Extract the number from suffix (e.g., '2Y' -> '2')
+                                                suffix_num = size_suffix[:-1]  # Remove 'Y'
+                                                
+                                                # Check if color_size_field ends with a number that can be combined
+                                                if '/' in color_size_field:
+                                                    parts = color_size_field.split('/')
+                                                    if len(parts) == 2 and parts[1].isdigit():
+                                                        # Combine the last part with suffix number
+                                                        combined_last = parts[1] + suffix_num + 'Y'
+                                                        size = f"{parts[0]}/{combined_last}"
+                                                    else:
+                                                        size = f"{color_size_field}{size_suffix}"
+                                                else:
+                                                    size = f"{color_size_field}{size_suffix}"
+                                            else:
+                                                # For regular 'Y' suffix, just append
+                                                size = f"{color_size_field}{size_suffix}"
+                                            
+                                            print(f"Found color and size suffix: color='{color}', size='{size}', EAN suffix='{ean_suffix}'")
                                         else:
-                                            color = base_str.strip() or "Unknown"
-                                    else:
-                                        color = "Unknown"
-                                    
-                                    # If size suffix found, combine sizes
-                                    if size_suffix:
-                                        current_item_size = size_from_line1 + size_suffix
-                                        print(f"Extracted color: '{color}', size suffix: '{size_suffix}', combined size: '{current_item_size}', EAN suffix: '{ean_suffix}'")
+                                            # No size suffix, entire base_str is color
+                                            color = base_str
+                                            size = color_size_field
+                                            print(f"Found color only: color='{color}', size='{size}', EAN suffix='{ean_suffix}'")
+                                        
                                         i += 1  # Consume the next line
                                     else:
-                                        print(f"Extracted color: '{color}', size unchanged: '{size_from_line1}', EAN suffix: '{ean_suffix}'")
+                                        # No color in next line, check if color_size_field contains both color and size
+                                        # Try to split color and size from the combined field
+                                        tokens = color_size_field.split()
+                                        if len(tokens) >= 2:
+                                            # Last token is likely the size, rest is color
+                                            potential_size = tokens[-1]
+                                            potential_color = " ".join(tokens[:-1])
+                                            
+                                            # Check if potential_size looks like a size (contains common size patterns)
+                                            if re.match(r'^(XS|S|M|L|XL|XXL|\d+(/\d+)?Y?|[\d/]+)$', potential_size):
+                                                color = potential_color
+                                                size = potential_size
+                                                print(f"Split color/size from field: color='{color}', size='{size}', EAN suffix='{ean_suffix}'")
+                                            else:
+                                                # Can't determine split, keep as is
+                                                color = "Unknown"
+                                                size = color_size_field
+                                                print(f"Could not split color/size, keeping as: color='{color}', size='{size}', EAN suffix='{ean_suffix}'")
+                                        else:
+                                            print(f"Single token in color/size field, keeping as size: '{color_size_field}', EAN suffix: '{ean_suffix}'")
                                         i += 1  # Still consume the next line
+                                else:
+                                    # No next line, try to split color and size from the combined field
+                                    tokens = color_size_field.split()
+                                    if len(tokens) >= 2:
+                                        potential_size = tokens[-1]
+                                        potential_color = " ".join(tokens[:-1])
+                                        
+                                        if re.match(r'^(XS|S|M|L|XL|XXL|\d+(/\d+)?Y?|[\d/]+)$', potential_size):
+                                            color = potential_color
+                                            size = potential_size
+                                            print(f"No next line, split color/size: color='{color}', size='{size}'")
+                                        else:
+                                            print(f"No next line, keeping original: color='{color}', size='{size}'")
+                                    else:
+                                        print(f"No next line, single token: color='{color}', size='{size}'")
                                 
                                 # If a real color (not "Unknown"), add it to our set
                                 if color and color.lower() != "unknown":
@@ -837,7 +873,7 @@ def extract_jackjones_o(pdf_path):
                                     "item_sno": item_number,
                                     "article_number": article_variant,
                                     "artcicle_id_color": id_colour,
-                                    "size_years": current_item_size,
+                                    "size_years": size,
                                     "quatity_uom": quantity,
                                     "igst_taxable_value": igst,
                                     "igst_percentage": igst_rate,
@@ -1133,6 +1169,42 @@ def extract_puma(pdf_path):
         IN"""
 
     with pdfplumber.open(pdf_path) as pdf:
+        # Log all tables found in the entire PDF
+        print("="*80)
+        print("DEBUG: SCANNING ALL TABLES IN PDF")
+        print("="*80)
+        
+        for page_num, page in enumerate(pdf.pages):
+            print(f"\n--- PAGE {page_num + 1} ---")
+            tables = page.extract_tables()
+            
+            if not tables:
+                print(f"No tables found on page {page_num + 1}")
+            else:
+                print(f"Found {len(tables)} table(s) on page {page_num + 1}")
+                
+                for table_num, table in enumerate(tables):
+                    print(f"\n  TABLE {table_num + 1} (Page {page_num + 1}):")
+                    print(f"  Dimensions: {len(table)} rows x {len(table[0]) if table else 0} columns")
+                    
+                    # Show table content
+                    for row_num, row in enumerate(table):
+                        if row_num == 0:
+                            print(f"    HEADER ROW: {row}")
+                        else:
+                            print(f"    ROW {row_num}: {row}")
+                        
+                        # Limit output to avoid too much logging
+                        if row_num >= 10:  # Show first 10 rows max
+                            remaining_rows = len(table) - row_num - 1
+                            if remaining_rows > 0:
+                                print(f"    ... ({remaining_rows} more rows)")
+                            break
+        
+        print("="*80)
+        print("DEBUG: END OF TABLE SCANNING")
+        print("="*80)
+        
         # Process first page for PO details and customer information
         page = pdf.pages[0]
         text = page.extract_text()
@@ -1157,13 +1229,10 @@ def extract_puma(pdf_path):
         for line in lines:
             if "Customer PO No." in line and "Ultimate Customer PO No." in line:
                 print(f"DEBUG: Found Customer PO line: {line}")
-                # Look for the next line that contains the actual PO numbers
                 continue
             elif "Customer PO No." in line:
                 print(f"DEBUG: Found Customer PO header line: {line}")
-                # The PO numbers are likely on the next line or same line
                 po_line = line
-                # Look for pattern: number space INP/number
                 po_match = re.search(r'(\d+)\s+(INP/\d+)', po_line)
                 if po_match:
                     article_info["customer_po_no"] = po_match.group(1)
@@ -1190,7 +1259,6 @@ def extract_puma(pdf_path):
         if "customer_po_no" not in article_info:
             print("DEBUG: Trying broader search for Customer PO numbers in first page")
             for line in lines:
-                # Look for the pattern anywhere in the line
                 po_match = re.search(r'(\d{10})\s+(INP/\d+)', line)
                 if po_match:
                     article_info["customer_po_no"] = po_match.group(1)
@@ -1208,25 +1276,26 @@ def extract_puma(pdf_path):
             # Try to extract table data directly first
             tables = page.extract_tables()
             
+            print(f"\nDEBUG: Processing page 2 - found {len(tables)} table(s)")
+            
             ship_to_address = []
             ship_to_found = False
             
             # Try to extract from tables first
             for i, table in enumerate(tables):
-                for row in table:
+                print(f"DEBUG: Examining table {i+1} for Ship To address")
+                for row_idx, row in enumerate(table):
+                    print(f"DEBUG: Table {i+1} Row {row_idx}: {row}")
                     if row and "Ship To" in str(row[0]):
                         ship_to_found = True
                         print(f"DEBUG: Found 'Ship To' in table row: {row}")
-                        # If Ship To is in a table, the address might be in subsequent cells/rows
                         for j in range(1, len(row)):
                             if row[j] and row[j].strip():
                                 ship_to_address.append(row[j].strip())
                     elif ship_to_found and row and row[0] is None and len(row) > 1:
-                        # Possible continuation of address in subsequent rows
                         if row[1] and row[1].strip():
                             ship_to_address.append(row[1].strip())
                     elif ship_to_found and row and "Ship Mode" in str(row[0]):
-                        # End of ship to section
                         ship_to_found = False
             
             # If table extraction didn't work, try text-based extraction
@@ -1244,14 +1313,12 @@ def extract_puma(pdf_path):
                     if in_ship_to_section and "Ship To" in line:
                         ship_to_marker_found = True
                         print(f"DEBUG: Found 'Ship To' line: {line}")
-                        # Check if there's content after "Ship To" on the same line
                         address_part = line.split("Ship To")[-1].strip()
                         if address_part:
                             ship_to_address.append(address_part)
                         continue
                     
                     if ship_to_marker_found and not "Ship Mode" in line:
-                        # This could be a continuation of the address
                         if line.strip() and not any(keyword in line for keyword in ["Ultimate Cust", "Article Number", "Size International"]):
                             ship_to_address.append(line.strip())
                             print(f"DEBUG: Added address line: {line.strip()}")
@@ -1260,64 +1327,128 @@ def extract_puma(pdf_path):
                         print("DEBUG: Found 'Ship Mode' - ending ship to extraction")
                         break
             
-            # Set delivery address (Ship To address) - this is different from customer address
+            # Set delivery address
             if ship_to_address:
                 delivery_address_str = "\n".join(ship_to_address)
                 po_details["delivery_address"] = delivery_address_str
                 print(f"DEBUG: Delivery address extracted: {delivery_address_str}")
                 po_details["customer_address"] = STATIC_CUSTOMER_ADDRESS
-                
-                # Update customer_details with Ship To address (for backward compatibility)
                 customer_details["address"] = delivery_address_str
             else:
                 po_details["delivery_address"] = ""
                 customer_details["address"] = ""
                 print("DEBUG: No delivery address found")
                         
-            for i, line in enumerate(lines):
-                if "Article Number" in line and "Style Description" in line and "Color" in line:
-                    if i + 1 < len(lines):
-                        article_line = lines[i + 1]
-                        print(f"DEBUG: Raw article line: {article_line}")
-                        
-                        article_data = re.split(r'\s+', article_line.strip())
-                        print(f"DEBUG: Processed article data: {article_data}")
-                        
-                        if len(article_data) >= 4:
-                            article_info["article_number"] = article_data[0]
-                            
-                            # Find PUMA position (first occurrence)
-                            puma_index = next((idx for idx, word in enumerate(article_data) 
-                                            if "PUMA" in word), None)
-                            
-                            if puma_index and puma_index > 1:
-                                # Style Description = everything between article number and first PUMA
-                                article_info["style_description"] = " ".join(article_data[1:puma_index])
-                                
-                                # Color = everything from first PUMA until "National" (or end if not found)
-                                national_index = next((idx for idx, word in enumerate(article_data) 
-                                                    if "National" in word), len(article_data))
-                                
-                                color_parts = article_data[puma_index:national_index]
-                                article_info["color"] = " ".join(color_parts)
-                                
-                                # Product Character = everything from "National" onwards
-                                if national_index < len(article_data):
-                                    product_parts = article_data[national_index:]
-                                    article_info["product_character"] = " ".join(product_parts)
-                                else:
-                                    article_info["product_character"] = ""
-                                
-                                print(f"DEBUG: Correct article info: {article_info}")
-                                break
-                            else:
-                                # Fallback if PUMA not found
-                                article_info["style_description"] = " ".join(article_data[1:-2])
-                                article_info["color"] = article_data[-2]
-                                article_info["product_character"] = article_data[-1]
-
+            # ARTICLE EXTRACTION USING TABLE STRUCTURE
+            print("\nDEBUG: Starting article extraction using table structure")
+            article_extracted = False
             
-            # Extract PO items and additional fields (Pack Factor, SKU/Line No, Incoterm, Named Place)
+            for table_idx, table in enumerate(tables):
+                print(f"DEBUG: Examining table {table_idx + 1} for article data")
+                
+                # Look for the header row with Article Number, Style Description, Color, Product Character
+                for row_idx, row in enumerate(table):
+                    if row and len(row) >= 4:
+                        # Check if this is the header row
+                        if (row[0] == "Article Number" and 
+                            any("Style Description" in str(cell) for cell in row if cell) and
+                            any("Color" in str(cell) for cell in row if cell) and
+                            any("Product Character" in str(cell) for cell in row if cell)):
+                            
+                            print(f"DEBUG: Found article header in table {table_idx + 1}, row {row_idx}: {row}")
+                            
+                            # Look for the data row (next row should contain the actual values)
+                            if row_idx + 1 < len(table):
+                                data_row = table[row_idx + 1]
+                                print(f"DEBUG: Data row found: {data_row}")
+                                
+                                # Extract non-None values from the data row
+                                non_none_values = [cell for cell in data_row if cell is not None and str(cell).strip()]
+                                print(f"DEBUG: Non-None values from data row: {non_none_values}")
+                                
+                                if len(non_none_values) >= 4:
+                                    article_info["article_number"] = non_none_values[0].strip()
+                                    article_info["style_description"] = non_none_values[1].strip()
+                                    article_info["color"] = non_none_values[2].strip()
+                                    article_info["product_character"] = non_none_values[3].strip()
+                                    
+                                    print(f"DEBUG: Successfully extracted article info from table:")
+                                    print(f"  Article Number: {article_info['article_number']}")
+                                    print(f"  Style Description: {article_info['style_description']}")
+                                    print(f"  Color: {article_info['color']}")
+                                    print(f"  Product Character: {article_info['product_character']}")
+                                    
+                                    article_extracted = True
+                                    break
+                                else:
+                                    print(f"DEBUG: Not enough non-None values in data row: {len(non_none_values)}")
+                    
+                    if article_extracted:
+                        break
+                
+                if article_extracted:
+                    break
+            
+            if not article_extracted:
+                print("DEBUG: Could not extract article info from tables, falling back to text extraction")
+                # Keep the original text-based extraction as fallback
+                for i, line in enumerate(lines):
+                    if "Article Number" in line and "Style Description" in line and "Color" in line:
+                        if i + 1 < len(lines):
+                            article_line = lines[i + 1]
+                            print(f"DEBUG: Raw article line: {article_line}")
+                            
+                            # Split by multiple spaces or tabs to handle table-like structure
+                            article_data = re.split(r'\s{2,}|\t+', article_line.strip())
+                            
+                            if len(article_data) >= 4:
+                                article_info["article_number"] = article_data[0].strip()
+                                article_info["style_description"] = article_data[1].strip()
+                                article_info["color"] = article_data[2].strip()
+                                article_info["product_character"] = article_data[3].strip()
+                                
+                                print(f"DEBUG: Text extracted article info: {article_info}")
+                                article_extracted = True
+                            else:
+                                # Fallback: try to split by single spaces and reconstruct
+                                parts = article_line.strip().split()
+                                if len(parts) >= 4:
+                                    article_info["article_number"] = parts[0]
+                                    
+                                    # Look for patterns to identify boundaries
+                                    style_parts = []
+                                    color_parts = []
+                                    product_parts = []
+                                    
+                                    current_section = "style"
+                                    
+                                    for j, part in enumerate(parts[1:], 1):
+                                        if current_section == "style":
+                                            # Look for color indicators
+                                            if any(color_word in part.upper() for color_word in ["PUMA", "BLACK", "WHITE", "NAVY", "BLUE", "RED", "GREEN", "YELLOW", "GREY", "GRAY", "PINK", "PURPLE", "ORANGE", "BROWN", "ASPHALT", "INDIGO", "DARK"]):
+                                                current_section = "color"
+                                                color_parts.append(part)
+                                            else:
+                                                style_parts.append(part)
+                                        elif current_section == "color":
+                                            # Look for product character indicators
+                                            if "NATIONAL" in part.upper() or "REGIONAL" in part.upper() or "PRODUCT" in part.upper():
+                                                current_section = "product"
+                                                product_parts.append(part)
+                                            else:
+                                                color_parts.append(part)
+                                        else:  # product section
+                                            product_parts.append(part)
+                                    
+                                    article_info["style_description"] = " ".join(style_parts)
+                                    article_info["color"] = " ".join(color_parts)
+                                    article_info["product_character"] = " ".join(product_parts)
+                                    
+                                    print(f"DEBUG: Reconstructed article info: {article_info}")
+                            
+                            break
+            
+            # Extract PO items and additional fields
             size_row = None
             quantity_row = None
             price_row = None
@@ -1361,7 +1492,7 @@ def extract_puma(pdf_path):
                         named_place_row = named_place_parts[1].strip().split()
                         print(f"DEBUG: Named place row extracted: {named_place_row}")
             
-            # If we don't find the explicit rows, try to find them in the bottom part of PDF
+            # Search for missing rows in bottom part of PDF
             if not pack_factor_row or not sku_line_row or not incoterm_row or not named_place_row:
                 print("DEBUG: Some rows missing, searching in bottom part of PDF")
                 for i, line in enumerate(lines):

@@ -17,6 +17,17 @@
     </div>
 </div>
 
+@if($hasPackingListItems)
+    <div class="row mt-3">
+        <div class="col-md-12">
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle"></i>
+                <strong>Thank you!</strong> Packing list items have already been created for this PO. Configuration cannot be modified.
+            </div>
+        </div>
+    </div>
+@endif
+
 <form id="packingConfigForm">
     @csrf
     <input type="hidden" name="po_id" value="{{ $po->id }}">
@@ -88,7 +99,9 @@
 
     <div class="row mt-3">
         <div class="col-md-12 text-center">
-            <button type="submit" class="btn btn-primary">Save Configuration</button>
+            <button type="submit" class="btn btn-primary" {{ $hasPackingListItems ? 'disabled' : '' }}>
+                Save Configuration
+            </button>
         </div>
     </div>
 </form>

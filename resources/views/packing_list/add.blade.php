@@ -75,29 +75,15 @@
                     <!-- Items Table Section -->
                     <div class="row mt-4" id="items_section" style="display: none;">
                         <div class="col-md-12">
-                            <div class="alert alert-info" id="status_display"></div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h5>Carton Items</h5>
+                                <h5>Packing Lists</h5>
                                 <button type="button" class="btn btn-success btn-sm add-item" disabled>
                                     <i class="fas fa-plus"></i> Add Item
                                 </button>
-                                
                             </div>
-                            <table class="table table-bordered" id="itemsTable">
-                                <thead>
-                                    <tr>
-                                        <th>Carton Name</th>
-                                        <th>Article Number</th>
-                                        <th>Color</th>
-                                        <th>Size</th>
-                                        <th>Quantity</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <!-- Dynamic rows will be added here -->
-                                </tbody>
-                            </table>
+                            <div id="packing_lists_container">
+                                <!-- Packing lists will be loaded here -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -265,51 +251,117 @@
                 type: 'GET',
                 data: requestData,
                 success: function(response) {
-                var packing_status = response.packing_status;
-                var items = response.items;
-                var hidden_class = "";
-if(packing_status>0)
-{
-hidden_class = "d-none";
-$("#status_display").html("Packing Done and Ready For Invoice");
- $('.add-item').prop('disabled', true);
-}
-else
-{
-    hidden_class = "";
-    $("#status_display").html("");
-     $('.add-item').prop('disabled', false);
-}
-                    var $tbody = $('#itemsTable tbody').empty();
-                    if (items.length) {
-                        items.forEach(function(item) {
-                            const delBtn = items.length > 1 ?
-                                `<button class="btn btn-danger btn-sm me-1 remove-item" data-id="${item.id}"><i class="fas fa-trash"></i></button>` :
-                                '';
-                            $tbody.append(`
+                    var packingLists = response.packing_lists;
+                    var canAddItems = response.can_add_items;
+
+                    // Enable/disable add button based on availability
+                    $('.add-item').prop('disabled', !canAddItems);
+
+                    var $container = $('#packing_lists_container').empty();
+
+                    if (packingLists.length) {
+                        packingLists.forEach(function(packingList, index) {
+                            var statusBadge = getStatusBadge(packingList.pack_status);
+
+                            var tableHtml = `
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">
+                                    <strong>Ref: ${packingList.pack_ref_no}</strong>
+                                </h6>
+                                <div>
+                                    ${statusBadge}
+                                </div>
+                            </div>
+                            <table class="table table-bordered table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Carton Name</th>
+                                        <th>Article Number</th>
+                                        <th>Color</th>
+                                        <th>Size</th>
+                                        <th>Quantity</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+
+                            if (packingList.items.length) {
+                                packingList.items.forEach(function(item) {
+                                    const actionButtons = packingList.pack_status === 0 ?
+                                        `<button class="btn btn-primary btn-sm me-1 edit-item" data-id="${item.id}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                ${packingList.items.length > 1 ? 
+                                    `<button class="btn btn-danger btn-sm remove-item" data-id="${item.id}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>` : ''
+                                }` :
+                                        '<span class="text-muted">No actions available</span>';
+
+                                    tableHtml += `
                                 <tr data-id="${item.id}">
                                     <td>${item.carton_name}</td>
                                     <td>${item.article_number}</td>
                                     <td>${item.color}</td>
                                     <td>${item.size}</td>
                                     <td>${item.quantity}</td>
-                                    <td class="${hidden_class}">
-                                        <button class="btn btn-primary btn-sm me-1 edit-item" data-id="${item.id}">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        ${delBtn}
-                                    </td>
+                                    <td>${actionButtons}</td>
                                 </tr>
-                            `);
+                            `;
+                                });
+                            } else {
+                                tableHtml += `<tr><td colspan="6" class="text-center">No items found</td></tr>`;
+                            }
+
+                            tableHtml += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+
+                            $container.append(tableHtml);
                         });
                     } else {
-                        $tbody.append(`<tr><td colspan="5" class="text-center">No items found</td></tr>`);
+                        $container.append(`
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No packing lists found for this color.
+                    </div>
+                `);
+                    }
+
+                    // Show status message
+                    if (!canAddItems) {
+                        $container.prepend(`
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        All items for this color have been fully packed. No more items can be added.
+                    </div>
+                `);
                     }
                 },
                 error: function() {
-                    $('#itemsTable tbody').html(`<tr><td colspan="5" class="text-center text-danger">Error loading items</td></tr>`);
+                    $('#packing_lists_container').html(`
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> Error loading packing lists
+                </div>
+            `);
                 }
             });
+        }
+
+        function getStatusBadge(status) {
+            switch (status) {
+                case 0:
+                    return '<span class="badge bg-warning text-dark">In Packaging</span>';
+                case 1:
+                    return '<span class="badge bg-info text-dark">Packed & Ready for Invoice</span>';
+                case 2:
+                    return '<span class="badge bg-success text-dark">Invoiced</span>';
+                default:
+                    return '<span class="badge bg-secondary">Unknown</span>';
+            }
         }
 
         // Add Item button
@@ -413,14 +465,14 @@ else
         });
 
         // Handle article selection - load sizes table
-       // $(document).on('change', '#articleSelect', function() {
+        // $(document).on('change', '#articleSelect', function() {
         $(document).on('change', '.articleSelect', function() {
             const $block = $(this).closest('.article-block');
             const poId = $('#po_id').val();
             const color = $('#color').val();
             const article = $(this).val();
             const $container = $block.find('.sizesTableContainer');
-console.log($container)
+            console.log($container)
 
 
             if (article) {
@@ -432,17 +484,17 @@ console.log($container)
                         article_number: article
                     },
                     success: function(data) {
-                        loadSizesTable(data,$container);
+                        loadSizesTable(data, $container);
                     }
                 });
             } else {
-               // $('#sizesTableContainer').hide();
-                 $container.hide().empty();
+                // $('#sizesTableContainer').hide();
+                $container.hide().empty();
             }
         });
 
         // Function to load sizes table
-        function loadSizesTable(sizes,$container) {
+        function loadSizesTable(sizes, $container) {
             let tableHtml = `
         <div class="sizes-table">
             <table class="table table-sm table-bordered">
@@ -497,10 +549,10 @@ console.log($container)
         // Handle select all sizes checkbox
         //$(document).on('change', '#selectAllSizes', function() {
         $(document).on('change', '.selectAllSizes', function() {
-             const $block = $(this).closest('.article-block');
-    const isChecked = $(this).is(':checked');
+            const $block = $(this).closest('.article-block');
+            const isChecked = $(this).is(':checked');
 
-    $block.find('.size-checkbox').prop('checked', isChecked).trigger('change');
+            $block.find('.size-checkbox').prop('checked', isChecked).trigger('change');
         });
 
         // Handle individual size checkbox
@@ -512,9 +564,9 @@ console.log($container)
             $input.prop('disabled', !isChecked);
 
             if (!isChecked) {
-            $input.val('');
+                $input.val('');
             } else {
-            $input.focus();
+                $input.focus();
             }
 
             // const size = $(this).val();
@@ -577,45 +629,45 @@ console.log($container)
             } else {
 
                 const allArticlesData = [];
-            $('.article-block').each(function () {
-                const $block = $(this);
+                $('.article-block').each(function() {
+                    const $block = $(this);
 
-                const article_number = $block.find('.articleSelect').val();
-                // Add mode - collect data from sizes table
-                const selectedSizes = [];
-                //$('.size-checkbox:checked').each(function() {
-                $block.find('.size-checkbox:checked').each(function () {
-                    const size = $(this).val();
-                    const quantity = $(`.quantity-input[data-size="${size}"]`).val();
-                    const configId = $(this).data('config-id');
+                    const article_number = $block.find('.articleSelect').val();
+                    // Add mode - collect data from sizes table
+                    const selectedSizes = [];
+                    //$('.size-checkbox:checked').each(function() {
+                    $block.find('.size-checkbox:checked').each(function() {
+                        const size = $(this).val();
+                        const quantity = $(`.quantity-input[data-size="${size}"]`).val();
+                        const configId = $(this).data('config-id');
 
-                    if (quantity && parseInt(quantity) > 0) {
-                        selectedSizes.push({
-                            size: size,
-                            quantity: parseInt(quantity),
-                            config_item_id: configId,
-                             
-                        });
-                    }
+                        if (quantity && parseInt(quantity) > 0) {
+                            selectedSizes.push({
+                                size: size,
+                                quantity: parseInt(quantity),
+                                config_item_id: configId,
 
-                        
-                });
-
-                if (selectedSizes.length > 0) {
-                            allArticlesData.push({
-                                //po_id,
-                                //carton_id,
-                                article_number,
-                                color,
-                                net_weight,
-                                sizes: selectedSizes
                             });
                         }
+
+
                     });
 
+                    if (selectedSizes.length > 0) {
+                        allArticlesData.push({
+                            //po_id,
+                            //carton_id,
+                            article_number,
+                            color,
+                            net_weight,
+                            sizes: selectedSizes
+                        });
+                    }
+                });
 
-               // if (selectedSizes.length === 0) {
-               if (allArticlesData.length === 0) {
+
+                // if (selectedSizes.length === 0) {
+                if (allArticlesData.length === 0) {
                     Swal.fire({
                         icon: 'warning',
                         title: 'No Items Selected',
@@ -625,9 +677,9 @@ console.log($container)
                     return;
                 }
 
-                
 
-                
+
+
                 // Call batch save
                 saveMultipleItems(allArticlesData);
             }
@@ -673,7 +725,7 @@ console.log($container)
         // Updated batch save: one AJAX with arrays
         function saveMultipleItems(allArticlesData) {
 
-           console.log(allArticlesData)
+            console.log(allArticlesData)
             // Build arrays
             // const sizes = selectedSizes.map(s => s.size);
             // const quantities = selectedSizes.map(s => s.quantity);
@@ -682,15 +734,15 @@ console.log($container)
             // const color = baseData['color'];
 
             // Prepare base data
-                const po_details = {
-                    po_id: $('#po_id').val(),
-                    carton_id: $('#carton_id').val(),
-                    //article_number: $('#articleSelect').val(),
-                    color: $('#color').val(),
-                    net_weight:$("#net_weight").val()
-                };
-             
-           
+            const po_details = {
+                po_id: $('#po_id').val(),
+                carton_id: $('#carton_id').val(),
+                //article_number: $('#articleSelect').val(),
+                color: $('#color').val(),
+                net_weight: $("#net_weight").val()
+            };
+
+
 
             // // Combine into one payload
             // const postData = {
@@ -715,7 +767,10 @@ console.log($container)
                 url: '{{ route("packing_list_item_store") }}',
                 method: 'POST',
                 contentType: 'application/json',
-                data: JSON.stringify({ cartondata: allArticlesData , po_details : po_details}),
+                data: JSON.stringify({
+                    cartondata: allArticlesData,
+                    po_details: po_details
+                }),
                 success: function(response) {
                     $('#add_modal').modal('hide');
                     Swal.fire({
@@ -752,40 +807,40 @@ console.log($container)
             });
         }
 
-        $(document).on('click','#addArticleBtn', function() {
-    
-                        // Destroy Select2 before cloning
-                const $original = $('.article-block').first();
-                $original.find('.select2m').select2('destroy');
+        $(document).on('click', '#addArticleBtn', function() {
 
-                // Clone the block
-                let newBlock = $original.clone();
+            // Destroy Select2 before cloning
+            const $original = $('.article-block').first();
+            $original.find('.select2m').select2('destroy');
 
-                // Reinitialize Select2 for the original block
-                $original.find('.select2m').select2({
-                    dropdownParent: $('#articlesWrapper')
-                });
+            // Clone the block
+            let newBlock = $original.clone();
 
-                // Reset values in cloned block
-                newBlock.find('input, select').val('');
-                newBlock.find('.sizesTableContainer').hide().empty();
+            // Reinitialize Select2 for the original block
+            $original.find('.select2m').select2({
+                dropdownParent: $('#articlesWrapper')
+            });
 
-                // Append cloned block
-                $('#articlesWrapper').append(newBlock);
+            // Reset values in cloned block
+            newBlock.find('input, select').val('');
+            newBlock.find('.sizesTableContainer').hide().empty();
 
-                // Reinitialize Select2 in the new block
-                newBlock.find('.select2m').select2({
-                    dropdownParent: $('#articlesWrapper')
-                });
+            // Append cloned block
+            $('#articlesWrapper').append(newBlock);
+
+            // Reinitialize Select2 in the new block
+            newBlock.find('.select2m').select2({
+                dropdownParent: $('#articlesWrapper')
+            });
         });
 
-         $(document).on('click', '.remove-article', function() {
-        if ($('.article-block').length > 1) {
-            $(this).closest('.article-block').remove();
-        } else {
-            alert("At least one article is required.");
-        }
-    });
+        $(document).on('click', '.remove-article', function() {
+            if ($('.article-block').length > 1) {
+                $(this).closest('.article-block').remove();
+            } else {
+                alert("At least one article is required.");
+            }
+        });
     });
 </script>
 @endpush

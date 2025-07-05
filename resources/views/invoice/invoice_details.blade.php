@@ -307,6 +307,14 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="transport_date_time" name="transport_date_time" placeholder="Transport Supply Date and Time" value="{{ $transportDetails['transport_date_time'] ?? '' }}" required>
+                                    <label for="transport_date_time">Transport Supply Date and Time</label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
