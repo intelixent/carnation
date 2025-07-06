@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Packing List</title>
     <style>
         body {
@@ -48,45 +48,34 @@
 
         .summary-section {
             margin-top: 20px;
-        }
-
-        /* Page break control */
-        .header-section {
-            page-break-after: avoid;
             page-break-inside: avoid;
         }
 
-        .items-table {
-            page-break-before: auto;
-            page-break-inside: auto;
-        }
-
+        /* allow thead once + keep it on every page */
         .items-table thead {
             display: table-header-group;
         }
 
-        .items-table tbody tr {
+        /* keep each carton’s rows (with rowspan) together */
+        .carton-group {
             page-break-inside: avoid;
+            break-inside: avoid-page;
+            -webkit-page-break-inside: avoid;
+            -webkit-column-break-inside: avoid;
+            display: table-row-group;
         }
 
-        /* Ensure summary stays together */
-        .summary-section {
-            page-break-before: auto;
+        /* keep individual lines from splitting too */
+        .carton-group tr {
             page-break-inside: avoid;
+            break-inside: avoid-page;
+            -webkit-page-break-inside: avoid;
+            -webkit-column-break-inside: avoid;
         }
 
-        @media print {
-            .header-section {
-                page-break-after: avoid;
-            }
-
-            .items-table {
-                page-break-before: auto;
-            }
-
-            .items-table thead {
-                display: table-header-group;
-            }
+        /* grand totals at the bottom */
+        .items-table tfoot {
+            display: table-footer-group;
         }
     </style>
 </head>
@@ -94,157 +83,129 @@
 <body>
     <div class="header">PACKING LIST</div>
 
-    <!-- Header Information Section -->
-    <div class="header-section">
-        <table style="width:100%; border-collapse:collapse; font-family: Arial, sans-serif; font-size: 12px;">
+    {{-- Header Information --}}
+    <div class="header-section" style="page-break-inside: avoid; margin-bottom: 10px;">
+        <table style="font-size:12px; border-collapse:collapse;">
             <tr>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:20%; font-weight:bold;">Invoice No.</th>
-                <td style="background-color:#fff; padding:8px; border:1px solid #000; width:40%;"></td>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:15%; font-weight:bold; text-align:right;">Date :</th>
-                <td colspan="3" style="background-color:#fff; padding:8px; border:1px solid #000; width:25%;">{{ $packing_list->po_date }}</td>
+                <th style="background-color:#bbb; padding:8px; width:20%;">Invoice No.</th>
+                <td style="padding:8px;" colspan="2"></td>
+                <th style="background-color:#bbb; padding:8px; text-align:right; width:15%;">Date :</th>
+                <td style="padding:8px;" colspan="2">{{ $packing_list->po_date }}</td>
             </tr>
-
             <tr>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:20%; vertical-align:top; font-weight:bold;">
-                    Shipped/<br>Exported By
-                </th>
-                <td colspan="5" style="background-color:#fff; padding:8px; border:1px solid #000; width:80%;">
-                    CARNATION CREATIONS PVT LTD 376,Narasimha Naicken Palayam, Coimbatore 641031
+                <th style="background-color:#bbb; padding:8px; vertical-align:top;">Shipped/<br>Exported By</th>
+                <td style="padding:8px;" colspan="5">
+                    CARNATION CREATIONS PVT LTD<br>
+                    376, Narasimha Naicken Palayam,<br>
+                    Coimbatore 641031
                 </td>
             </tr>
-
             <tr>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:20%; vertical-align:top; font-weight:bold;">
-                    Bill To Address
-                </th>
-                <td colspan="5" style="background-color:#fff; padding:8px; border:1px solid #000; width:80%;">
-                    {{ $packing_list->po->vendor_com_adr }}
-                </td>
+                <th style="background-color:#bbb; padding:8px; vertical-align:top;">Bill To Address</th>
+                <td style="padding:8px;" colspan="5">{{ $packing_list->po->vendor_com_adr }}</td>
             </tr>
-
             <tr>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:20%; vertical-align:top; font-weight:bold;">
-                    Ship to Address
-                </th>
-                <td colspan="5" style="background-color:#fff; padding:8px; border:1px solid #000; width:80%;">
-                    {{ $packing_list->po->vendor_del_adr }}
-                </td>
+                <th style="background-color:#bbb; padding:8px; vertical-align:top;">Ship to Address</th>
+                <td style="padding:8px;" colspan="5">{{ $packing_list->po->vendor_del_adr }}</td>
             </tr>
-
+            @php $info = json_decode($packing_list->po->article_info, true); @endphp
             <tr>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:20%; font-weight:bold;">Final Destination</th>
-                <td style="background-color:#fff; padding:8px; border:1px solid #000; width:30%;"></td>
-                <th colspan="2" style="background-color:#bbb; padding:8px; border:1px solid #000; width:15%; font-weight:bold;">Color</th>
-                <td colspan="2" style="background-color:#fff; padding:8px; border:1px solid #000; width:35%;">
-                    @php
-                    $articleInfo = json_decode($packing_list->po->article_info, true);
-                    $article = $articleInfo['ARTICLE'] ?? '';
-                    $description = $articleInfo['Article description'] ?? '';
-                    $gender = $articleInfo['Gender'] ?? '';
-                    $colors = $articleInfo['Colors'] ?? '';
-                    $vendor = $articleInfo['Vendor'] ?? '';
-                    @endphp
-
-                    {{ $colors }}
-                </td>
+                <th style="background-color:#bbb; padding:8px;">Final Destination</th>
+                <td style="padding:8px;" colspan="1"></td>
+                <th style="background-color:#bbb; padding:8px;" colspan="2">Color</th>
+                <td style="padding:8px;" colspan="2">{{ $info['Colors'] ?? '' }}</td>
             </tr>
-
             <tr>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:20%; font-weight:bold;">Item Description</th>
-                <td style="background-color:#fff; padding:8px; border:1px solid #000; width:25%;">
-                    {{ $gender }} {{ $description }}
+                <th style="background-color:#bbb; padding:8px;">Item Description</th>
+                <td style="padding:8px;" colspan="1">
+                    {{ ($info['Gender'] ?? '') . ' ' . ($info['Article description'] ?? '') }}
                 </td>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:15%; font-weight:bold;">PO No.</th>
-                <td style="background-color:#fff; padding:8px; border:1px solid #000; width:15%;">{{ $packing_list->po->po_num }}</td>
-                <th style="background-color:#bbb; padding:8px; border:1px solid #000; width:15%; font-weight:bold;">Style No.</th>
-                <td style="background-color:#fff; padding:8px; border:1px solid #000; width:25%;">{{ $description }}</td>
+                <th style="background-color:#bbb; padding:8px;">PO No.</th>
+                <td style="padding:8px;">{{ $packing_list->po->po_num }}</td>
+                <th style="background-color:#bbb; padding:8px;">Style No.</th>
+                <td style="padding:8px;">{{ $info['Article description'] ?? '' }}</td>
             </tr>
         </table>
     </div>
 
-    <!-- Main Items Table -->
+    {{-- Main Items Table --}}
+    @php
+    $byCarton = $packing_list->items->groupBy(fn($i) => $i->carton_name);
+    $grandQty = 0;
+    $grandNet = 0;
+    $grandGross = 0;
+    @endphp
+
     <table class="items-table">
         <thead>
             <tr>
-                <th style="background-color:#bbb;" rowspan="2">Ctn. #</th>
-                <th style="background-color:#bbb;" rowspan="2">PO No.</th>
-                <th style="background-color:#bbb;" rowspan="2">SAP Article No.</th>
-                <th style="background-color:#bbb;" rowspan="2">Short Desc.</th>
-                <th style="background-color:#bbb;" rowspan="2">EAN / SKU</th>
-                <th style="background-color:#bbb;" rowspan="2">Size</th>
-                <th style="background-color:#bbb;" rowspan="2">Shipped Units</th>
-                <th style="background-color:#bbb;" colspan="3">Ctn. Mea (cm)</th>
-                <th style="background-color:#bbb;" rowspan="2">Net Weight (kg)</th>
-                <th style="background-color:#bbb;" rowspan="2">Gross Weight (kg)</th>
-                <th style="background-color:#bbb;" rowspan="2">CBM</th>
+                <th rowspan="2">Ctn. #</th>
+                <th rowspan="2">PO No.</th>
+                <th rowspan="2">SAP Article No.</th>
+                <th rowspan="2">Short Desc.</th>
+                <th rowspan="2">EAN / SKU</th>
+                <th rowspan="2">Size</th>
+                <th rowspan="2">Qty</th>
+                <th colspan="3">Ctn. Mea (cm)</th>
+                <th rowspan="2">Net Wt</th>
+                <th rowspan="2">Gross Wt</th>
+                <th rowspan="2">CBM</th>
             </tr>
             <tr>
-                <th style="background-color:#bbb;">L</th>
-                <th style="background-color:#bbb;">B</th>
-                <th style="background-color:#bbb;">H</th>
+                <th>L</th>
+                <th>B</th>
+                <th>H</th>
             </tr>
         </thead>
-        <tbody>
-            @if($packing_list->items->isNotEmpty())
-            {{-- Group items by carton name --}}
-            @php
-            $byCarton = $packing_list->items->groupBy(fn($item) => $item->carton_name);
 
-            //dd($byCarton);
-            $total_net_weight=$total_gross_weight=0;
-            @endphp
-
-            @foreach($byCarton as $cartonName => $items)
+        @foreach($byCarton as $cartonName => $items)
+        <tbody class="carton-group">
             @foreach($items as $i => $item)
-            @php 
-            $cbm = $item->quantity*($item->carton->length*$item->carton->breadth*$item->carton->height/1000000) ;
-            $total_net_weight+=$item->net_weight ;
-            $total_gross_weight+=$item->net_weight + 1.2 ;
+            @php
+            $cbm = $item->quantity
+            * ($item->carton->length
+            * $item->carton->breadth
+            * $item->carton->height)
+            / 1_000_000;
+            $grandQty += $item->quantity;
+            $grandNet += $item->net_weight;
+            $grandGross += ($item->net_weight + 1.2);
             @endphp
             <tr>
-                {{-- only on the first row of the group: output the carton name with rowspan --}}
                 @if($i === 0)
                 <td rowspan="{{ $items->count() }}">{{ $cartonName }}</td>
                 @endif
-
                 <td>{{ $packing_list->po_no }}</td>
                 <td>{{ $item->article_number }}</td>
-                <td> {{ $description }} </td>
+                <td>{{ $info['Article description'] ?? '' }}</td>
                 <td>{{ $item->po_item->ean_code }}</td>
                 <td>{{ $item->size }}</td>
                 <td>{{ $item->quantity }}</td>
-
-                {{-- carton measures split into three cells --}}
                 <td>{{ $item->carton->length }}</td>
                 <td>{{ $item->carton->breadth }}</td>
                 <td>{{ $item->carton->height }}</td>
-
                 <td>{{ $item->net_weight }}</td>
-                <td>{{ $item->net_weight + 1.2 }}</td>
-                <td>{{round($cbm,2)}}</td>
+                <td>{{ round($item->net_weight + 1.2, 2) }}</td>
+                <td>{{ round($cbm, 2) }}</td>
             </tr>
             @endforeach
-            @endforeach
+        </tbody>
+        @endforeach
 
-            {{-- example of a totals row after all cartons --}}
+        <tfoot>
             <tr>
                 <td colspan="6"></td>
-                <td style="background-color:#bbb;"><strong>{{ $packing_list->items->sum('quantity') }}</strong></td>
+                <td><strong>{{ $grandQty }}</strong></td>
                 <td colspan="3"></td>
-                <td style="background-color:#bbb;"><strong>{{ $total_net_weight }}</strong></td>
-                <td style="background-color:#bbb;"><strong>{{ $total_gross_weight }}</strong></td>
-                <td style="background-color:#bbb;"><strong></strong></td>
+                <td><strong>{{ round($grandNet, 2) }}</strong></td>
+                <td><strong>{{ round($grandGross, 2) }}</strong></td>
+                <td></td>
             </tr>
-
-            @else
-            {{-- your existing "static" fallback rows here --}}
-            @endif
-        </tbody>
+        </tfoot>
     </table>
 
-    <!-- Summary Section -->
+    {{-- Summary Section --}}
     <div class="summary-section">
-        <!-- Size Summary Table -->
         <table class="summary-table">
             <thead>
                 <tr>
@@ -260,74 +221,48 @@
                 </tr>
             </thead>
             <tbody>
-                <!-- ORDER QTY Row -->
+                @php
+                $orderTotal = $packTotal = $balTotal = 0;
+                @endphp
                 <tr>
-                    <td>{{ $article }}</td>
+                    <td>{{ $info['ARTICLE'] ?? '' }}</td>
                     <td>ORDER. QTY</td>
-                    @php $orderTotal = 0; @endphp
                     @foreach($all_sizes as $size)
-                    @php
-                    $orderQty = $ordered_quantities->get($size, 0);
-                    $orderTotal += $orderQty;
-                    @endphp
-                    <td>{{ $orderQty }}</td>
+                    @php $q = $ordered_quantities->get($size, 0); $orderTotal += $q; @endphp
+                    <td>{{ $q }}</td>
                     @endforeach
                     <td><strong>{{ $orderTotal }}</strong></td>
                 </tr>
-
-                <!-- PACK QTY Row -->
                 <tr>
-                    <td>{{ $description }}</td>
+                    <td>{{ $info['Article description'] ?? '' }}</td>
                     <td>PACK QTY</td>
-                    @php $packTotal = 0; @endphp
                     @foreach($all_sizes as $size)
-                    @php
-                    $packQty = $packed_quantities->get($size, 0);
-                    $packTotal += $packQty;
-                    @endphp
-                    <td>{{ $packQty }}</td>
+                    @php $q = $packed_quantities->get($size, 0); $packTotal += $q; @endphp
+                    <td>{{ $q }}</td>
                     @endforeach
                     <td><strong>{{ $packTotal }}</strong></td>
                 </tr>
-
-                <!-- BALANCE Row -->
                 <tr>
-                    <td>{{ $vendor }}</td>
+                    <td>{{ $info['Vendor'] ?? '' }}</td>
                     <td>BALANCE</td>
-                    @php $balanceTotal = 0; @endphp
                     @foreach($all_sizes as $size)
-                    @php
-                    $balance = $balances->get($size, 0);
-                    $balanceTotal += $balance;
-                    @endphp
-                    <td>{{ $balance }}</td>
+                    @php $b = $balances->get($size, 0); $balTotal += $b; @endphp
+                    <td>{{ $b }}</td>
                     @endforeach
-                    <td><strong>{{ $balanceTotal }}</strong></td>
+                    <td><strong>{{ $balTotal }}</strong></td>
                 </tr>
-
-                <!-- PACK QTY % Row -->
                 <tr>
-                    <td>{{ $colors }}</td>
+                    <td>{{ $info['Colors'] ?? '' }}</td>
                     <td>PACK QTY %</td>
                     @foreach($all_sizes as $size)
-                    @php
-                    $percentage = $percentages->get($size, 0);
-                    @endphp
-                    <td>
-                        @if($percentage > 0)
-                        {{ round($percentage) }}%
-                        @else
-                        -
-                        @endif
-                    </td>
+                    @php $pct = $percentages->get($size, 0); @endphp
+                    <td>{{ $pct > 0 ? round($pct) . '%' : '-' }}</td>
                     @endforeach
                     <td>
                         <strong>
-                            @if($orderTotal > 0)
-                            {{ round(($packTotal / $orderTotal) * 100) }}%
-                            @else
-                            -
-                            @endif
+                            {{ $orderTotal
+                 ? round(($packTotal / $orderTotal) * 100) . '%'
+                 : '-' }}
                         </strong>
                     </td>
                 </tr>
