@@ -227,94 +227,108 @@
     </table>
     @endif
 
-    <!-- Summary Section -->
+    {{-- Summary Section --}}
     <div class="summary-section">
-        <!-- Size Summary Table -->
         <table class="summary-table">
             <thead>
+                <tr>
+                    <th colspan="{{ 2 + $all_sizes->count() }}">Summary</th>
+                </tr>
                 <tr>
                     <th>SIZE</th>
                     @foreach($all_sizes as $size)
                     <th>{{ $size }}</th>
                     @endforeach
                     <th>TOTAL</th>
-                    <th>Percentage %</th>
                 </tr>
             </thead>
             <tbody>
-                <!-- ORDER QTY Row -->
+                @php
+                $orderTotal = 0;
+                $cumulativePackTotal = 0;
+                $balTotal = 0;
+                @endphp
+
+                {{-- ORDER QTY Row (Total from all packing lists for this PO) --}}
                 <tr>
-                    <td>Order Qty</td>
-                    @php $orderTotal = 0; @endphp
+                    <td>ORDER. QTY</td>
                     @foreach($all_sizes as $size)
-                    @php
-                    $orderQty = $ordered_quantities->get($size, 0);
-                    $orderTotal += $orderQty;
-                    @endphp
-                    <td>{{ $orderQty }}</td>
+                    @php $q = $orderQuantitiesFromAllPacks->get($size, 0); $orderTotal += $q; @endphp
+                    <td>{{ $q }}</td>
                     @endforeach
                     <td><strong>{{ $orderTotal }}</strong></td>
-                    <td><strong>100.00%</strong></td>
                 </tr>
 
-                <!-- Packing List Qty Row -->
+                {{-- DISPATCH QTY Rows (1st, 2nd, etc.) --}}
+                @foreach($dispatchQuantities as $dispatchNumber => $dispatchQty)
+                @php
+                $dispatchTotal = 0;
+                $isCurrentPackingList = $dispatchNumber == $currentDispatchNumber;
+                if ($isCurrentPackingList) {
+                $rowLabel = 'PACKING LIST QTY';
+                } else {
+                $ordinalNumber = $dispatchNumber == 1 ? '1st' : ($dispatchNumber == 2 ? '2nd' : ($dispatchNumber == 3 ? '3rd' : $dispatchNumber.'th'));
+                $rowLabel = $ordinalNumber . ' DISPATCH QTY';
+                }
+                @endphp
                 <tr>
-                    <td>Packing List Qty</td>
-                    @php $packTotal = 0; @endphp
+                    <td>{{ $rowLabel }}</td>
                     @foreach($all_sizes as $size)
                     @php
-                    $packQty = $packed_quantities->get($size, 0);
-                    $packTotal += $packQty;
+                    $q = $dispatchQty->get($size, 0);
+                    $dispatchTotal += $q;
                     @endphp
-                    <td>{{ $packQty }}</td>
+                    <td>{{ $q }}</td>
                     @endforeach
-                    <td><strong>{{ $packTotal }}</strong></td>
-                    <td>
-                        <strong>
-                            @if($orderTotal > 0)
-                            {{ number_format(($packTotal / $orderTotal) * 100, 2) }}%
-                            @else
-                            -
-                            @endif
-                        </strong>
-                    </td>
+                    <td><strong>{{ $dispatchTotal }}</strong></td>
                 </tr>
+                @endforeach
 
-                <!-- Order Qty % Row -->
+                {{-- BALANCE Row --}}
                 <tr>
-                    <td>Order Qty %</td>
-                    @foreach($all_sizes as $size)
-                    <td>100%</td>
-                    @endforeach
-                    <td><strong>100.00%</strong></td>
-                    <td>&nbsp;</td>
-                </tr>
-
-                <!-- Packing List % Row -->
-                <tr>
-                    <td>Packing List %</td>
+                    <td>BALANCE</td>
                     @foreach($all_sizes as $size)
                     @php
-                    $percentage = $percentages->get($size, 0);
+                    $totalDispatched = 0;
+                    foreach($dispatchQuantities as $dispatchQty) {
+                    $totalDispatched += $dispatchQty->get($size, 0);
+                    }
+                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                    $b = $orderQty - $totalDispatched;
+                    $balTotal += $b;
                     @endphp
-                    <td>
-                        @if($percentage > 0)
-                        {{ round($percentage) }}%
-                        @else
-                        -
-                        @endif
-                    </td>
+                    <td>{{ $b }}</td>
+                    @endforeach
+                    <td><strong>{{ $balTotal }}</strong></td>
+                </tr>
+
+                {{-- PACK QTY % Row --}}
+                <tr>
+                    <td>PACK QTY %</td>
+                    @foreach($all_sizes as $size)
+                    @php
+                    $totalDispatched = 0;
+                    foreach($dispatchQuantities as $dispatchQty) {
+                    $totalDispatched += $dispatchQty->get($size, 0);
+                    }
+                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                    $pct = $orderQty > 0 ? ($totalDispatched / $orderQty) * 100 : 0;
+                    @endphp
+                    <td>{{ $pct > 0 ? round($pct) . '%' : '-' }}</td>
                     @endforeach
                     <td>
                         <strong>
-                            @if($orderTotal > 0)
-                            {{ round(($packTotal / $orderTotal) * 100) }}%
-                            @else
-                            -
-                            @endif
+                            @php
+                            $totalDispatched = 0;
+                            foreach($dispatchQuantities as $dispatchQty) {
+                            foreach($all_sizes as $size) {
+                            $totalDispatched += $dispatchQty->get($size, 0);
+                            }
+                            }
+                            @endphp
+                            {{ $orderTotal > 0 ? round(($totalDispatched / $orderTotal) * 100) . '%' : '-' }}
                         </strong>
                     </td>
-                    <td>&nbsp;</td>
                 </tr>
             </tbody>
         </table>

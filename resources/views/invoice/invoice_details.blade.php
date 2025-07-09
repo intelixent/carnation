@@ -12,9 +12,6 @@
                     <a class="nav-link active rounded-pill" data-bs-toggle="tab" role="tab" href="#nav-address" aria-selected="true">
                         <i class="fas fa-table me-2"></i>Address
                     </a>
-                    <a class="nav-link rounded-pill" data-bs-toggle="tab" role="tab" href="#nav-irn" aria-selected="false">
-                        <i class="fas fa-table me-2"></i>IRN
-                    </a>
                     <a class="nav-link rounded-pill" data-bs-toggle="tab" role="tab" href="#nav-transport" aria-selected="false">
                         <i class="fas fa-table me-2"></i>Transport
                     </a>
@@ -190,88 +187,6 @@
                         </div>
                     </div>
 
-                    <!-- IRN Tab -->
-                    <div class="tab-pane" id="nav-irn" role="tabpanel">
-                        <div class="row mb-3">
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="irn_no" name="irn_no" value="{{ $irnDetails['irn_no'] ?? '' }}" placeholder="IRN No" required>
-                                    <label for="irn_no">IRN No</label>
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="acknowledgment_no" name="acknowledgment_no" value="{{ $irnDetails['acknowledgment_no'] ?? '' }}" placeholder="Acknowledgment No" required>
-                                    <label for="acknowledgment_no">Acknowledgment No</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="document_no" name="document_no" value="{{ $irnDetails['document_no'] ?? '' }}" placeholder="Document No" required>
-                                    <label for="document_no">Document No</label>
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="supply_type_code" name="supply_type_code" value="{{ $irnDetails['supply_type_code'] ?? '' }}" placeholder="Supply Type Code" required>
-                                    <label for="supply_type_code">Supply Type Code</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="eway_bill_no" name="eway_bill_no" value="{{ $irnDetails['eway_bill_no'] ?? '' }}" placeholder="E-WAY BILL NO" required>
-                                    <label for="eway_bill_no">E-WAY BILL NO</label>
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="eway_bill_date" name="eway_bill_date" value="{{ $irnDetails['eway_bill_date'] ?? '' }}" required>
-                                    <label for="eway_bill_date">E-WAY BILL DATE</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="acknowledgment_date" name="acknowledgment_date" value="{{ $irnDetails['acknowledgment_date'] ?? '' }}" required>
-                                    <label for="acknowledgment_date">Acknowledgment Date</label>
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="document_date" name="document_date" value="{{ $irnDetails['document_date'] ?? '' }}" required>
-                                    <label for="document_date">Document Date</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="reverse_charge" name="reverse_charge" placeholder="Reverse Charge" value="{{ $irnDetails['reverse_charge'] ?? '' }}" required>
-                                    <label for="reverse_charge">Reverse Charge</label>
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="preceeding_document_no" name="preceeding_document_no" value="{{ $irnDetails['preceeding_document_no'] ?? '' }}" placeholder="Preceeding Document No" required>
-                                    <label for="preceeding_document_no">Preceeding Document No</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="preceeding_document_date" name="preceeding_document_date" value="{{ $irnDetails['preceeding_document_date'] ?? '' }}" required>
-                                    <label for="preceeding_document_date">Preceeding Document Date</label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Transport Tab -->
                     <div class="tab-pane" id="nav-transport" role="tabpanel">
                         <div class="row mb-3">
@@ -290,20 +205,6 @@
                                 <div class="form-floating">
                                     <input type="text" class="form-control" id="mode_of_transport" name="mode_of_transport" placeholder="Mode of Transport" value="{{ $transportDetails['mode_of_transport'] ?? '' }}" required>
                                     <label for="mode_of_transport">Mode Of Transport</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="text" class="form-control" id="transport_vehicle_no" name="transport_vehicle_no" placeholder="Vehicle No" value="{{ $transportDetails['transport_vehicle_no'] ?? '' }}" required>
-                                    <label for="transport_vehicle_no">Vehicle No</label>
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-floating">
-                                    <input type="number" class="form-control" id="transport_distance" name="transport_distance" placeholder="Distance (KM)" value="{{ $transportDetails['transport_distance'] ?? '' }}" required>
-                                    <label for="transport_distance">Distance (KM)</label>
                                 </div>
                             </div>
                         </div>

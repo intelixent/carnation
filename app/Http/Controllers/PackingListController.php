@@ -1334,7 +1334,56 @@ class PackingListController extends BaseController
             // VENDOR ID 2 (Skechers-specific) - Using PUMA logic
             //
 
-            // 1. Compute ordered quantities for items in this packing list
+            // Initialize dispatch-related variables
+            $dispatchQuantities = collect();
+            $totalDispatches = 0;
+            $orderQuantitiesFromAllPacks = collect();
+            $currentDispatchNumber = 1;
+
+            // Get all packing lists for this PO ordered by ID (chronological order)
+            $allPackingLists = PackingListMaster::where('po_id', $packingList->po_id)
+                ->orderBy('id', 'asc')
+                ->get();
+
+            $totalDispatches = $allPackingLists->count();
+
+            // Calculate ORDER QTY from all packing lists for this PO (total packed quantities across all dispatches)
+            $allPackingListIds = $allPackingLists->pluck('id')->toArray();
+            $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
+
+            $orderQuantitiesFromAllPacks = $allPackingListItems
+                ->groupBy('size')
+                ->map(function ($items) {
+                    return $items->sum('quantity');
+                });
+
+            // Find the position of current packing list
+            $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
+                return $item->id == $packingList->id;
+            });
+
+            $currentDispatchNumber = $currentPackingListIndex + 1;
+
+            // Calculate dispatch quantities for all packing lists up to and including current one
+            foreach ($allPackingLists as $index => $pList) {
+                if ($index <= $currentPackingListIndex) {
+                    $dispatchNumber = $index + 1; // 1st dispatch, 2nd dispatch, etc.
+
+                    // Get items for this specific packing list
+                    $packingListItems = PackingListItem::where('packing_list_id', $pList->id)->get();
+
+                    // Calculate quantities by size for this dispatch
+                    $dispatchQtyBySize = $packingListItems
+                        ->groupBy('size')
+                        ->map(function ($items) {
+                            return $items->sum('quantity');
+                        });
+
+                    $dispatchQuantities[$dispatchNumber] = $dispatchQtyBySize;
+                }
+            }
+
+            // 1. Compute ordered quantities for items in this packing list (keep this for backward compatibility)
             if (!empty($uniquePoItemIds)) {
                 $poItemsFiltered = PoItems::whereIn('id', $uniquePoItemIds)->get();
                 $orderedQuantities = $poItemsFiltered
@@ -1344,9 +1393,9 @@ class PackingListController extends BaseController
                 $orderedQuantities = collect();
             }
 
-            // 2. Compute balances & percentages per size
+            // 2. Compute balances & percentages per size (using orderQuantitiesFromAllPacks as the reference)
             foreach ($allSizes as $size) {
-                $ordered = $orderedQuantities->get($size, 0);
+                $ordered = $orderQuantitiesFromAllPacks->get($size, 0); // Use total from all packs
                 $packed  = $packedQuantities->get($size, 0);
                 $balance = $ordered - $packed;
                 $percentage = $ordered > 0 ? ($packed / $ordered) * 100 : 0;
@@ -1535,31 +1584,90 @@ class PackingListController extends BaseController
             // VENDOR ID 3 (PUMA-specific)
             //
 
-            // For vendor 3, orderedQuantities/summary may not apply; skip or set empty
-            $orderedQuantities = collect();
-            $balances = collect();
-            $percentages = collect();
+            // Initialize dispatch-related variables
+            $dispatchQuantities = collect();
+            $totalDispatches = 0;
+            $orderQuantitiesFromAllPacks = collect();
+            $currentDispatchNumber = 1;
 
-            // 1. Compute ordered quantities for items in this packing list
+            // Get all packing lists for this PO ordered by ID (chronological order)
+            $allPackingLists = PackingListMaster::where('po_id', $packingList->po_id)
+                ->orderBy('id', 'asc')
+                ->get();
+
+            $totalDispatches = $allPackingLists->count();
+
+            // Calculate ORDER QTY from all packing lists for this PO (total packed quantities across all dispatches)
+            $allPackingListIds = $allPackingLists->pluck('id')->toArray();
+            $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
+
+            $orderQuantitiesFromAllPacks = $allPackingListItems
+                ->groupBy('size')
+                ->map(function ($items) {
+                    return $items->sum('quantity');
+                });
+
+            // Find the position of current packing list
+            $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
+                return $item->id == $packingList->id;
+            });
+
+            $currentDispatchNumber = $currentPackingListIndex + 1;
+
+            // Calculate dispatch quantities for all packing lists up to and including current one
+            foreach ($allPackingLists as $index => $pList) {
+                if ($index <= $currentPackingListIndex) {
+                    $dispatchNumber = $index + 1; // 1st dispatch, 2nd dispatch, etc.
+
+                    // Get items for this specific packing list
+                    $packingListItems = PackingListItem::where('packing_list_id', $pList->id)->get();
+
+                    // Calculate quantities by size for this dispatch
+                    $dispatchQtyBySize = $packingListItems
+                        ->groupBy('size')
+                        ->map(function ($items) {
+                            return $items->sum('quantity');
+                        });
+
+                    $dispatchQuantities[$dispatchNumber] = $dispatchQtyBySize;
+                }
+            }
+
+            // 1. Get all sizes from the PO (not just from current packing list)
+            $allSizesFromPO = collect();
+            if ($packingList->po_id) {
+                $allSizesFromPO = PoItems::where('po_id', $packingList->po_id)
+                    ->pluck('size')
+                    ->unique()
+                    ->sort()
+                    ->values();
+            }
+
+            // If no sizes found in PO, fallback to current packing list sizes
+            if ($allSizesFromPO->isEmpty()) {
+                $allSizesFromPO = $allSizes;
+            }
+
+            // 2. Compute ordered quantities for all sizes in the PO
+            $orderedQuantities = collect();
             if (!empty($uniquePoItemIds)) {
                 $poItemsFiltered = PoItems::whereIn('id', $uniquePoItemIds)->get();
                 $orderedQuantities = $poItemsFiltered
                     ->groupBy('size')
                     ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
             } else {
-                $orderedQuantities = collect();
+                // If no specific items, get all items for this PO
+                if ($packingList->po_id) {
+                    $allPoItems = PoItems::where('po_id', $packingList->po_id)->get();
+                    $orderedQuantities = $allPoItems
+                        ->groupBy('size')
+                        ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
+                } else {
+                    $orderedQuantities = collect();
+                }
             }
 
-            // 2. Compute balances & percentages per size
-            foreach ($allSizes as $size) {
-                $ordered = $orderedQuantities->get($size, 0);
-                $packed  = $packedQuantities->get($size, 0);
-                $balance = $ordered - $packed;
-                $percentage = $ordered > 0 ? ($packed / $ordered) * 100 : 0;
-
-                $balances[$size]    = $balance;
-                $percentages[$size] = $percentage;
-            }
+            $allSizes = $allSizesFromPO;
 
             // Get dynamic sizeOrder from PO items or fallback
             $sizeOrder = [];
@@ -1951,26 +2059,41 @@ class PackingListController extends BaseController
             // OTHER VENDORS: generic summary similar to vendor_id 2
             //
 
-            // 1. Compute ordered quantities for items in this packing list
+            // 1. Get all sizes from the PO (not just from current packing list)
+            $allSizesFromPO = collect();
+            if ($packingList->po_id) {
+                $allSizesFromPO = PoItems::where('po_id', $packingList->po_id)
+                    ->pluck('size')
+                    ->unique()
+                    ->sort()
+                    ->values();
+            }
+
+            // If no sizes found in PO, fallback to current packing list sizes
+            if ($allSizesFromPO->isEmpty()) {
+                $allSizesFromPO = $allSizes;
+            }
+
+            // 2. Compute ordered quantities for all sizes in the PO
+            $orderedQuantities = collect();
             if (!empty($uniquePoItemIds)) {
                 $poItemsFiltered = PoItems::whereIn('id', $uniquePoItemIds)->get();
                 $orderedQuantities = $poItemsFiltered
                     ->groupBy('size')
                     ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
             } else {
-                $orderedQuantities = collect();
+                // If no specific items, get all items for this PO
+                if ($packingList->po_id) {
+                    $allPoItems = PoItems::where('po_id', $packingList->po_id)->get();
+                    $orderedQuantities = $allPoItems
+                        ->groupBy('size')
+                        ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
+                } else {
+                    $orderedQuantities = collect();
+                }
             }
 
-            // 2. Compute balances & percentages per size
-            foreach ($allSizes as $size) {
-                $ordered = $orderedQuantities->get($size, 0);
-                $packed  = $packedQuantities->get($size, 0);
-                $balance = $ordered - $packed;
-                $percentage = $ordered > 0 ? ($packed / $ordered) * 100 : 0;
-
-                $balances[$size]    = $balance;
-                $percentages[$size] = $percentage;
-            }
+            $allSizes = $allSizesFromPO;
 
             // 3. Determine sizeOrder for any detail table or consistent ordering in summary
             $sizeOrder = [];
@@ -2074,6 +2197,74 @@ class PackingListController extends BaseController
             // If you have weight totals, compute similarly; otherwise leave as 0
             $totalNetWeight = $totals['total_pieces'] * 0; // or sum from rows if meaningful
             $totalGrossWeight = $totals['total_pieces'] * 0;
+
+            $dispatchQuantities = collect(); // Collection to store dispatch quantities by dispatch number
+            $totalDispatches = 0;
+            $orderQuantitiesFromAllPacks = collect(); // This will store the total order qty from all packing lists
+
+            if (in_array($packingList->vendor_id, [1, 5, 6])) {
+                // Get all packing lists for this PO ordered by ID (chronological order)
+                $allPackingLists = PackingListMaster::where('po_id', $packingList->po_id)
+                    ->orderBy('id', 'asc')
+                    ->get();
+
+                $totalDispatches = $allPackingLists->count();
+
+                // Calculate ORDER QTY from all packing lists for this PO (total packed quantities across all dispatches)
+                $allPackingListIds = $allPackingLists->pluck('id')->toArray();
+                $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
+
+                $orderQuantitiesFromAllPacks = $allPackingListItems
+                    ->groupBy('size')
+                    ->map(function ($items) {
+                        return $items->sum('quantity');
+                    });
+
+                // Find the position of current packing list
+                $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
+                    return $item->id == $packingList->id;
+                });
+
+                // Find the position of current packing list
+                $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
+                    return $item->id == $packingList->id;
+                });
+
+                // Calculate dispatch quantities for all packing lists up to and including current one
+                foreach ($allPackingLists as $index => $pList) {
+                    if ($index <= $currentPackingListIndex) {
+                        $dispatchNumber = $index + 1; // 1st dispatch, 2nd dispatch, etc.
+
+                        // Get items for this specific packing list
+                        $packingListItems = PackingListItem::where('packing_list_id', $pList->id)->get();
+
+                        // Calculate quantities by size for this dispatch
+                        $dispatchQtyBySize = $packingListItems
+                            ->groupBy('size')
+                            ->map(function ($items) {
+                                return $items->sum('quantity');
+                            });
+
+                        $dispatchQuantities[$dispatchNumber] = $dispatchQtyBySize;
+                    }
+                }
+
+                // Add a flag to identify current packing list
+                $currentDispatchNumber = $currentPackingListIndex + 1;
+            }
+        }
+
+        if (!isset($dispatchQuantities)) {
+            $dispatchQuantities = collect();
+        }
+        if (!isset($totalDispatches)) {
+            $totalDispatches = 0;
+        }
+        if (!isset($orderQuantitiesFromAllPacks)) {
+            $orderQuantitiesFromAllPacks = collect();
+        }
+        if (!isset($currentDispatchNumber)) {
+            $currentDispatchNumber = 1;
         }
 
         //
@@ -2099,6 +2290,10 @@ class PackingListController extends BaseController
             'totalCtn'                 => $totalCtn,
             'totalNetWeight'           => $totalNetWeight,
             'totalGrossWeight'         => $totalGrossWeight,
+            'dispatchQuantities'       => $dispatchQuantities, // Add this
+            'totalDispatches'          => $totalDispatches,    // Add this
+            'orderQuantitiesFromAllPacks' => $orderQuantitiesFromAllPacks, // Add this
+            'currentDispatchNumber'    => $currentDispatchNumber, // Add this
         ];
 
         //echo "<pre>".print_r($viewData,true)."</pre>";
