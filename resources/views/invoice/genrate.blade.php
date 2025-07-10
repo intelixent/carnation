@@ -111,7 +111,7 @@
                 method: 'POST',
                 data: {
                     id: poId,
-                    vendor_id:vendor_id
+                    vendor_id: vendor_id
                 },
                 success: function(response) {
                     $('#tableContainer').html(response);
@@ -128,100 +128,79 @@
             });
         });
 
+        $(document).on('change', '.po_pack', function() {
+            let selectedCount = $('.po_pack:checked').length;
 
-$(document).on('change', '.po_pack', function() {
-        let selectedCount = $('.po_pack:checked').length;
-
-        if (selectedCount > 0) {
-            $('#generateBtnContainer').show();
-        } else {
-            $('#generateBtnContainer').hide();
-        }
-    });
-
-    // Generate Invoice button click
-    $(document).on('click', '#generateInvoiceBtn',function() {
-        let selectedIds = [];
-        $('.po_pack:checked').each(function() {
-            selectedIds.push($(this).val().trim());
+            if (selectedCount > 0) {
+                $('#generateBtnContainer').show();
+            } else {
+                $('#generateBtnContainer').hide();
+            }
         });
-        var selected_vendor_id = $(".selected_vendor_id").val();
-        var selected_po = $(".selected_po").val();
-        console.log("Selected IDs:", selectedIds); // For debug
 
-         Swal.fire({
-                title: 'Genrate Invoice?',
-                text: 'Are you sure you want to Genrate Invoice For Checked Packing List?',
+        // Generate Invoice button click
+        $(document).on('click', '#generateInvoiceBtn', function() {
+            let selectedIds = $('.po_pack:checked')
+                .map((_, cb) => $(cb).val().trim())
+                .get();
+
+            // grab invoice fields
+            let invoiceNo = $('#invoice_no').val().trim();
+            let invoiceDate = $('#invoice_date').val();
+
+            if (!invoiceNo || !invoiceDate) {
+                return Swal.fire({
+                    icon: 'warning',
+                    title: 'Oops!',
+                    text: 'Please enter both Invoice No. and Invoice Date'
+                });
+            }
+
+            Swal.fire({
+                title: 'Generate Invoice?',
+                text: 'This will apply to all selected lists.',
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Yes, Genrate it!',
-                cancelButtonText: 'Cancel',
-                confirmButtonColor: '#28a745',
-                cancelButtonColor: '#6c757d'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    Swal.fire({
-                        title: 'Genrating...',
-                        text: 'Please wait while ..',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false,
-                        showConfirmButton: false,
-                        didOpen: () => {
-                            Swal.showLoading();
-                        }
+                confirmButtonText: 'Yes, Generate',
+                cancelButtonText: 'Cancel'
+            }).then(result => {
+                if (!result.isConfirmed) return;
+
+                Swal.fire({
+                    title: 'Generating…',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    didOpen: () => Swal.showLoading()
+                });
+
+                $.post('{{ route("store_invoice") }}', {
+                        selectedpackids: selectedIds,
+                        selected_po: $('.selected_po').val(),
+                        selected_vendor_id: $('.selected_vendor_id').val(),
+                        invoice_no: invoiceNo,
+                        invoice_date: invoiceDate,
+                        _token: $('meta[name="csrf-token"]').attr('content')
+                    })
+                    .done(response => {
+                        Swal.fire({
+                            icon: response.success ? 'success' : 'error',
+                            title: response.success ? 'Saved!' : 'Error',
+                            text: response.message,
+                            timer: response.success ? 2000 : null
+                        }).then(() => {
+                            if (response.success) window.location.reload();
+                        });
+                    })
+                    .fail(xhr => {
+                        let msg = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Unexpected error';
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: msg
+                        });
                     });
-
-                    $.ajax({
-                        url: '{{ route("store_invoice") }}',
-                        method: 'POST',
-                        data: {"selectedpackids":selectedIds,"selected_po":selected_po,"selected_vendor_id":selected_vendor_id},
-                        success: function(response) {
-                            if (response.success) {
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Success!',
-                                    text: response.message || 'saved successfully!',
-                                    confirmButtonText: 'OK',
-                                    confirmButtonColor: '#28a745',
-                                    timer: 2000,
-                                    timerProgressBar: true
-                                }).then((result) => {
-                                    window.location.reload();
-                                });
-                            } else {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'Error!',
-                                    text: response.message || 'Something went wrong!',
-                                    confirmButtonText: 'OK',
-                                    confirmButtonColor: '#dc3545'
-                                });
-                            }
-                        },
-                        error: function(xhr) {
-                            let errorMessage = 'An unexpected error occurred.';
-
-                            if (xhr.responseJSON && xhr.responseJSON.error) {
-                                errorMessage = xhr.responseJSON.error;
-                            } else if (xhr.responseJSON && xhr.responseJSON.message) {
-                                errorMessage = xhr.responseJSON.message;
-                            }
-
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Error!',
-                                text: 'Error saving configuration: ' + errorMessage,
-                                confirmButtonText: 'Try Again',
-                                confirmButtonColor: '#dc3545'
-                            });
-                        }
-                    });
-                }
             });
-       
-    });
-
-       
+        });
     });
 </script>
 @endpush

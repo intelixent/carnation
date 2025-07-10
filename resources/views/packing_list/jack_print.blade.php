@@ -209,10 +209,9 @@
         <table class="summary-table">
             <thead>
                 <tr>
-                    <th colspan="{{ 3 + $all_sizes->count() }}">Summary</th>
+                    <th colspan="{{ 2 + $all_sizes->count() }}">Summary</th>
                 </tr>
                 <tr>
-                    <th>{{ $packing_list->po_no }}</th>
                     <th>SIZE</th>
                     @foreach($all_sizes as $size)
                     <th>{{ $size }}</th>
@@ -222,47 +221,89 @@
             </thead>
             <tbody>
                 @php
-                $orderTotal = $packTotal = $balTotal = 0;
+                $orderTotal = 0;
+                $cumulativePackTotal = 0;
+                $balTotal = 0;
                 @endphp
+
+                {{-- ORDER QTY Row (Total from all packing lists for this PO) --}}
                 <tr>
-                    <td>{{ $info['ARTICLE'] ?? '' }}</td>
                     <td>ORDER. QTY</td>
                     @foreach($all_sizes as $size)
-                    @php $q = $ordered_quantities->get($size, 0); $orderTotal += $q; @endphp
+                    @php $q = $orderQuantitiesFromAllPacks->get($size, 0); $orderTotal += $q; @endphp
                     <td>{{ $q }}</td>
                     @endforeach
                     <td><strong>{{ $orderTotal }}</strong></td>
                 </tr>
+
+                {{-- DISPATCH QTY Rows (1st, 2nd, etc.) --}}
+                @foreach($dispatchQuantities as $dispatchNumber => $dispatchQty)
+                @php
+                $dispatchTotal = 0;
+                $isCurrentPackingList = $dispatchNumber == $currentDispatchNumber;
+                if ($isCurrentPackingList) {
+                $rowLabel = 'PACKING LIST QTY';
+                } else {
+                $ordinalNumber = $dispatchNumber == 1 ? '1st' : ($dispatchNumber == 2 ? '2nd' : ($dispatchNumber == 3 ? '3rd' : $dispatchNumber.'th'));
+                $rowLabel = $ordinalNumber . ' DISPATCH QTY';
+                }
+                @endphp
                 <tr>
-                    <td>{{ $info['Article description'] ?? '' }}</td>
-                    <td>PACK QTY</td>
+                    <td>{{ $rowLabel }}</td>
                     @foreach($all_sizes as $size)
-                    @php $q = $packed_quantities->get($size, 0); $packTotal += $q; @endphp
+                    @php
+                    $q = $dispatchQty->get($size, 0);
+                    $dispatchTotal += $q;
+                    @endphp
                     <td>{{ $q }}</td>
                     @endforeach
-                    <td><strong>{{ $packTotal }}</strong></td>
+                    <td><strong>{{ $dispatchTotal }}</strong></td>
                 </tr>
+                @endforeach
+
+                {{-- BALANCE Row --}}
                 <tr>
-                    <td>{{ $info['Vendor'] ?? '' }}</td>
                     <td>BALANCE</td>
                     @foreach($all_sizes as $size)
-                    @php $b = $balances->get($size, 0); $balTotal += $b; @endphp
+                    @php
+                    $totalDispatched = 0;
+                    foreach($dispatchQuantities as $dispatchQty) {
+                    $totalDispatched += $dispatchQty->get($size, 0);
+                    }
+                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                    $b = $orderQty - $totalDispatched;
+                    $balTotal += $b;
+                    @endphp
                     <td>{{ $b }}</td>
                     @endforeach
                     <td><strong>{{ $balTotal }}</strong></td>
                 </tr>
+
+                {{-- PACK QTY % Row --}}
                 <tr>
-                    <td>{{ $info['Colors'] ?? '' }}</td>
                     <td>PACK QTY %</td>
                     @foreach($all_sizes as $size)
-                    @php $pct = $percentages->get($size, 0); @endphp
+                    @php
+                    $totalDispatched = 0;
+                    foreach($dispatchQuantities as $dispatchQty) {
+                    $totalDispatched += $dispatchQty->get($size, 0);
+                    }
+                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                    $pct = $orderQty > 0 ? ($totalDispatched / $orderQty) * 100 : 0;
+                    @endphp
                     <td>{{ $pct > 0 ? round($pct) . '%' : '-' }}</td>
                     @endforeach
                     <td>
                         <strong>
-                            {{ $orderTotal
-                 ? round(($packTotal / $orderTotal) * 100) . '%'
-                 : '-' }}
+                            @php
+                            $totalDispatched = 0;
+                            foreach($dispatchQuantities as $dispatchQty) {
+                            foreach($all_sizes as $size) {
+                            $totalDispatched += $dispatchQty->get($size, 0);
+                            }
+                            }
+                            @endphp
+                            {{ $orderTotal > 0 ? round(($totalDispatched / $orderTotal) * 100) . '%' : '-' }}
                         </strong>
                     </td>
                 </tr>

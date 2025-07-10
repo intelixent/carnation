@@ -169,7 +169,7 @@
                 <strong>Date of Registration</strong>
             </td>
             <td style="border: none;">
-                {{ $irn_details['document_date'] ?? '' }}
+                {{ $invoice['invoice_date'] ?? '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
@@ -220,7 +220,7 @@
                 <strong>Serial No. of Invoice:</strong>
             </td>
             <td style="border: none;">
-                {{ $irn_details['document_no'] ?? '' }}
+                {{ $invoice['ref_no'] ?? '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <strong>DT</strong> {{ $transporter_details['transport_date_time'] ?? '' }}
@@ -255,13 +255,11 @@
     </table>
 
     @php
-    $totalCartons = 0;
     $totalQty = 0;
     $totalAmount = 0;
     $totalDiscount = 0;
     $totalTaxable = 0;
     foreach ($invoice_item_details as $item) {
-    $totalCartons += $item['total_cartons'];
     $totalQty += $item['qty'];
     $totalAmount += $item['amount'];
     $totalDiscount += $item['discount'];
@@ -304,7 +302,13 @@
                 <td>{{ $invoice_item['hsn_code'] }}</td>
                 <td class="text-right">{{ $invoice_item['style'] }}</td>
                 <td class="text-right">{{ $invoice_item['color'] }}</td>
-                <td class="text-right">{{ $invoice_item['total_cartons'] }}</td>
+                @if ($loop->first)
+                <td class="text-center"
+                    style="vertical-align: middle;"
+                    rowspan="{{ count($invoice_item_details) }}">
+                    <strong>{{ $totalCartonsInInvoice }}</strong>
+                </td>
+                @endif
                 <td class="text-right">{{ $invoice_item['unit'] }}</td>
                 <td class="text-right">{{ $invoice_item['qty'] }}</td>
                 <td class="text-right">{{ IND_money_format($invoice_item['rate'], 2) }}</td>
@@ -319,7 +323,7 @@
         <tfoot>
             <tr>
                 <td colspan="5" align="right"><strong>Total</strong></td>
-                <td class="text-right"><strong>{{ $totalCartons }}</strong></td>
+                <td class="text-right"><strong>{{ $totalCartonsInInvoice }}</strong></td>
                 <td></td>
                 <td class="text-right"><strong>{{ $totalQty }}</strong></td>
                 <td></td>
