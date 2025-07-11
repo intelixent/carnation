@@ -9,7 +9,10 @@
                 <input type="hidden" name="id" value="{{ $invoice->id }}">
                 <!-- Tabs -->
                 <nav class="nav nav-pills nav-fill mb-4" role="tablist">
-                    <a class="nav-link active rounded-pill" data-bs-toggle="tab" role="tab" href="#nav-address" aria-selected="true">
+                    <a class="nav-link active rounded-pill" data-bs-toggle="tab" role="tab" href="#nav-invoice" aria-selected="true">
+                        <i class="fas fa-table me-2"></i>Invoice
+                    </a>
+                    <a class="nav-link rounded-pill" data-bs-toggle="tab" role="tab" href="#nav-address" aria-selected="false">
                         <i class="fas fa-table me-2"></i>Address
                     </a>
                     <a class="nav-link rounded-pill" data-bs-toggle="tab" role="tab" href="#nav-transport" aria-selected="false">
@@ -18,8 +21,26 @@
                 </nav>
 
                 <div class="tab-content">
-                    <!-- Address Tab -->
+                    <!-- Invoice Tab -->
                     <div class="tab-pane show active" id="nav-address" role="tabpanel">
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="invoice_no" name="invoice_no" placeholder="Invoice No" value="{{ $invoice['ref_no'] ?? '' }}" required>
+                                    <label for="invoice_no">Invoice No</label>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="invoice_date" name="invoice_date" placeholder="Invoice Date" value="{{ $invoice['inv_date'] ?? '' }}" required>
+                                    <label for="invoice_date">Invoice Date</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Address Tab -->
+                    <div class="tab-pane" id="nav-address" role="tabpanel">
                         <div class="row">
                             <!-- Billed To Column -->
                             <div class="col-md-6">

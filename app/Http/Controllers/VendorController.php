@@ -70,6 +70,7 @@ class VendorController extends BaseController
                 'gst_no' => $request->gst_no,
                 'state_id' => $request->state_id,
                 'notes' => $request->notes,
+                'discount' => $request->discount,
                 'created_by' => auth()->user()->id,
                 'created_at' => now(),
             ]);
@@ -111,6 +112,7 @@ class VendorController extends BaseController
                 'gst_no' => $request->gst_no,
                 'state_id' => $request->state_id,
                 'notes' => $request->notes,
+                'discount' => $request->discount,
             ]);
 
             return response()->json([

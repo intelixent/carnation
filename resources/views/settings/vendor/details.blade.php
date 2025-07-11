@@ -65,10 +65,16 @@
                             </td>
                         </tr>
                         <tr>
-                            <td colspan="3">
+                            <td colspan="2">
                                 <div class="d-flex flex-column gap-1">
                                     <span class="text-uppercase text-secondary" style="font-size: 11px;">Notes</span>
                                     <span class="fw-semibold text-dark">{{ $vendor_details->notes ?? 'N/A' }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-column gap-1">
+                                    <span class="text-uppercase text-secondary" style="font-size: 11px;">Discount</span>
+                                    <span class="fw-semibold text-dark">{{ $vendor_details->discount ?? 'N/A' }} %</span>
                                 </div>
                             </td>
                         </tr>

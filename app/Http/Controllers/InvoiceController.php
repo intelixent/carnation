@@ -428,6 +428,8 @@ class InvoiceController extends BaseController
             ];
 
             $invoice->update([
+                'ref_no' => $request->invoice_no,
+                'inv_date' => $request->invoice_date,
                 'bill_to_details' => json_encode($billedToDetails),
                 'ship_to_details' => json_encode($shippedToDetails),
                 'irn_details' => json_encode($irnDetails),
