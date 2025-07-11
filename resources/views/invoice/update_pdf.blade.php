@@ -169,7 +169,7 @@
                 <strong>Date of Registration</strong>
             </td>
             <td style="border: none;">
-                {{ $invoice['invoice_date'] ?? '' }}
+                {{ $invoice['inv_date'] ?? '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->

@@ -25,6 +25,7 @@ class VendorMaster extends Model
         'state_id',
         'excess',
         'shortage',
+        'discount',
         'extraction_no',
         'custom_field_no',
         'notes',
