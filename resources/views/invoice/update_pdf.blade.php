@@ -169,7 +169,7 @@
                 <strong>Date of Registration</strong>
             </td>
             <td style="border: none;">
-                {{ $invoice['inv_date'] ?? '' }}
+               
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
@@ -223,7 +223,7 @@
                 {{ $invoice['ref_no'] ?? '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
-                <strong>DT</strong> {{ $transporter_details['transport_date_time'] ?? '' }}
+                <strong>DT</strong>  {{ $invoice['inv_date'] ?? '' }} 
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
