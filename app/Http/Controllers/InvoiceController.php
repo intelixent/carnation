@@ -80,7 +80,21 @@ class InvoiceController extends BaseController
     {
         $poId = $request->id;
         $vendor_id = $request->vendor_id;
-        $packed_lists = PackingListMaster::where(array('po_id' => $poId, 'pack_status' => 1))->withCount('items')->get();
+       // $packed_lists = PackingListMaster::where(array('po_id' => $poId, 'pack_status' => 1))->withCount('items')->get();
+       $packed_lists = DB::table('packing_list_items as pli')
+    ->join('packing_list_masters as plm', 'pli.packing_list_id', '=', 'plm.id')
+    ->select(
+        'pli.packing_list_id as id',
+        'plm.pack_ref_no',
+        DB::raw('MIN(pli.created_at) as created_at'),
+        DB::raw('MIN(pli.color) as color'),
+        DB::raw('COUNT(DISTINCT pli.carton_name) as carton_count')
+    )
+    ->where('plm.po_id', $poId)
+    ->where('plm.pack_status', 1)
+    ->groupBy('pli.packing_list_id', 'plm.pack_ref_no')
+    ->get();
+    
         if (!$packed_lists) {
             return response()->json(['error' => 'Not found'], 404);
         }
@@ -98,7 +112,7 @@ class InvoiceController extends BaseController
         $data = $request->validate([
             'selectedpackids'    => 'required|array|min:1',
             'selectedpackids.*'  => 'integer|exists:packing_list_masters,id',
-            'selected_po'        => 'required|integer|exists:po_master,id',
+            'selected_po'        => 'required|integer|exists:po_masters,id',
             'selected_vendor_id' => 'required|integer|exists:vendor_master,id',
             'invoice_no'         => 'required|string|max:100',
             'invoice_date'       => 'required|date',

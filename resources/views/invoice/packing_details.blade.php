@@ -17,13 +17,15 @@
                 <tbody>
                     <?php
                     foreach ($packed_lists as $packed_list):
+
+                     
                     ?>
                         <tr>
-                            <td><input type="checkbox" class="po_pack" name="po_pack" value="<?php echo $packed_list['id']; ?> " /></td>
-                            <td><?php echo $packed_list['pack_ref_no']; ?></td>
-                            <td><?php echo \Carbon\Carbon::parse($packed_list['created_at'])->format('d-m-Y h:i A');; ?></td>
-                            <td><?php echo $packed_list['color']; ?></td>
-                            <td><?php echo $packed_list->items_count; ?></td>
+                            <td><input type="checkbox" class="po_pack" name="po_pack" value="<?php echo $packed_list->id; ?> " /></td>
+                            <td><?php echo $packed_list->pack_ref_no; ?></td>
+                            <td><?php echo \Carbon\Carbon::parse($packed_list->created_at)->format('d-m-Y h:i A');; ?></td>
+                            <td><?php echo $packed_list->color; ?></td>
+                            <td><?php echo $packed_list->carton_count; ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
