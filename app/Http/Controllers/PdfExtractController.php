@@ -66,6 +66,25 @@ class PdfExtractController extends BaseController
         $query = POutils::getPoQuery($request, $this->isSuperAdmin);
 
         return DataTables::of($query)
+            ->filter(function ($q) use ($request) {
+                if ($search = trim($request->get('search')['value'] ?? '')) {
+                    $q->where(function ($sub) use ($search) {
+                        // Across PO ref and job numbers and num
+                        $sub->orWhere('po_ref_num', 'like', "%{$search}%")
+                            ->orWhere('po_job_num', 'like', "%{$search}%")
+                            ->orWhere('po_num', 'like', "%{$search}%");
+
+                        // Vendor name
+                        $sub->orWhereHas('vendor', function ($vq) use ($search) {
+                            $vq->where('name', 'like', "%{$search}%");
+                        });
+
+                        // PO date
+                        $sub->orWhereDate('po_date', $search)
+                            ->orWhere('po_date', 'like', "%{$search}%");
+                    });
+                }
+            })
             ->addIndexColumn()
             ->addColumn('po_ref_num', function ($row) use ($request) {
                 if ($request->type === 'amended') {
