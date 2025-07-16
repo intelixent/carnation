@@ -314,7 +314,7 @@
                     $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
                     $pct = $orderQty > 0 ? ($totalDispatched / $orderQty) * 100 : 0;
                     @endphp
-                    <td>{{ $pct > 0 ? round($pct) . '%' : '-' }}</td>
+                    <td>{{ $pct > 0 ? round($pct, 2) . '%' : '-' }}</td>
                     @endforeach
                     <td>
                         <strong>
@@ -326,7 +326,7 @@
                             }
                             }
                             @endphp
-                            {{ $orderTotal > 0 ? round(($totalDispatched / $orderTotal) * 100) . '%' : '-' }}
+                            {{ $orderTotal > 0 ? round(($totalDispatched / $orderTotal) * 100, 2) . '%' : '-' }}
                         </strong>
                     </td>
                 </tr>
