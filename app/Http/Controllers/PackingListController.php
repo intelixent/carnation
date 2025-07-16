@@ -1489,11 +1489,11 @@ class PackingListController extends BaseController
             $allPackingListIds = $allPackingLists->pluck('id')->toArray();
             $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
 
-            $orderQuantitiesFromAllPacks = $allPackingListItems
+            $orderQuantitiesFromAllPacks = PackingListConfigItem::where('po_id', $packingList->po_id)
+                ->where('status', 0)
                 ->groupBy('size')
-                ->map(function ($items) {
-                    return $items->sum('quantity');
-                });
+                ->selectRaw('size, SUM(pack_qty) as total_pack_qty')
+                ->pluck('total_pack_qty', 'size');
 
             // Find the position of current packing list
             $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
@@ -1739,11 +1739,11 @@ class PackingListController extends BaseController
             $allPackingListIds = $allPackingLists->pluck('id')->toArray();
             $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
 
-            $orderQuantitiesFromAllPacks = $allPackingListItems
+            $orderQuantitiesFromAllPacks = PackingListConfigItem::where('po_id', $packingList->po_id)
+                ->where('status', 0)
                 ->groupBy('size')
-                ->map(function ($items) {
-                    return $items->sum('quantity');
-                });
+                ->selectRaw('size, SUM(pack_qty) as total_pack_qty')
+                ->pluck('total_pack_qty', 'size');
 
             // Find the position of current packing list
             $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
@@ -2350,11 +2350,11 @@ class PackingListController extends BaseController
                 $allPackingListIds = $allPackingLists->pluck('id')->toArray();
                 $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
 
-                $orderQuantitiesFromAllPacks = $allPackingListItems
+                $orderQuantitiesFromAllPacks = PackingListConfigItem::where('po_id', $packingList->po_id)
+                    ->where('status', 0)
                     ->groupBy('size')
-                    ->map(function ($items) {
-                        return $items->sum('quantity');
-                    });
+                    ->selectRaw('size, SUM(pack_qty) as total_pack_qty')
+                    ->pluck('total_pack_qty', 'size');
 
                 // Find the position of current packing list
                 $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
