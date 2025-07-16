@@ -100,19 +100,20 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/get_config_vendor_po', [PackingListController::class, 'get_config_vendor_po'])->name('get_config_vendor_po');
         Route::post('/get_config_po_details', [PackingListController::class, 'get_config_po_details'])->name('get_config_po_details');
         Route::post('/save_config_po_details', [PackingListController::class, 'save_config_po_details'])->name('save_config_po_details');
+        Route::get('/get-available-sizes', [PackingListController::class, 'getAvailableSizes'])->name('get_available_sizes');
+        Route::get('/check-size-availability', [PackingListController::class, 'checkSizeAvailability'])->name('check_size_availability');
     });
 
     Route::group(['prefix' => 'invoice'], function () {
-    Route::get('/genrate', [InvoiceController::class, 'genrate'])->name('invoice_genrate');
-    Route::get('/master', [InvoiceController::class, 'master'])->name('invoice_master');
-    Route::post('/get_complete_vendor_packing_list', [InvoiceController::class, 'get_complete_vendor_packing_list'])->name('get_complete_vendor_packing_list');
-    Route::post('/get_packging_list', [InvoiceController::class, 'get_packging_list'])->name('get_packging_list');
-    Route::post('/invoice_details_edit', [InvoiceController::class, 'invoice_details_edit'])->name('invoice_details_edit');
-    Route::post('/invoice_details_update', [InvoiceController::class, 'invoice_details_update'])->name('invoice_details_update');
-    Route::post('/store_invoice', [InvoiceController::class, 'store_invoice'])->name('store_invoice');
+        Route::get('/genrate', [InvoiceController::class, 'genrate'])->name('invoice_genrate');
+        Route::get('/master', [InvoiceController::class, 'master'])->name('invoice_master');
+        Route::post('/get_complete_vendor_packing_list', [InvoiceController::class, 'get_complete_vendor_packing_list'])->name('get_complete_vendor_packing_list');
+        Route::post('/get_packging_list', [InvoiceController::class, 'get_packging_list'])->name('get_packging_list');
+        Route::post('/invoice_details_edit', [InvoiceController::class, 'invoice_details_edit'])->name('invoice_details_edit');
+        Route::post('/invoice_details_update', [InvoiceController::class, 'invoice_details_update'])->name('invoice_details_update');
+        Route::post('/store_invoice', [InvoiceController::class, 'store_invoice'])->name('store_invoice');
 
-    Route::get('/download', [InvoiceController::class, 'generateInvoice'])->name('generateInvoice');
-            
+        Route::get('/download', [InvoiceController::class, 'generateInvoice'])->name('generateInvoice');
     });
 
     Route::group(['prefix' => 'settings'], function () {

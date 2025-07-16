@@ -123,7 +123,7 @@
         </tr>
         <tr>
             <td style="width:50%; text-align: right; font-weight: bold;">Colour :</td>
-            <td style="width:20%; text-align: left;">{{ $color }}</td>
+            <td style="width:20%; text-align: left;">{{ $packing_list->color }}</</td>
             <td style="width:10%; border: none;"></td>
             <td style="width:10%; border: none;"></td>
             <td style="width:10%; border-left: none; border-top: none; border-bottom: none;"></td>

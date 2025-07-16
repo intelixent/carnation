@@ -113,7 +113,7 @@
                 <th style="background-color:#bbb; padding:8px;">Final Destination</th>
                 <td style="padding:8px;" colspan="1"></td>
                 <th style="background-color:#bbb; padding:8px;" colspan="2">Color</th>
-                <td style="padding:8px;" colspan="2">{{ $info['Colors'] ?? '' }}</td>
+                <td style="padding:8px;" colspan="2">{{ $packing_list->color }}</td>
             </tr>
             <tr>
                 <th style="background-color:#bbb; padding:8px;">Item Description</th>
