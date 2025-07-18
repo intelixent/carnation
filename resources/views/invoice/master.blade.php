@@ -94,7 +94,7 @@
                                             </ul>
                                         </div>
                                     </td>
-                                    <td>{{  \Carbon\Carbon::parse($invoice->inv_date)->format('d-m-Y'); }}</td>
+                                    <td>{{ $invoice->inv_date }}</td>
                                     <td>{{ $invoice->po->po_num }}</td>
                                     <td>{{ $invoice->po->vendor->name ?? 'N/A' }}</td>
                                     <td>{{  \Carbon\Carbon::parse($invoice->created_at)->format('d-m-Y h:i A'); }}</td>

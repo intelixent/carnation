@@ -123,7 +123,7 @@
         </tr>
         <tr>
             <td style="width:50%; text-align: right; font-weight: bold;">Colour :</td>
-            <td style="width:20%; text-align: left;">{{ $packing_list->color }}</</td>
+            <td style="width:20%; text-align: left;">{{ $packing_list->color }}</< /td>
             <td style="width:10%; border: none;"></td>
             <td style="width:10%; border: none;"></td>
             <td style="width:10%; border-left: none; border-top: none; border-bottom: none;"></td>
@@ -199,8 +199,9 @@
                 @endforeach
                 <td>{{ $row['per_ctn'] }}</td>
                 <td>{{ $row['total'] }}</td>
-                <td>{{ $row['net_wt_per'] }}</td>
-                <td>{{ $row['grs_wt_per'] }}</td>
+                <!-- Calculate per-carton weights -->
+                <td>{{ $row['ttl_ctn'] > 0 ? round($row['net_wt_total'] / $row['ttl_ctn'], 2) : 0 }}</td>
+                <td>{{ $row['ttl_ctn'] > 0 ? round($row['grs_wt_total'] / $row['ttl_ctn'], 2) : 0 }}</td>
                 <td>{{ $row['net_wt_total'] }}</td>
                 <td>{{ $row['grs_wt_total'] }}</td>
                 <td>{{ $row['ctn_dim'] }}</td>
@@ -219,8 +220,8 @@
                 <td>{{ $totals['total_pieces'] }}</td>
                 <td></td>
                 <td></td>
-                <td>{{ $totals['net_weight'] }}</td>
-                <td>{{ $totals['gross_weight'] }}</td>
+                <td>{{ round($totals['net_weight'], 2) }}</td>
+                <td>{{ round($totals['gross_weight'], 2) }}</td>
                 <td></td>
             </tr>
         </tbody>
