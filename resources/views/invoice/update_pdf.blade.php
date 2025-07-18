@@ -323,7 +323,7 @@
         <tfoot>
             <tr>
                 <td colspan="5" align="right"><strong>Total</strong></td>
-                <td class="text-right"><strong>{{ $totalCartonsInInvoice }}</strong></td>
+                <td class="text-center"><strong>{{ $totalCartonsInInvoice }}</strong></td>
                 <td></td>
                 <td class="text-right"><strong>{{ $totalQty }}</strong></td>
                 <td></td>
