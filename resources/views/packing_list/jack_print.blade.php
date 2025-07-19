@@ -160,6 +160,17 @@
 
         @foreach($byCarton as $cartonName => $items)
         <tbody class="carton-group">
+            @php
+            // Get the net weight for this carton (should be same for all items in same carton)
+            $cartonNetWeight = $items->first()->net_weight;
+            $cartonGrossWeight = $cartonNetWeight + 1.2;
+
+            // Add to grand totals (once per carton)
+            $grandNet += $cartonNetWeight;
+            $grandGross += $cartonGrossWeight;
+            @endphp
+
+
             @foreach($items as $i => $item)
             @php
             $cbm = $item->quantity
@@ -168,8 +179,6 @@
             * $item->carton->height)
             / 1_000_000;
             $grandQty += $item->quantity;
-            $grandNet += $item->net_weight;
-            $grandGross += ($item->net_weight + 1.2);
             @endphp
             <tr>
                 @if($i === 0)
@@ -184,8 +193,10 @@
                 <td>{{ $item->carton->length }}</td>
                 <td>{{ $item->carton->breadth }}</td>
                 <td>{{ $item->carton->height }}</td>
-                <td>{{ $item->net_weight }}</td>
-                <td>{{ round($item->net_weight + 1.2, 2) }}</td>
+                @if($i === 0)
+                <td rowspan="{{ $items->count() }}">{{ $item->net_weight }}</td>
+                <td rowspan="{{ $items->count() }}">{{ round($item->net_weight + 1.2, 2) }}</td>
+                @endif
                 <td>{{ round($cbm, 2) }}</td>
             </tr>
             @endforeach
