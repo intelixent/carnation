@@ -51,31 +51,31 @@
             page-break-inside: avoid;
         }
 
-        /* allow thead once + keep it on every page */
         .items-table thead {
             display: table-header-group;
         }
 
-        /* keep each carton’s rows (with rowspan) together */
+        .items-table tfoot {
+            display: table-footer-group;
+        }
+
         .carton-group {
             page-break-inside: avoid;
             break-inside: avoid-page;
-            -webkit-page-break-inside: avoid;
-            -webkit-column-break-inside: avoid;
             display: table-row-group;
         }
 
-        /* keep individual lines from splitting too */
-        .carton-group tr {
-            page-break-inside: avoid;
-            break-inside: avoid-page;
-            -webkit-page-break-inside: avoid;
-            -webkit-column-break-inside: avoid;
+        @media print {
+            .carton-group {
+                page-break-inside: avoid;
+                break-inside: avoid-page;
+            }
         }
 
-        /* grand totals at the bottom */
-        .items-table tfoot {
-            display: table-footer-group;
+        .debug-info {
+            font-size: 8px;
+            color: #999;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -83,12 +83,11 @@
 <body>
     <div class="header">PACKING LIST</div>
 
-    {{-- Header Information --}}
     <div class="header-section" style="page-break-inside: avoid; margin-bottom: 10px;">
-        <table style="font-size:12px; border-collapse:collapse;">
+        <table style="font-size:12px; border-collapse:collapse; width:100%;">
             <tr>
                 <th style="background-color:#bbb; padding:8px; width:20%;">Invoice No.</th>
-                <td style="padding:8px;" colspan="2"></td>
+                <td style="padding:8px;" colspan="2">{{ $packing_list->po->invoice_no ?? '' }}</td>
                 <th style="background-color:#bbb; padding:8px; text-align:right; width:15%;">Date :</th>
                 <td style="padding:8px;" colspan="2">{{ $packing_list->po_date }}</td>
             </tr>
@@ -123,17 +122,16 @@
                 <th style="background-color:#bbb; padding:8px;">PO No.</th>
                 <td style="padding:8px;">{{ $packing_list->po->po_num }}</td>
                 <th style="background-color:#bbb; padding:8px;">Style No.</th>
-                <td style="padding:8px;">{{ $info['Article description'] ?? '' }}</td>
+                <td style="padding:8px;">{{ $info['Style No.'] ?? '' }}</td>
             </tr>
         </table>
     </div>
 
-    {{-- Main Items Table --}}
     @php
     $byCarton = $packing_list->items->groupBy(fn($i) => $i->carton_name);
-    $grandQty = 0;
-    $grandNet = 0;
-    $grandGross = 0;
+    $grandQty = 0; $grandNet = 0; $grandGross = 0;
+    $firstPageMax = 19; $otherPageMax = 30;
+    $currentPageRowCount = 0; $pageNumber = 1; $debugInfo = [];
     @endphp
 
     <table class="items-table">
@@ -159,30 +157,42 @@
         </thead>
 
         @foreach($byCarton as $cartonName => $items)
-        <tbody class="carton-group">
+        @php
+        $count = $items->count();
+        $maxRows = $pageNumber === 1 ? $firstPageMax : $otherPageMax;
+        $remaining = $maxRows - $currentPageRowCount;
+        $force = false;
+        if ($currentPageRowCount > 0 && $count > $remaining) {
+        $force = true;
+        $debugInfo[] = "Carton {$cartonName} ({$count}) won't fit page {$pageNumber}, rem {$remaining} → BREAK";
+        } else {
+        $debugInfo[] = "Carton {$cartonName} ({$count}) fits page {$pageNumber}, rem {$remaining}";
+        }
+        if ($force) { $pageNumber++; $currentPageRowCount = 0; }
+        $cls = 'carton-group';
+        $currentPageRowCount += $count;
+        if ($currentPageRowCount >= $maxRows) { $currentPageRowCount -= $maxRows; $pageNumber++; }
+        @endphp
+
+        <tbody class="{{ $cls }}" @if($force) style="page-break-before: always;" @endif>
             @php
-            // Get the net weight for this carton (should be same for all items in same carton)
-            $cartonNetWeight = $items->first()->net_weight;
-            $cartonGrossWeight = $cartonNetWeight + 1.2;
-
-            // Add to grand totals (once per carton)
-            $grandNet += $cartonNetWeight;
-            $grandGross += $cartonGrossWeight;
+            $net = $items->first()->net_weight;
+            $gross = $net + 1.2;
+            $grandNet += $net;
+            $grandGross += $gross;
             @endphp
-
-
             @foreach($items as $i => $item)
             @php
-            $cbm = $item->quantity
-            * ($item->carton->length
-            * $item->carton->breadth
-            * $item->carton->height)
-            / 1_000_000;
+            $cbm = $item->quantity * (
+            $item->carton->length *
+            $item->carton->breadth *
+            $item->carton->height
+            ) / 1e6;
             $grandQty += $item->quantity;
             @endphp
-            <tr>
+            <tr @if($i===0 && $force) style="page-break-before: always;" @endif>
                 @if($i === 0)
-                <td rowspan="{{ $items->count() }}">{{ $cartonName }}</td>
+                <td rowspan="{{ $count }}">{{ $cartonName }}</td>
                 @endif
                 <td>{{ $packing_list->po_no }}</td>
                 <td>{{ $item->article_number }}</td>
@@ -194,8 +204,8 @@
                 <td>{{ $item->carton->breadth }}</td>
                 <td>{{ $item->carton->height }}</td>
                 @if($i === 0)
-                <td rowspan="{{ $items->count() }}">{{ $item->net_weight }}</td>
-                <td rowspan="{{ $items->count() }}">{{ round($item->net_weight + 1.2, 2) }}</td>
+                <td rowspan="{{ $count }}">{{ $net }}</td>
+                <td rowspan="{{ $count }}">{{ round($gross, 2) }}</td>
                 @endif
                 <td>{{ round($cbm, 2) }}</td>
             </tr>
@@ -215,7 +225,6 @@
         </tfoot>
     </table>
 
-    {{-- Summary Section --}}
     <div class="summary-section">
         <table class="summary-table">
             <thead>
@@ -231,13 +240,7 @@
                 </tr>
             </thead>
             <tbody>
-                @php
-                $orderTotal = 0;
-                $cumulativePackTotal = 0;
-                $balTotal = 0;
-                @endphp
-
-                {{-- ORDER QTY Row (Total from all packing lists for this PO) --}}
+                @php $orderTotal = 0; $balTotal = 0; @endphp
                 <tr>
                     <td>ORDER. QTY</td>
                     @foreach($all_sizes as $size)
@@ -246,75 +249,53 @@
                     @endforeach
                     <td><strong>{{ $orderTotal }}</strong></td>
                 </tr>
-
-                {{-- DISPATCH QTY Rows (1st, 2nd, etc.) --}}
-                @foreach($dispatchQuantities as $dispatchNumber => $dispatchQty)
+                @foreach($dispatchQuantities as $num => $dispatch)
                 @php
-                $dispatchTotal = 0;
-                $isCurrentPackingList = $dispatchNumber == $currentDispatchNumber;
-                if ($isCurrentPackingList) {
-                $rowLabel = 'PACKING LIST QTY';
-                } else {
-                $ordinalNumber = $dispatchNumber == 1 ? '1st' : ($dispatchNumber == 2 ? '2nd' : ($dispatchNumber == 3 ? '3rd' : $dispatchNumber.'th'));
-                $rowLabel = $ordinalNumber . ' DISPATCH QTY';
-                }
+                $label = $num == $currentDispatchNumber
+                ? 'PACKING LIST QTY'
+                : ($num == 1 ? '1st DISPATCH QTY'
+                : ($num == 2 ? '2nd DISPATCH QTY'
+                : ($num == 3 ? '3rd DISPATCH QTY' : $num.'th DISPATCH QTY')));
+                $dispTotal = 0;
                 @endphp
                 <tr>
-                    <td>{{ $rowLabel }}</td>
+                    <td>{{ $label }}</td>
                     @foreach($all_sizes as $size)
-                    @php
-                    $q = $dispatchQty->get($size, 0);
-                    $dispatchTotal += $q;
-                    @endphp
-                    <td>{{ $q }}</td>
+                    @php $d = $dispatch->get($size, 0); $dispTotal += $d; @endphp
+                    <td>{{ $d }}</td>
                     @endforeach
-                    <td><strong>{{ $dispatchTotal }}</strong></td>
+                    <td><strong>{{ $dispTotal }}</strong></td>
                 </tr>
                 @endforeach
-
-                {{-- BALANCE Row --}}
                 <tr>
                     <td>BALANCE</td>
                     @foreach($all_sizes as $size)
                     @php
-                    $totalDispatched = 0;
-                    foreach($dispatchQuantities as $dispatchQty) {
-                    $totalDispatched += $dispatchQty->get($size, 0);
-                    }
-                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
-                    $b = $orderQty - $totalDispatched;
-                    $balTotal += $b;
+                    $sum = 0; foreach($dispatchQuantities as $dq) $sum += $dq->get($size, 0);
+                    $b = $orderQuantitiesFromAllPacks->get($size, 0) - $sum; $balTotal += $b;
                     @endphp
                     <td>{{ $b }}</td>
                     @endforeach
                     <td><strong>{{ $balTotal }}</strong></td>
                 </tr>
-
-                {{-- PACK QTY % Row --}}
                 <tr>
                     <td>PACK QTY %</td>
                     @foreach($all_sizes as $size)
                     @php
-                    $totalDispatched = 0;
-                    foreach($dispatchQuantities as $dispatchQty) {
-                    $totalDispatched += $dispatchQty->get($size, 0);
-                    }
-                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
-                    $pct = $orderQty > 0 ? ($totalDispatched / $orderQty) * 100 : 0;
+                    $sum = 0; foreach($dispatchQuantities as $dq) $sum += $dq->get($size, 0);
+                    $pct = $orderQuantitiesFromAllPacks->get($size, 0) > 0
+                    ? round($sum / $orderQuantitiesFromAllPacks->get($size, 0) * 100, 2) . '%'
+                    : '-';
                     @endphp
-                    <td>{{ $pct > 0 ? round($pct, 2) . '%' : '-' }}</td>
+                    <td>{{ $pct }}</td>
                     @endforeach
-                    <td>
-                        <strong>
+                    <td><strong>
                             @php
-                            $totalDispatched = 0;
-                            foreach($dispatchQuantities as $dispatchQty) {
-                            foreach($all_sizes as $size) {
-                            $totalDispatched += $dispatchQty->get($size, 0);
-                            }
-                            }
+                            $totalDisp = 0;
+                            foreach($dispatchQuantities as $dq)
+                            foreach($all_sizes as $s) $totalDisp += $dq->get($s, 0);
                             @endphp
-                            {{ $orderTotal > 0 ? round(($totalDispatched / $orderTotal) * 100, 2) . '%' : '-' }}
+                            {{ $orderTotal > 0 ? round($totalDisp / $orderTotal * 100, 2) . '%' : '-' }}
                         </strong>
                     </td>
                 </tr>
