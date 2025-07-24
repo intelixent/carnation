@@ -1674,6 +1674,7 @@ class PackingListController extends BaseController
 
             $orderQuantitiesFromAllPacks = PackingListConfigItem::where('po_id', $packingList->po_id)
                 ->where('status', 0)
+                ->where('color', $packingList->color)
                 ->groupBy('size')
                 ->selectRaw('size, SUM(po_qty) as total_pack_qty')
                 ->pluck('total_pack_qty', 'size');
@@ -2293,6 +2294,7 @@ class PackingListController extends BaseController
 
                 $orderQuantitiesFromAllPacks = PackingListConfigItem::where('po_id', $packingList->po_id)
                     ->where('status', 0)
+                    ->where('color', $packingList->color)
                     ->groupBy('size')
                     ->selectRaw('size, SUM(po_qty) as total_pack_qty')
                     ->pluck('total_pack_qty', 'size');

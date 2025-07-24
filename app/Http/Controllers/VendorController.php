@@ -71,6 +71,7 @@ class VendorController extends BaseController
                 'state_id' => $request->state_id,
                 'notes' => $request->notes,
                 'discount' => $request->discount,
+                'payment_terms' => $request->payment_terms,
                 'created_by' => auth()->user()->id,
                 'created_at' => now(),
             ]);
@@ -113,6 +114,7 @@ class VendorController extends BaseController
                 'state_id' => $request->state_id,
                 'notes' => $request->notes,
                 'discount' => $request->discount,
+                'payment_terms' => $request->payment_terms,
             ]);
 
             return response()->json([

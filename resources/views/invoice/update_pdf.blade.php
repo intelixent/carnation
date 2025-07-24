@@ -121,7 +121,7 @@
     <table style="width: 100%; border-collapse: collapse; border: 1px solid #000;">
         <tr>
             <td colspan="3" style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
-                <strong>Registered under the MSME UDYAM - Registration Number - UDYAM-TN-03-0004047</strong>
+                <strong>Registered under the MSME UDYAM - Registration Number - {{ $business_settings['nsme_register_no'] }}</strong>
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <strong>Mode of Transport</strong>
@@ -135,7 +135,7 @@
                 <strong>Type</strong>
             </td>
             <td style="border: none;">
-                Medium
+                {{ $business_settings['nsme_type'] }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
@@ -152,7 +152,7 @@
                 <strong>Sector</strong>
             </td>
             <td style="border: none;">
-                Manufacturing
+                {{ $business_settings['nsme_sector'] }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
@@ -169,7 +169,7 @@
                 <strong>Date of Registration</strong>
             </td>
             <td style="border: none;">
-               
+                {{ $business_settings['nsme_register_date'] }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
@@ -183,7 +183,7 @@
         </tr>
         <tr>
             <td style="border: none;">
-                <strong>PAN NO.AAHCC1371N</strong>
+                <strong>PAN NO : {{ $business_settings['business_pan_no'] }}</strong>
             </td>
             <td style="border: none;">
                 <!-- Empty cell -->
@@ -200,7 +200,7 @@
         </tr>
         <tr>
             <td style="border: none;">
-                <strong>GST IN: 33AAHCC1371N1ZL</strong>
+                <strong>GST IN: {{ $business_settings['business_gst_no'] }}</strong>
             </td>
             <td style="border: none;">
                 <!-- Empty cell -->
@@ -217,13 +217,15 @@
         </tr>
         <tr>
             <td style="border: none;">
-                <strong>Serial No. of Invoice:</strong>
+                <strong>Invoice No:</strong>
             </td>
             <td style="border: none;">
                 {{ $invoice['ref_no'] ?? '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
-                <strong>DT</strong>  {{ $invoice['inv_date'] ?? '' }} 
+
+                <strong>Invoice Date:</strong> {{ $invoice['inv_date'] ?? '' }}
+
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
@@ -275,33 +277,33 @@
     <table class="invoice-table">
         <thead>
             <tr>
-                <th rowspan="2">SI No</th>
-                <th rowspan="2">Description</th>
-                <th rowspan="2">HSN</th>
-                <th rowspan="2">Style No</th>
-                <th rowspan="2">Color</th>
-                <th rowspan="2">Total<br>Cartons</th>
-                <th rowspan="2">UOM</th>
-                <th rowspan="2">Qty</th>
-                <th rowspan="2">Rate</th>
-                <th rowspan="2">Amount</th>
-                <th rowspan="2">Discount</th>
-                <th rowspan="2">Taxable Value</th>
-                <th colspan="2">IGST</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">SI No</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Description</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">HSN</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Style No</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Color</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Total<br>Cartons</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">UOM</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Qty</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Rate</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Amount</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Discount</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Taxable Value</th>
+                <th class="text-center" style="vertical-align: middle;" colspan="2">IGST</th>
             </tr>
             <tr>
-                <th>Rate</th>
-                <th>Amount</th>
+                <th class="text-center">Rate</th>
+                <th class="text-center">Amount</th>
             </tr>
         </thead>
         <tbody>
             @foreach ($invoice_item_details as $i => $invoice_item)
             <tr>
-                <td class="text-right">{{ $i + 1 }}</td>
+                <td class="text-center">{{ $i + 1 }}</td>
                 <td>{{ $invoice_item['description'] }}, {{ $invoice_item['size'] }}</td>
                 <td>{{ $invoice_item['hsn_code'] }}</td>
-                <td class="text-right">{{ $invoice_item['style'] }}</td>
-                <td class="text-right">{{ $invoice_item['color'] }}</td>
+                <td class="text-center">{{ $invoice_item['style'] }}</td>
+                <td class="text-center">{{ $invoice_item['color'] }}</td>
                 @if ($loop->first)
                 <td class="text-center"
                     style="vertical-align: middle;"
@@ -313,8 +315,8 @@
                 <td class="text-right">{{ $invoice_item['qty'] }}</td>
                 <td class="text-right">{{ IND_money_format($invoice_item['rate'], 2) }}</td>
                 <td class="text-right">{{ IND_money_format($invoice_item['amount'], 2) }}</td>
-                <td class="text-center">{{ IND_money_format($invoice_item['discount'], 2) }}</td>
-                <td class="text-center">{{ IND_money_format($invoice_item['taxable_value'], 2) }}</td>
+                <td class="text-right">{{ IND_money_format($invoice_item['discount'], 2) }}</td>
+                <td class="text-right">{{ IND_money_format($invoice_item['taxable_value'], 2) }}</td>
                 <td class="text-center">{{ IND_money_format($invoice_item['igst_rate'], 2) }}%</td>
                 <td class="text-right">{{ IND_money_format($invoice_item['igst_amount'], 2) }}</td>
             </tr>
@@ -342,10 +344,10 @@
             $formatter = new \NumberFormatter('en_IN', \NumberFormatter::SPELLOUT);
 
             // Format and capitalize
-            $totalInWords = ucfirst($formatter->format($finalAmount));
+            $totalInWords = strtoupper($formatter->format($finalAmount));
             @endphp
             <tr>
-                <td colspan="14" align="left"><strong>Invoice Total ( In Words) : INR {{ $totalInWords }} Only</strong></td>
+                <td colspan="14" align="left"><strong>Invoice Total ( In Words) : INR {{ $totalInWords }} ONLY</strong></td>
             </tr>
             <tr>
                 <td colspan="14" align="left">
@@ -359,7 +361,7 @@
                     <strong>TERMS OF SALE</strong></br>
                     1) Goods once sold will not be taken back or exchanged </br>
                     2) Jurisdiction : Coimbatore </br>
-                    3) Payment Terms : 90 Days 2.5%
+                    3) Payment Terms : {{ $vendor->payment_terms }}
                 </td>
             </tr>
         </tfoot>

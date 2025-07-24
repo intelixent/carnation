@@ -21,6 +21,7 @@ use App\Models\PackingListItem;
 use App\Models\InvoiceMaster;
 use App\Models\StateMaster;
 use App\Models\TransportMaster;
+use App\Models\BusinessSettingMaster;
 
 class InvoiceController extends BaseController
 {
@@ -80,21 +81,21 @@ class InvoiceController extends BaseController
     {
         $poId = $request->id;
         $vendor_id = $request->vendor_id;
-       // $packed_lists = PackingListMaster::where(array('po_id' => $poId, 'pack_status' => 1))->withCount('items')->get();
-       $packed_lists = DB::table('packing_list_items as pli')
-    ->join('packing_list_masters as plm', 'pli.packing_list_id', '=', 'plm.id')
-    ->select(
-        'pli.packing_list_id as id',
-        'plm.pack_ref_no',
-        DB::raw('MIN(pli.created_at) as created_at'),
-        DB::raw('MIN(pli.color) as color'),
-        DB::raw('COUNT(DISTINCT pli.carton_name) as carton_count')
-    )
-    ->where('plm.po_id', $poId)
-    ->where('plm.pack_status', 1)
-    ->groupBy('pli.packing_list_id', 'plm.pack_ref_no')
-    ->get();
-    
+        // $packed_lists = PackingListMaster::where(array('po_id' => $poId, 'pack_status' => 1))->withCount('items')->get();
+        $packed_lists = DB::table('packing_list_items as pli')
+            ->join('packing_list_masters as plm', 'pli.packing_list_id', '=', 'plm.id')
+            ->select(
+                'pli.packing_list_id as id',
+                'plm.pack_ref_no',
+                DB::raw('MIN(pli.created_at) as created_at'),
+                DB::raw('MIN(pli.color) as color'),
+                DB::raw('COUNT(DISTINCT pli.carton_name) as carton_count')
+            )
+            ->where('plm.po_id', $poId)
+            ->where('plm.pack_status', 1)
+            ->groupBy('pli.packing_list_id', 'plm.pack_ref_no')
+            ->get();
+
         if (!$packed_lists) {
             return response()->json(['error' => 'Not found'], 404);
         }
@@ -153,6 +154,15 @@ class InvoiceController extends BaseController
         $po_details = $invoice->po;
         $vendor     = $po_details->vendor;
         $state      = $vendor->state;
+
+        $businessSettings = BusinessSettingMaster::whereIn('name', [
+            'nsme_register_no',
+            'nsme_register_date',
+            'nsme_type',
+            'nsme_sector',
+            'business_pan_no',
+            'business_gst_no'
+        ])->pluck('value', 'name')->toArray();
 
         $packIds     = explode(',', $invoice->pack_ids);
         $packedItems = PackingListItem::whereIn('packing_list_id', $packIds)
@@ -244,7 +254,7 @@ class InvoiceController extends BaseController
             }
 
             $amount         = $pi->total_quantity * $unit_price;
-            $discountPct    = $vendor->discount_percentage ?? 0;
+            $discountPct    = $vendor->discount ?? 0;
             $discountAmount = ($amount * $discountPct) / 100;
             $taxableValue   = $amount - $discountAmount;
             $igstRate       = 5.00;
@@ -300,6 +310,7 @@ class InvoiceController extends BaseController
             'ship_to_details'      => $shipTo,
             'transporter_details'  => $transpDet,
             'irn_details'          => $irnDetails,
+            'business_settings'    => $businessSettings,
         ])
             ->setOption('isHtml5ParserEnabled', true)
             ->setOption('isRemoteEnabled', true)

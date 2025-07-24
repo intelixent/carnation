@@ -76,6 +76,15 @@
                             <label for="discount">Discount %</label>
                         </div>
                     </div>
+                    <div class="col-sm-6">
+                        <div class="form-floating ">
+                            <input type="text" class="form-control form-control-sm" id="payment_terms" name="payment_terms" placeholder="Payment Terms">
+                            <label for="payment_terms">Payment Terms</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
                     <div class="col-sm-6 ">
                         <div class="form-floating">
                             <textarea class="form-control" id="notes" name="notes" placeholder="Notes" style="height: 100px"></textarea>
