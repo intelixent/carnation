@@ -253,6 +253,9 @@
                         required: true,
                         validName: true
                     },
+                    legal_name: {
+                        required: true,
+                    },
                     mobile: {
                         required: true,
                         Mobile: true,
@@ -262,9 +265,6 @@
                     email: {
                         required: true,
                         email: true
-                    },
-                    address: {
-                        required: true
                     },
                     gst_no: {
                         required: true
@@ -277,12 +277,27 @@
                     },
                     shortage: {
                         required: true
+                    },
+                    address_1: {
+                        required: true
+                    },
+                    city_town_village: {
+                        required: true
+                    },
+                    pincode: {
+                        required: true,
+                    },
+                    pan_no: {
+                        required: true,
                     }
                 },
                 messages: {
                     name: {
                         required: "Please enter vendor name",
                         validName: "Please enter a valid name (only letters and single spaces between words)"
+                    },
+                    legal_name: {
+                        required: "Please enter legal vendor name",
                     },
                     mobile: {
                         required: "Please enter mobile number",
@@ -293,9 +308,6 @@
                     email: {
                         required: "Please enter email address",
                         email: "Please enter a valid email address"
-                    },
-                    address: {
-                        required: "Please enter address"
                     },
                     gst_no: {
                         required: "Please enter GST No"
@@ -309,6 +321,18 @@
                     shortage: {
                         required: "Please enter shortage %"
                     },
+                    address_1: {
+                        required: "Please enter address line 1"
+                    },
+                    city_town_village: {
+                        required: "Please enter city/town/village"
+                    },
+                    pincode: {
+                        required: "Please enter pincode",
+                    },
+                    pan_no: {
+                        required: "Please enter PAN number",
+                    }
                 },
                 errorElement: 'span',
                 errorClass: 'error',
@@ -366,6 +390,9 @@
                         required: true,
                         validName: true
                     },
+                    legal_name: {
+                        required: true,
+                    },
                     mobile: {
                         required: true,
                         Mobile: true,
@@ -375,9 +402,6 @@
                     email: {
                         required: true,
                         email: true
-                    },
-                    address: {
-                        required: true
                     },
                     gst_no: {
                         required: true
@@ -390,12 +414,27 @@
                     },
                     shortage: {
                         required: true
+                    },
+                    address_1: {
+                        required: true
+                    },
+                    city_town_village: {
+                        required: true
+                    },
+                    pincode: {
+                        required: true,
+                    },
+                    pan_no: {
+                        required: true,
                     }
                 },
                 messages: {
                     name: {
                         required: "Please enter vendor name",
                         validName: "Please enter a valid name (only letters and single spaces between words)"
+                    },
+                    legal_name: {
+                        required: "Please enter vendor legal name",
                     },
                     mobile: {
                         required: "Please enter mobile number",
@@ -406,9 +445,6 @@
                     email: {
                         required: "Please enter email address",
                         email: "Please enter a valid email address"
-                    },
-                    address: {
-                        required: "Please enter address"
                     },
                     gst_no: {
                         required: "Please enter GST No"
@@ -422,6 +458,18 @@
                     shortage: {
                         required: "Please enter shortage %"
                     },
+                    address_1: {
+                        required: "Please enter address line 1"
+                    },
+                    city_town_village: {
+                        required: "Please enter city/town/village"
+                    },
+                    pincode: {
+                        required: "Please enter pincode",
+                    },
+                    pan_no: {
+                        required: "Please enter PAN number",
+                    }
                 },
                 errorElement: 'span',
                 errorClass: 'error',

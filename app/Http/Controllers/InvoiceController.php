@@ -345,29 +345,29 @@ class InvoiceController extends BaseController
 
         if (empty($billedToDetails)) {
             $billedToDetails = [
-                'billed_legal_name' => $vendor->name ?? '',
-                'billed_address_1' => $vendor->address ?? '',
-                'billed_address_2' => '',
-                'billed_city' => '',
+                'billed_legal_name' => $vendor->legal_name ?? '',
+                'billed_address_1' => $vendor->address_1 ?? '',
+                'billed_address_2' => $vendor->address_2 ?? '',
+                'billed_city' => $vendor->city_town_village ?? '',
                 'billed_state' => $vendor->state_id ?? '',
                 'billed_gst_no' => $vendor->gst_no ?? '',
                 'billed_pan_no' => $vendor->pan_no ?? '',
-                'billed_pincode' => '',
-                'billed_gst_type' => '',
+                'billed_pincode' => $vendor->pincode ?? '',
+                'billed_gst_type' => $vendor->gst_type ?? '',
             ];
         }
 
         if (empty($shippedToDetails)) {
             $shippedToDetails = [
-                'shipped_legal_name' => $vendor->name ?? '',
-                'shipped_address_1' => $vendor->address ?? '',
-                'shipped_address_2' => '',
-                'shipped_city' => '',
+                'shipped_legal_name' => $vendor->legal_name ?? '',
+                'shipped_address_1' => $vendor->address_1 ?? '',
+                'shipped_address_2' => $vendor->address_2 ?? '',
+                'shipped_city' => $vendor->city_town_village ?? '',
                 'shipped_state' => $vendor->state_id ?? '',
                 'shipped_gst_no' => $vendor->gst_no ?? '',
                 'shipped_pan_no' => $vendor->pan_no ?? '',
-                'shipped_pincode' => '',
-                'shipped_place_of_supply' => '',
+                'shipped_pincode' => $vendor->pincode ?? '',
+                'shipped_place_of_supply' => $vendor->place_supply ?? '',
             ];
         }
 
