@@ -26,6 +26,7 @@ class VendorMaster extends Model
         'excess',
         'shortage',
         'discount',
+        'payment_terms',
         'extraction_no',
         'custom_field_no',
         'notes',
