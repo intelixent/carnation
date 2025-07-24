@@ -223,7 +223,9 @@
                 {{ $invoice['ref_no'] ?? '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
+
                 <strong>Invoice Date:</strong> {{ $invoice['inv_date'] ?? '' }}
+
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
