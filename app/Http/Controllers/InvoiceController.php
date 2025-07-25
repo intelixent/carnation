@@ -325,7 +325,7 @@ class InvoiceController extends BaseController
             'page_main_title' => "Invoice Master",
             'page_child_title' => "Invoice Master",
             'isSuperAdmin' => $this->isSuperAdmin,
-            'InvoiceMaster' => InvoiceMaster::where('status', 0)->get(),
+            'InvoiceMaster' => InvoiceMaster::where('status', 0)->orderBy('id', 'desc')->get(),
         ];
         return view('invoice.master', $page_data);
     }
@@ -345,29 +345,29 @@ class InvoiceController extends BaseController
 
         if (empty($billedToDetails)) {
             $billedToDetails = [
-                'billed_legal_name' => $vendor->legal_name ?? '',
-                'billed_address_1' => $vendor->address_1 ?? '',
-                'billed_address_2' => $vendor->address_2 ?? '',
-                'billed_city' => $vendor->city_town_village ?? '',
-                'billed_state' => $vendor->state_id ?? '',
-                'billed_gst_no' => $vendor->gst_no ?? '',
-                'billed_pan_no' => $vendor->pan_no ?? '',
-                'billed_pincode' => $vendor->pincode ?? '',
-                'billed_gst_type' => $vendor->gst_type ?? '',
+                'billed_legal_name' => $vendor->billing_legal_name ?? '',
+                'billed_address_1' => $vendor->billing_address_1 ?? '',
+                'billed_address_2' => $vendor->billing_address_2 ?? '',
+                'billed_city' => $vendor->billing_city_town_village ?? '',
+                'billed_state' => $vendor->billing_state_id ?? '',
+                'billed_gst_no' => $vendor->billing_gst_no ?? '',
+                'billed_pan_no' => $vendor->billing_pan_no ?? '',
+                'billed_pincode' => $vendor->billing_pincode ?? '',
+                'billed_gst_type' => $vendor->billing_gst_type ?? '',
             ];
         }
 
         if (empty($shippedToDetails)) {
             $shippedToDetails = [
-                'shipped_legal_name' => $vendor->legal_name ?? '',
-                'shipped_address_1' => $vendor->address_1 ?? '',
-                'shipped_address_2' => $vendor->address_2 ?? '',
-                'shipped_city' => $vendor->city_town_village ?? '',
-                'shipped_state' => $vendor->state_id ?? '',
-                'shipped_gst_no' => $vendor->gst_no ?? '',
-                'shipped_pan_no' => $vendor->pan_no ?? '',
-                'shipped_pincode' => $vendor->pincode ?? '',
-                'shipped_place_of_supply' => $vendor->place_supply ?? '',
+                'shipped_legal_name' => $vendor->shipping_legal_name ?? '',
+                'shipped_address_1' => $vendor->shipping_address_1 ?? '',
+                'shipped_address_2' => $vendor->shipping_address_2 ?? '',
+                'shipped_city' => $vendor->shipping_city_town_village ?? '',
+                'shipped_state' => $vendor->shipping_state_id ?? '',
+                'shipped_gst_no' => $vendor->shipping_gst_no ?? '',
+                'shipped_pan_no' => $vendor->shipping_pan_no ?? '',
+                'shipped_pincode' => $vendor->shipping_pincode ?? '',
+                'shipped_place_of_supply' => $vendor->shipping_place_supply ?? '',
             ];
         }
 

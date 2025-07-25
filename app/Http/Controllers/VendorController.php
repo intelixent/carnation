@@ -45,7 +45,7 @@ class VendorController extends BaseController
             'page_main_title' => "Settings",
             'page_child_title' => "Master",
             'isSuperAdmin' => $this->isSuperAdmin,
-            'vendors' => VendorMaster::whereIn('status', [0, 1])
+            'vendors' => VendorMaster::with(['billingState', 'shippingState'])->whereIn('status', [0, 1])
                 ->orderBy('id', 'asc')
                 ->get(),
         ];
@@ -64,23 +64,34 @@ class VendorController extends BaseController
         try {
             $vendor = VendorMaster::create([
                 'name' => $request->name,
-                'legal_name' => $request->legal_name,
                 'mobile' => $request->mobile,
                 'email' => $request->email,
-                'address_1' => $request->address_1,
-                'address_2' => $request->address_2,
-                'city_town_village' => $request->city_town_village,
-                'pincode' => $request->pincode,
-                'gst_no' => $request->gst_no,
-                'pan_no' => $request->pan_no,
-                'gst_type' => $request->gst_type,
-                'place_supply' => $request->place_supply,
-                'state_id' => $request->state_id,
+                'notes' => $request->notes,
+                // Billing Address
+                'billing_legal_name' => $request->billing_legal_name,
+                'billing_address_1' => $request->billing_address_1,
+                'billing_address_2' => $request->billing_address_2,
+                'billing_city_town_village' => $request->billing_city_town_village,
+                'billing_pincode' => $request->billing_pincode,
+                'billing_gst_no' => $request->billing_gst_no,
+                'billing_pan_no' => $request->billing_pan_no,
+                'billing_gst_type' => $request->billing_gst_type,
+                'billing_state_id' => $request->billing_state_id,
+                // Shipping Address
+                'shipping_legal_name' => $request->shipping_legal_name,
+                'shipping_address_1' => $request->shipping_address_1,
+                'shipping_address_2' => $request->shipping_address_2,
+                'shipping_city_town_village' => $request->shipping_city_town_village,
+                'shipping_pincode' => $request->shipping_pincode,
+                'shipping_gst_no' => $request->shipping_gst_no,
+                'shipping_pan_no' => $request->shipping_pan_no,
+                'shipping_place_supply' => $request->shipping_place_supply,
+                'shipping_state_id' => $request->shipping_state_id,
+                // Other Fields
                 'excess' => $request->excess,
                 'shortage' => $request->shortage,
                 'discount' => $request->discount,
                 'payment_terms' => $request->payment_terms,
-                'notes' => $request->notes,
                 'created_by' => auth()->user()->id,
                 'created_at' => now(),
             ]);
@@ -99,7 +110,7 @@ class VendorController extends BaseController
 
     public function get_vendor_details(Request $request)
     {
-        $vendor_details = VendorMaster::with('state')->findOrFail($request->input('id'));
+        $vendor_details = VendorMaster::with(['billingState', 'shippingState'])->findOrFail($request->input('id'));
         return view('settings.vendor.details', compact('vendor_details'));
     }
 
@@ -116,23 +127,34 @@ class VendorController extends BaseController
             $vendor = VendorMaster::findOrFail($request->vendor_id);
 
             $vendor->update([
-                'legal_name' => $request->legal_name,
                 'mobile' => $request->mobile,
                 'email' => $request->email,
-                'address_1' => $request->address_1,
-                'address_2' => $request->address_2,
-                'city_town_village' => $request->city_town_village,
-                'pincode' => $request->pincode,
-                'gst_no' => $request->gst_no,
-                'pan_no' => $request->pan_no,
-                'gst_type' => $request->gst_type,
-                'place_supply' => $request->place_supply,
-                'state_id' => $request->state_id,
+                'notes' => $request->notes,
+                // Billing Address
+                'billing_legal_name' => $request->billing_legal_name,
+                'billing_address_1' => $request->billing_address_1,
+                'billing_address_2' => $request->billing_address_2,
+                'billing_city_town_village' => $request->billing_city_town_village,
+                'billing_pincode' => $request->billing_pincode,
+                'billing_gst_no' => $request->billing_gst_no,
+                'billing_pan_no' => $request->billing_pan_no,
+                'billing_gst_type' => $request->billing_gst_type,
+                'billing_state_id' => $request->billing_state_id,
+                // Shipping Address
+                'shipping_legal_name' => $request->shipping_legal_name,
+                'shipping_address_1' => $request->shipping_address_1,
+                'shipping_address_2' => $request->shipping_address_2,
+                'shipping_city_town_village' => $request->shipping_city_town_village,
+                'shipping_pincode' => $request->shipping_pincode,
+                'shipping_gst_no' => $request->shipping_gst_no,
+                'shipping_pan_no' => $request->shipping_pan_no,
+                'shipping_place_supply' => $request->shipping_place_supply,
+                'shipping_state_id' => $request->shipping_state_id,
+                // Other Fields
                 'excess' => $request->excess,
                 'shortage' => $request->shortage,
                 'discount' => $request->discount,
                 'payment_terms' => $request->payment_terms,
-                'notes' => $request->notes,
             ]);
 
             return response()->json([
