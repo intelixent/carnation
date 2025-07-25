@@ -63,6 +63,13 @@
                     <div class="card-title text-white">
                         Vendor Master
                     </div>
+                    <div class="card-options">
+                        @if($isSuperAdmin || auth()->user()->hasDirectPermission('add-vendor'))
+                        <button class="btn btn-sm btn-light add-vendor" type="button">
+                            <i class="fas fa-plus me-1"></i>Add Vendor
+                        </button>
+                        @endif
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -72,7 +79,8 @@
                                     <th>S.No</th>
                                     <th>Name</th>
                                     <th>Contact</th>
-                                    <th>Gst</th>
+                                    <th>Billing Address</th>
+                                    <th>Shipping Address</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -80,14 +88,20 @@
                                 @foreach($vendors as $key => $vendor)
                                 <tr>
                                     <td>{{ $key + 1 }}</td>
-                                    <td>{{ $vendor->name }}</td>
                                     <td>
-                                        <strong>Name:</strong> {{ $vendor->mobile }}<br>
-                                        <strong>Mobile:</strong> {{ $vendor->email }}<br>
+                                        <strong>{{ $vendor->name }}</strong><br>
                                     </td>
                                     <td>
-                                        <strong>No:</strong> {{ $vendor->gst_no }}<br>
-                                        <strong>State:</strong> {{ $vendor->state->name }}<br>
+                                        <strong>Mobile:</strong> {{ $vendor->mobile }}<br>
+                                        <strong>Email:</strong> {{ $vendor->email ?? 'N/A' }}<br>
+                                    </td>
+                                    <td>
+                                        <strong>State:</strong> {{ $vendor->billingState->name ?? 'N/A' }}<br>
+                                        <strong>City:</strong> {{ $vendor->billing_city_town_village ?? 'N/A' }}
+                                    </td>
+                                    <td>
+                                        <strong>State:</strong> {{ $vendor->shippingState->name ?? 'N/A' }}<br>
+                                        <strong>City:</strong> {{ $vendor->shipping_city_town_village ?? 'N/A' }}
                                     </td>
                                     <td>
                                         <div class="dropdown">
@@ -95,11 +109,14 @@
                                                 Action
                                             </button>
                                             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
-                                                @if($isSuperAdmin ||auth()->user()->hasDirectPermission('view-vendor'))
+                                                @if($isSuperAdmin || auth()->user()->hasDirectPermission('view-vendor'))
                                                 <li><a class="dropdown-item view-vendor" data-id="{{ $vendor->id }}" href="javascript:void(0);">View</a></li>
                                                 @endif
-                                                @if($isSuperAdmin ||auth()->user()->hasDirectPermission('edit-vendor'))
+                                                @if($isSuperAdmin || auth()->user()->hasDirectPermission('edit-vendor'))
                                                 <li><a class="dropdown-item edit-vendor" data-id="{{ $vendor->id }}" href="javascript:void(0);">Edit</a></li>
+                                                @endif
+                                                @if($isSuperAdmin || auth()->user()->hasDirectPermission('delete-vendor'))
+                                                <li><a class="dropdown-item delete-vendor" data-id="{{ $vendor->id }}" href="javascript:void(0);">Delete</a></li>
                                                 @endif
                                             </ul>
                                         </div>
@@ -253,9 +270,6 @@
                         required: true,
                         validName: true
                     },
-                    legal_name: {
-                        required: true,
-                    },
                     mobile: {
                         required: true,
                         Mobile: true,
@@ -263,13 +277,34 @@
                         maxlength: 10
                     },
                     email: {
-                        required: true,
                         email: true
                     },
-                    gst_no: {
+                    // Billing Address Validation
+                    billing_legal_name: {
+                        required: true,
+                    },
+                    billing_gst_no: {
                         required: true
                     },
-                    state_id: {
+                    billing_state_id: {
+                        required: true
+                    },
+                    billing_address_1: {
+                        required: true
+                    },
+                    billing_city_town_village: {
+                        required: true
+                    },
+                    billing_pincode: {
+                        required: true,
+                    },
+                    billing_pan_no: {
+                        required: true,
+                    },
+                    billing_gst_type: {
+                        required: true
+                    },
+                    billing_place_supply: {
                         required: true
                     },
                     excess: {
@@ -278,26 +313,14 @@
                     shortage: {
                         required: true
                     },
-                    address_1: {
+                    discount: {
                         required: true
-                    },
-                    city_town_village: {
-                        required: true
-                    },
-                    pincode: {
-                        required: true,
-                    },
-                    pan_no: {
-                        required: true,
                     }
                 },
                 messages: {
                     name: {
                         required: "Please enter vendor name",
                         validName: "Please enter a valid name (only letters and single spaces between words)"
-                    },
-                    legal_name: {
-                        required: "Please enter legal vendor name",
                     },
                     mobile: {
                         required: "Please enter mobile number",
@@ -306,14 +329,16 @@
                         maxlength: "Mobile number must be 10 digits"
                     },
                     email: {
-                        required: "Please enter email address",
                         email: "Please enter a valid email address"
                     },
-                    gst_no: {
-                        required: "Please enter GST No"
+                    billing_legal_name: {
+                        required: "Please enter billing legal name",
                     },
-                    state_id: {
-                        required: "Please select a State"
+                    billing_gst_no: {
+                        required: "Please enter billing GST No"
+                    },
+                    billing_state_id: {
+                        required: "Please select billing state"
                     },
                     excess: {
                         required: "Please enter excess %"
@@ -321,17 +346,26 @@
                     shortage: {
                         required: "Please enter shortage %"
                     },
-                    address_1: {
-                        required: "Please enter address line 1"
+                    discount: {
+                        required: "Please enter discount %"
                     },
-                    city_town_village: {
-                        required: "Please enter city/town/village"
+                    billing_address_1: {
+                        required: "Please enter billing address line 1"
                     },
-                    pincode: {
-                        required: "Please enter pincode",
+                    billing_city_town_village: {
+                        required: "Please enter billing city/town/village"
                     },
-                    pan_no: {
-                        required: "Please enter PAN number",
+                    billing_pincode: {
+                        required: "Please enter billing pincode",
+                    },
+                    billing_pan_no: {
+                        required: "Please enter billing PAN number",
+                    },
+                    billing_gst_type: {
+                        required: "Please enter billing GST type"
+                    },
+                    billing_place_supply: {
+                        required: "Please enter billing place of supply"
                     }
                 },
                 errorElement: 'span',
@@ -386,13 +420,6 @@
 
             $("#VendorEditForm").validate({
                 rules: {
-                    name: {
-                        required: true,
-                        validName: true
-                    },
-                    legal_name: {
-                        required: true,
-                    },
                     mobile: {
                         required: true,
                         Mobile: true,
@@ -400,13 +427,34 @@
                         maxlength: 10
                     },
                     email: {
-                        required: true,
                         email: true
                     },
-                    gst_no: {
+                    // Billing Address Validation
+                    billing_legal_name: {
+                        required: true,
+                    },
+                    billing_gst_no: {
                         required: true
                     },
-                    state_id: {
+                    billing_state_id: {
+                        required: true
+                    },
+                    billing_address_1: {
+                        required: true
+                    },
+                    billing_city_town_village: {
+                        required: true
+                    },
+                    billing_pincode: {
+                        required: true,
+                    },
+                    billing_pan_no: {
+                        required: true,
+                    },
+                    billing_gst_type: {
+                        required: true
+                    },
+                    billing_place_supply: {
                         required: true
                     },
                     excess: {
@@ -415,27 +463,11 @@
                     shortage: {
                         required: true
                     },
-                    address_1: {
+                    discount: {
                         required: true
-                    },
-                    city_town_village: {
-                        required: true
-                    },
-                    pincode: {
-                        required: true,
-                    },
-                    pan_no: {
-                        required: true,
                     }
                 },
                 messages: {
-                    name: {
-                        required: "Please enter vendor name",
-                        validName: "Please enter a valid name (only letters and single spaces between words)"
-                    },
-                    legal_name: {
-                        required: "Please enter vendor legal name",
-                    },
                     mobile: {
                         required: "Please enter mobile number",
                         Mobile: "Please enter a valid mobile number",
@@ -443,14 +475,16 @@
                         maxlength: "Mobile number must be 10 digits"
                     },
                     email: {
-                        required: "Please enter email address",
                         email: "Please enter a valid email address"
                     },
-                    gst_no: {
-                        required: "Please enter GST No"
+                    billing_legal_name: {
+                        required: "Please enter billing legal name",
                     },
-                    state_id: {
-                        required: "Please select a State"
+                    billing_gst_no: {
+                        required: "Please enter billing GST No"
+                    },
+                    billing_state_id: {
+                        required: "Please select billing state"
                     },
                     excess: {
                         required: "Please enter excess %"
@@ -458,17 +492,26 @@
                     shortage: {
                         required: "Please enter shortage %"
                     },
-                    address_1: {
-                        required: "Please enter address line 1"
+                    discount: {
+                        required: "Please enter discount %"
                     },
-                    city_town_village: {
-                        required: "Please enter city/town/village"
+                    billing_address_1: {
+                        required: "Please enter billing address line 1"
                     },
-                    pincode: {
-                        required: "Please enter pincode",
+                    billing_city_town_village: {
+                        required: "Please enter billing city/town/village"
                     },
-                    pan_no: {
-                        required: "Please enter PAN number",
+                    billing_pincode: {
+                        required: "Please enter billing pincode",
+                    },
+                    billing_pan_no: {
+                        required: "Please enter billing PAN number",
+                    },
+                    billing_gst_type: {
+                        required: "Please enter billing GST type"
+                    },
+                    billing_place_supply: {
+                        required: "Please enter billing place of supply"
                     }
                 },
                 errorElement: 'span',

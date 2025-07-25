@@ -17,32 +17,56 @@ class VendorMaster extends Model
 
     protected $fillable = [
         'name',
-        'legal_name',
         'mobile',
         'email',
-        'address_1',
-        'address_2',
-        'city_town_village',
-        'pincode',
-        'gst_no',
-        'pan_no',
-        'gst_type',
-        'place_supply',
-        'state_id',
+        'notes',
+        // Billing Address Fields
+        'billing_legal_name',
+        'billing_address_1',
+        'billing_address_2',
+        'billing_city_town_village',
+        'billing_pincode',
+        'billing_gst_no',
+        'billing_pan_no',
+        'billing_gst_type',
+        'billing_place_supply',
+        'billing_state_id',
+        // Shipping Address Fields
+        'shipping_legal_name',
+        'shipping_address_1',
+        'shipping_address_2',
+        'shipping_city_town_village',
+        'shipping_pincode',
+        'shipping_gst_no',
+        'shipping_pan_no',
+        'shipping_gst_type',
+        'shipping_place_supply',
+        'shipping_state_id',
+        // Other Fields
         'excess',
         'shortage',
         'discount',
         'payment_terms',
         'extraction_no',
         'custom_field_no',
-        'notes',
         'created_by',
         'created_at',
         'status',
     ];
 
+    public function billingState()
+    {
+        return $this->belongsTo(StateMaster::class, 'billing_state_id');
+    }
+
+    public function shippingState()
+    {
+        return $this->belongsTo(StateMaster::class, 'shipping_state_id');
+    }
+
+    // Keep the old state relationship for backward compatibility
     public function state()
     {
-        return $this->belongsTo(StateMaster::class, 'state_id');
+        return $this->belongsTo(StateMaster::class, 'billing_state_id');
     }
 }
