@@ -64,14 +64,23 @@ class VendorController extends BaseController
         try {
             $vendor = VendorMaster::create([
                 'name' => $request->name,
+                'legal_name' => $request->legal_name,
                 'mobile' => $request->mobile,
                 'email' => $request->email,
-                'address' => $request->address,
+                'address_1' => $request->address_1,
+                'address_2' => $request->address_2,
+                'city_town_village' => $request->city_town_village,
+                'pincode' => $request->pincode,
                 'gst_no' => $request->gst_no,
+                'pan_no' => $request->pan_no,
+                'gst_type' => $request->gst_type,
+                'place_supply' => $request->place_supply,
                 'state_id' => $request->state_id,
-                'notes' => $request->notes,
+                'excess' => $request->excess,
+                'shortage' => $request->shortage,
                 'discount' => $request->discount,
                 'payment_terms' => $request->payment_terms,
+                'notes' => $request->notes,
                 'created_by' => auth()->user()->id,
                 'created_at' => now(),
             ]);
@@ -107,14 +116,23 @@ class VendorController extends BaseController
             $vendor = VendorMaster::findOrFail($request->vendor_id);
 
             $vendor->update([
+                'legal_name' => $request->legal_name,
                 'mobile' => $request->mobile,
                 'email' => $request->email,
-                'address' => $request->address,
+                'address_1' => $request->address_1,
+                'address_2' => $request->address_2,
+                'city_town_village' => $request->city_town_village,
+                'pincode' => $request->pincode,
                 'gst_no' => $request->gst_no,
+                'pan_no' => $request->pan_no,
+                'gst_type' => $request->gst_type,
+                'place_supply' => $request->place_supply,
                 'state_id' => $request->state_id,
-                'notes' => $request->notes,
+                'excess' => $request->excess,
+                'shortage' => $request->shortage,
                 'discount' => $request->discount,
                 'payment_terms' => $request->payment_terms,
+                'notes' => $request->notes,
             ]);
 
             return response()->json([

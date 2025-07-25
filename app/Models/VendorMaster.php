@@ -17,11 +17,17 @@ class VendorMaster extends Model
 
     protected $fillable = [
         'name',
+        'legal_name',
         'mobile',
         'email',
-        'address',
+        'address_1',
+        'address_2',
+        'city_town_village',
+        'pincode',
         'gst_no',
         'pan_no',
+        'gst_type',
+        'place_supply',
         'state_id',
         'excess',
         'shortage',
