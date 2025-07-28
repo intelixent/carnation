@@ -149,8 +149,7 @@ class InvoiceController extends BaseController
 
     public function generateInvoice(Request $request)
     {
-        $invoice    = InvoiceMaster::with(['po.vendor.state'])
-            ->findOrFail($request->id);
+        $invoice    = InvoiceMaster::with(['po.vendor.state'])->findOrFail($request->id);
         $po_details = $invoice->po;
         $vendor     = $po_details->vendor;
         $state      = $vendor->state;
@@ -299,8 +298,17 @@ class InvoiceController extends BaseController
             $transpDet['transport_name_display'] = $tp->name ?? null;
         }
 
+        $invoiceData = [
+            'ref_no' => $invoice->ref_no ?? '',
+            'inv_date' => $invoice->inv_date ?? '',
+            'po_num' => $po_details->po_num ?? '',
+            'customer_po_no' => ($vendor->id == 3 && isset($articleInfo['customer_po_no']))
+                ? $articleInfo['customer_po_no']
+                : '',
+        ];
+
         return Pdf::loadView('invoice.update_pdf', [
-            'invoice'              => $invoice,
+            'invoice'              => $invoiceData,
             'po_details'           => $po_details,
             'vendor'               => $vendor,
             'state'                => $state,

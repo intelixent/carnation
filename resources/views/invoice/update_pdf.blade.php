@@ -233,6 +233,27 @@
             </td>
         </tr>
         <tr>
+            <td style="border: none;">
+                <strong>PO No:</strong>
+            </td>
+            <td style="border: none;">
+                {{ $invoice['po_num'] ?? '' }}
+            </td>
+            <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
+                @if($vendor->id == 3 && !empty($invoice['customer_po_no']))
+                <strong>Customer PO No:</strong> {{ $invoice['customer_po_no'] }}
+                @else
+                <strong></strong>
+                @endif
+            </td>
+            <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
+                <!-- Empty cell -->
+            </td>
+            <td style="border: none;">
+                <!-- Empty cell -->
+            </td>
+        </tr>
+        <tr>
             <td colspan="3" style="border: 1px solid #000;">
                 <strong>Details of Receiver (Billed to)</strong><br />
                 <strong>Name:</strong> {{ $bill_to_details['billed_legal_name'] ?? '' }}<br />
