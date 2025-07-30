@@ -307,7 +307,7 @@ class InvoiceController extends BaseController
                 : '',
         ];
 
-        return Pdf::loadView('invoice.update_pdf', [
+         return view('invoice.update_pdf', [
             'invoice'              => $invoiceData,
             'po_details'           => $po_details,
             'vendor'               => $vendor,
@@ -319,11 +319,25 @@ class InvoiceController extends BaseController
             'transporter_details'  => $transpDet,
             'irn_details'          => $irnDetails,
             'business_settings'    => $businessSettings,
-        ])
-            ->setOption('isHtml5ParserEnabled', true)
-            ->setOption('isRemoteEnabled', true)
-            ->setPaper('a4', 'portrait')
-            ->stream('invoice.pdf');
+        ]);
+
+        // return Pdf::loadView('invoice.update_pdf', [
+        //     'invoice'              => $invoiceData,
+        //     'po_details'           => $po_details,
+        //     'vendor'               => $vendor,
+        //     'state'                => $state,
+        //     'invoice_item_details' => $items,
+        //     'totalCartonsInInvoice' => $totalCartonsInInvoice,
+        //     'bill_to_details'      => $billTo,
+        //     'ship_to_details'      => $shipTo,
+        //     'transporter_details'  => $transpDet,
+        //     'irn_details'          => $irnDetails,
+        //     'business_settings'    => $businessSettings,
+        // ])
+        //     ->setOption('isHtml5ParserEnabled', true)
+        //     ->setOption('isRemoteEnabled', true)
+        //     ->setPaper('a4', 'portrait')
+        //     ->stream('invoice.pdf');
     }
 
     public function master()
