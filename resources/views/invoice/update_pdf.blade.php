@@ -94,10 +94,16 @@
             padding: 1px;
             vertical-align: top;
         }
+
+        @media print {
+            body {
+                margin: 0;
+            }
+        }
     </style>
 </head>
 
-<body>
+<body onload="window.print()">
 
     <table>
         <tr>
@@ -316,28 +322,28 @@
             </tr>
         </thead>
         <tbody>
-            @foreach ($invoice_item_details as $i => $invoice_item)
+            @foreach ($invoice_item_details as $i => $item)
             <tr>
-                <td class="text-center">{{ $i + 1 }}</td>
-                <td>{{ $invoice_item['description'] }}, {{ $invoice_item['size'] }}</td>
-                <td>{{ $invoice_item['hsn_code'] }}</td>
-                <td class="text-center">{{ $invoice_item['style'] }}</td>
-                <td class="text-center">{{ $invoice_item['color'] }}</td>
-                @if ($loop->first)
+                <td class="text-center">{{ $i+1 }}</td>
+                <td>{{ $item['description'] }}, {{ $item['size'] }}</td>
+                <td>{{ $item['hsn_code'] }}</td>
+                <td class="text-center">{{ $item['style'] }}</td>
+                <td class="text-center">{{ $item['colors'] }}</td> {{-- now holds comma‑list --}}
+                @if ($i === 0)
                 <td class="text-center"
                     style="vertical-align: middle;"
                     rowspan="{{ count($invoice_item_details) }}">
                     <strong>{{ $totalCartonsInInvoice }}</strong>
                 </td>
                 @endif
-                <td class="text-right">{{ $invoice_item['unit'] }}</td>
-                <td class="text-right">{{ $invoice_item['qty'] }}</td>
-                <td class="text-right">{{ IND_money_format($invoice_item['rate'], 2) }}</td>
-                <td class="text-right">{{ IND_money_format($invoice_item['amount'], 2) }}</td>
-                <td class="text-right">{{ IND_money_format($invoice_item['discount'], 2) }}</td>
-                <td class="text-right">{{ IND_money_format($invoice_item['taxable_value'], 2) }}</td>
-                <td class="text-center">{{ IND_money_format($invoice_item['igst_rate'], 2) }}%</td>
-                <td class="text-right">{{ IND_money_format($invoice_item['igst_amount'], 2) }}</td>
+                <td class="text-right">{{ $item['unit'] }}</td>
+                <td class="text-right">{{ $item['qty'] }}</td>
+                <td class="text-right">{{ IND_money_format($item['rate'], 2) }}</td>
+                <td class="text-right">{{ IND_money_format($item['amount'], 2) }}</td>
+                <td class="text-right">{{ IND_money_format($item['discount'], 2) }}</td>
+                <td class="text-right">{{ IND_money_format($item['taxable_value'], 2) }}</td>
+                <td class="text-center">{{ IND_money_format($item['igst_rate'], 2) }}%</td>
+                <td class="text-right">{{ IND_money_format($item['igst_amount'], 2) }}</td>
             </tr>
             @endforeach
         </tbody>

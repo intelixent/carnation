@@ -149,11 +149,13 @@ class InvoiceController extends BaseController
 
     public function generateInvoice(Request $request)
     {
+        // 1. Load invoice with PO → vendor → state
         $invoice    = InvoiceMaster::with(['po.vendor.state'])->findOrFail($request->id);
         $po_details = $invoice->po;
         $vendor     = $po_details->vendor;
         $state      = $vendor->state;
 
+        // 2. Business settings
         $businessSettings = BusinessSettingMaster::whereIn('name', [
             'nsme_register_no',
             'nsme_register_date',
@@ -163,95 +165,110 @@ class InvoiceController extends BaseController
             'business_gst_no'
         ])->pluck('value', 'name')->toArray();
 
-        $packIds     = explode(',', $invoice->pack_ids);
+        // 3. All packing‑list IDs for this invoice
+        $packIds = explode(',', $invoice->pack_ids);
+
+        // 4. Carton counts _per_ packing list
+        $packCartonCounts = PackingListItem::whereIn('packing_list_id', $packIds)
+            ->select('packing_list_id', DB::raw('COUNT(DISTINCT carton_name) AS carton_count'))
+            ->groupBy('packing_list_id')
+            ->pluck('carton_count', 'packing_list_id')
+            ->toArray();
+
+        // 5. Grand total cartons across all packing lists
+        $totalCartonsInInvoice = array_sum($packCartonCounts);
+
+        // 6. Group items by size, aggregate all colors, sum quantities & cartons
         $packedItems = PackingListItem::whereIn('packing_list_id', $packIds)
-            ->select(
-                'po_item_id',
+            ->select([
                 'size',
-                'color',
-                DB::raw('SUM(quantity) as total_quantity'),
-                DB::raw('COUNT(DISTINCT id) as carton_counts')
-            )
-            ->groupBy('po_item_id', 'size', 'color')
+                DB::raw('GROUP_CONCAT(DISTINCT color ORDER BY color SEPARATOR ", ") AS colors'),
+                DB::raw('SUM(quantity) AS total_quantity'),
+                DB::raw('COUNT(DISTINCT carton_name) AS carton_counts'),
+            ])
+            ->groupBy('size')
             ->get();
-        $totalCartonsInInvoice = PackingListItem::whereIn('packing_list_id', $packIds)->distinct()->count('carton_name');
-        $poUnitPrice   = floatval($po_details->vcp);
-        $articleInfo   = json_decode($po_details->article_info, true) ?: [];
-        $items         = [];
+
+        // 7. Build invoice line‑items array
+        $items       = [];
+        $poUnitPrice = floatval($po_details->vcp);
+        $articleInfo = json_decode($po_details->article_info, true) ?: [];
 
         foreach ($packedItems as $pi) {
-            $description = '';
-            $style       = '';
-            $hsn_code    = '';
+            $description = $style = $hsn_code = '';
             $uom         = 'PCS';
-            $color       = $pi->color;
+            $unit_price  = $poUnitPrice;
 
-            if (in_array($vendor->id, [1, 5, 6])) {
-                // Vendors 1,5,6 → PO master price + article_info + PoItems for HSN/UOM
-                $unit_price  = $poUnitPrice;
-                $description = $articleInfo['Article description'] ?? '';
-                $style       = $articleInfo['ARTICLE']             ?? '';
+            // Choose a representative color for lookups
+            $colors = explode(',', $pi->colors);
+            $firstColor = trim($colors[0]);
 
-                // try getting HSN/UOM from the PoItems record
-                if ($pi->po_item_id) {
-                    $itm = PoItems::find($pi->po_item_id);
-                    if ($itm) {
-                        $hsn_code = $itm->hsn_code ?? '';
-                        $uom      = $itm->uom      ?? 'PCS';
-                    }
-                }
-            } elseif ($vendor->id === 4) {
-                // Vendor 4 (Benetton): PoSizes → PoItems
-                $poSize = PoSizes::where('po_id', $po_details->id)
-                    ->where('color', $pi->color)
-                    ->where('size', $pi->size)
-                    ->first();
+            // Attempt to fetch PoItems by representative color & size
+            $itm = PoItems::where('po_id', $po_details->id)
+                ->where('size', $pi->size)
+                ->where('color', $firstColor)
+                ->first();
 
-                if ($poSize) {
-                    $unit_price = $poSize->unit_price ?? 0;
-                    $hsn_code   = $poSize->hsn_code   ?? '';
-                    $uom        = $poSize->uom        ?? 'PCS';
-                }
-
-                $itm = PoItems::where('po_id', $po_details->id)
-                    ->where('color', $pi->color)
-                    ->first();
-                if ($itm) {
-                    $unit_price  = $unit_price ?: ($itm->unit_price ?? 0);
-                    $hsn_code    = $hsn_code   ?: ($itm->hsn_code   ?? '');
-                    $uom         = $uom        ?: ($itm->uom        ?? 'PCS');
-                    $description = $itm->part_description ?? '';
-                    $style       = $itm->article_number   ?? '';
-                }
-            } else {
-                // Vendors 2,3 (or others): PoItems price + specific description/style
-                $itm = PoItems::find($pi->po_item_id);
-                if ($itm) {
-                    $unit_price = floatval($itm->unit_price ?? 0);
-                    $hsn_code   = $itm->hsn_code     ?? '';
-                    $uom        = $itm->uom          ?? 'PCS';
-
-                    switch ($vendor->id) {
-                        case 2:
-                            $description = $itm->type           ?? '';
-                            $style       = $itm->article_number ?? '';
-                            break;
-                        case 3:
-                            $description = $itm->style_description ?? '';
-                            $style       = $itm->article_number     ?? '';
-                            break;
-                        default:
-                            $description = $articleInfo['Article description'] ?? '';
-                            $style       = $articleInfo['ARTICLE']             ?? '';
-                    }
-                } else {
-                    // fallback to PO master price & article_info
-                    $unit_price  = $poUnitPrice;
+            switch ($vendor->id) {
+                case 1:
+                case 5:
+                case 6:
                     $description = $articleInfo['Article description'] ?? '';
                     $style       = $articleInfo['ARTICLE']             ?? '';
-                }
+                    if ($itm) {
+                        $hsn_code = $itm->hsn_code;
+                        $uom      = $itm->uom;
+                    }
+                    break;
+
+                case 4:
+                    $poSize = PoSizes::where('po_id', $po_details->id)
+                        ->where('size', $pi->size)
+                        ->where('color', $firstColor)
+                        ->first();
+                    if ($poSize) {
+                        $unit_price = $poSize->unit_price ?: $unit_price;
+                        $hsn_code   = $poSize->hsn_code   ?? '';
+                        $uom        = $poSize->uom        ?? 'PCS';
+                    }
+                    if ($itm) {
+                        $unit_price  = $unit_price ?: floatval($itm->unit_price);
+                        $hsn_code    = $hsn_code   ?: $itm->hsn_code;
+                        $uom         = $uom        ?: $itm->uom;
+                        $description = $itm->part_description ?? '';
+                        $style       = $itm->article_number   ?? '';
+                    }
+                    break;
+
+                case 2:
+                case 3:
+                    if ($itm) {
+                        $unit_price = floatval($itm->unit_price ?? 0);
+                        $hsn_code   = $itm->hsn_code     ?? '';
+                        $uom        = $itm->uom          ?? 'PCS';
+                        if ($vendor->id === 2) {
+                            $description = $itm->type;
+                            $style       = $itm->article_number;
+                        } else {
+                            $description = $itm->style_description;
+                            $style       = $itm->article_number;
+                        }
+                    }
+                    break;
+
+                default:
+                    $description = $articleInfo['Article description'] ?? '';
+                    $style       = $articleInfo['ARTICLE']             ?? '';
+                    break;
             }
 
+            // Fallback PoItems lookup if hsn_code still empty
+            if (empty($hsn_code) && $itm) {
+                $hsn_code = $itm->hsn_code;
+                $uom      = $itm->uom;
+            }
+
+            // Compute amounts
             $amount         = $pi->total_quantity * $unit_price;
             $discountPct    = $vendor->discount ?? 0;
             $discountAmount = ($amount * $discountPct) / 100;
@@ -263,7 +280,7 @@ class InvoiceController extends BaseController
                 'description'    => $description,
                 'hsn_code'       => $hsn_code,
                 'style'          => $style,
-                'color'          => $color,
+                'colors'         => $pi->colors,
                 'total_cartons'  => $pi->carton_counts,
                 'unit'           => $uom,
                 'size'           => $pi->size,
@@ -277,67 +294,53 @@ class InvoiceController extends BaseController
             ];
         }
 
-        // Decode any JSON details
-        $billTo      = json_decode($invoice->bill_to_details, true)      ?: [];
-        $shipTo      = json_decode($invoice->ship_to_details, true)      ?: [];
-        $transpDet   = json_decode($invoice->transporter_details, true)  ?: [];
-        $irnDetails  = json_decode($invoice->irn_details, true)          ?: [];
+        // 8. Decode billing/shipping/transporter/IRN JSONs
+        $billTo     = json_decode($invoice->bill_to_details, true)     ?: [];
+        $shipTo     = json_decode($invoice->ship_to_details, true)     ?: [];
+        $transpDet  = json_decode($invoice->transporter_details, true) ?: [];
+        $irnDetails = json_decode($invoice->irn_details, true)         ?: [];
 
+        // 9. Resolve state & transporter names
         if (!empty($billTo['billed_state'])) {
             $bs = StateMaster::find($billTo['billed_state']);
-            $billTo['billed_state_name'] = $bs->name ?? null;
-            $billTo['billed_state_code'] = $bs->code ?? null;
+            $billTo['billed_state_name'] = $bs->name  ?? null;
+            $billTo['billed_state_code'] = $bs->code  ?? null;
         }
         if (!empty($shipTo['shipped_state'])) {
             $ss = StateMaster::find($shipTo['shipped_state']);
-            $shipTo['shipped_state_name'] = $ss->name ?? null;
-            $shipTo['shipped_state_code'] = $ss->code ?? null;
+            $shipTo['shipped_state_name'] = $ss->name  ?? null;
+            $shipTo['shipped_state_code'] = $ss->code  ?? null;
         }
         if (!empty($transpDet['transport_name'])) {
             $tp = TransportMaster::find($transpDet['transport_name']);
             $transpDet['transport_name_display'] = $tp->name ?? null;
         }
 
+        // 10. Prepare top‑level invoice data
         $invoiceData = [
-            'ref_no' => $invoice->ref_no ?? '',
-            'inv_date' => $invoice->inv_date ?? '',
-            'po_num' => $po_details->po_num ?? '',
-            'customer_po_no' => ($vendor->id == 3 && isset($articleInfo['customer_po_no']))
+            'ref_no'         => $invoice->ref_no,
+            'inv_date'       => $invoice->inv_date,
+            'po_num'         => $po_details->po_num,
+            'customer_po_no' => ($vendor->id === 3 && isset($articleInfo['customer_po_no']))
                 ? $articleInfo['customer_po_no']
                 : '',
         ];
 
-         return view('invoice.update_pdf', [
-            'invoice'              => $invoiceData,
-            'po_details'           => $po_details,
-            'vendor'               => $vendor,
-            'state'                => $state,
-            'invoice_item_details' => $items,
+        // 11. Render the Blade view
+        return view('invoice.update_pdf', [
+            'invoice'               => $invoiceData,
+            'po_details'            => $po_details,
+            'vendor'                => $vendor,
+            'state'                 => $state,
+            'invoice_item_details'  => $items,
+            'packCartonCounts'      => $packCartonCounts,
             'totalCartonsInInvoice' => $totalCartonsInInvoice,
-            'bill_to_details'      => $billTo,
-            'ship_to_details'      => $shipTo,
-            'transporter_details'  => $transpDet,
-            'irn_details'          => $irnDetails,
-            'business_settings'    => $businessSettings,
+            'bill_to_details'       => $billTo,
+            'ship_to_details'       => $shipTo,
+            'transporter_details'   => $transpDet,
+            'irn_details'           => $irnDetails,
+            'business_settings'     => $businessSettings,
         ]);
-
-        // return Pdf::loadView('invoice.update_pdf', [
-        //     'invoice'              => $invoiceData,
-        //     'po_details'           => $po_details,
-        //     'vendor'               => $vendor,
-        //     'state'                => $state,
-        //     'invoice_item_details' => $items,
-        //     'totalCartonsInInvoice' => $totalCartonsInInvoice,
-        //     'bill_to_details'      => $billTo,
-        //     'ship_to_details'      => $shipTo,
-        //     'transporter_details'  => $transpDet,
-        //     'irn_details'          => $irnDetails,
-        //     'business_settings'    => $businessSettings,
-        // ])
-        //     ->setOption('isHtml5ParserEnabled', true)
-        //     ->setOption('isRemoteEnabled', true)
-        //     ->setPaper('a4', 'portrait')
-        //     ->stream('invoice.pdf');
     }
 
     public function master()
