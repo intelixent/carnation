@@ -368,8 +368,20 @@
             // Instantiate the formatter once
             $formatter = new \NumberFormatter('en_IN', \NumberFormatter::SPELLOUT);
 
-            // Format and capitalize
-            $totalInWords = strtoupper($formatter->format($finalAmount));
+            // Split the amount into rupees and paise
+            $rupees = floor($finalAmount);
+            $paise = round(($finalAmount - $rupees) * 100);
+
+            // Format rupees in words
+            $rupeesInWords = strtoupper($formatter->format($rupees));
+
+            // Format the complete amount in words
+            if ($paise > 0) {
+            $paiseInWords = strtoupper($formatter->format($paise));
+            $totalInWords = $rupeesInWords . ' RUPEES AND ' . $paiseInWords . ' PAISE';
+            } else {
+            $totalInWords = $rupeesInWords . ' RUPEES';
+            }
             @endphp
             <tr>
                 <td colspan="14" align="left"><strong>Invoice Total ( In Words) : INR {{ $totalInWords }} ONLY</strong></td>

@@ -198,16 +198,24 @@ class InvoiceController extends BaseController
             $description = $style = $hsn_code = '';
             $uom         = 'PCS';
             $unit_price  = $poUnitPrice;
+            $igstRateDefault = 5.00;
 
             // Choose a representative color for lookups
             $colors = explode(',', $pi->colors);
             $firstColor = trim($colors[0]);
 
-            // Attempt to fetch PoItems by representative color & size
+            // Fetch PoItems by representative color & size
             $itm = PoItems::where('po_id', $po_details->id)
                 ->where('size', $pi->size)
                 ->where('color', $firstColor)
                 ->first();
+
+            // Determine IGST rate: vendor 1,5,6 use item-specific, others default
+            if (in_array($vendor->id, [1, 5, 6]) && $itm && isset($itm->igst_per)) {
+                $igstRate = floatval($itm->igst_per);
+            } else {
+                $igstRate = $igstRateDefault;
+            }
 
             switch ($vendor->id) {
                 case 1:
@@ -262,7 +270,7 @@ class InvoiceController extends BaseController
                     break;
             }
 
-            // Fallback PoItems lookup if hsn_code still empty
+            // Fallback hs n_code
             if (empty($hsn_code) && $itm) {
                 $hsn_code = $itm->hsn_code;
                 $uom      = $itm->uom;
@@ -273,7 +281,6 @@ class InvoiceController extends BaseController
             $discountPct    = $vendor->discount ?? 0;
             $discountAmount = ($amount * $discountPct) / 100;
             $taxableValue   = $amount - $discountAmount;
-            $igstRate       = 5.00;
             $igstAmount     = ($taxableValue * $igstRate) / 100;
 
             $items[] = [
@@ -294,13 +301,11 @@ class InvoiceController extends BaseController
             ];
         }
 
-        // 8. Decode billing/shipping/transporter/IRN JSONs
         $billTo     = json_decode($invoice->bill_to_details, true)     ?: [];
         $shipTo     = json_decode($invoice->ship_to_details, true)     ?: [];
         $transpDet  = json_decode($invoice->transporter_details, true) ?: [];
         $irnDetails = json_decode($invoice->irn_details, true)         ?: [];
 
-        // 9. Resolve state & transporter names
         if (!empty($billTo['billed_state'])) {
             $bs = StateMaster::find($billTo['billed_state']);
             $billTo['billed_state_name'] = $bs->name  ?? null;
@@ -316,7 +321,6 @@ class InvoiceController extends BaseController
             $transpDet['transport_name_display'] = $tp->name ?? null;
         }
 
-        // 10. Prepare top‑level invoice data
         $invoiceData = [
             'ref_no'         => $invoice->ref_no,
             'inv_date'       => $invoice->inv_date,
@@ -326,7 +330,6 @@ class InvoiceController extends BaseController
                 : '',
         ];
 
-        // 11. Render the Blade view
         return view('invoice.update_pdf', [
             'invoice'               => $invoiceData,
             'po_details'            => $po_details,
