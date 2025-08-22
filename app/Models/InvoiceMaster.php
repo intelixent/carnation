@@ -16,6 +16,7 @@ class InvoiceMaster extends Model
     protected $fillable = [
         'ref_no',
         'inv_date',
+        'gst',
         'bill_to_details',
         'ship_to_details',
         'po_id',

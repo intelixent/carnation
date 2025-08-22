@@ -10,6 +10,7 @@ use App\Http\Controllers\VendorController;
 use App\Http\Controllers\PackingListController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\TransportController;
+use App\Http\Controllers\EInvoiceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -112,8 +113,13 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/invoice_details_edit', [InvoiceController::class, 'invoice_details_edit'])->name('invoice_details_edit');
         Route::post('/invoice_details_update', [InvoiceController::class, 'invoice_details_update'])->name('invoice_details_update');
         Route::post('/store_invoice', [InvoiceController::class, 'store_invoice'])->name('store_invoice');
-
         Route::get('/download', [InvoiceController::class, 'generateInvoice'])->name('generateInvoice');
+    });
+
+    Route::group(['prefix' => 'e_invoice'], function () {
+        Route::get('/master', [EInvoiceController::class, 'e_invoice_master'])->name('e_invoice_master');
+        Route::post('/table', [EInvoiceController::class, 'e_invoice_master_table'])->name('e_invoice_master_table');
+        Route::get('/excel_download', [EInvoiceController::class, 'e_invoice_excel_download'])->name('e_invoice_excel_download');
     });
 
     Route::group(['prefix' => 'settings'], function () {

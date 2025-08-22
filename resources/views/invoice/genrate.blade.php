@@ -12,7 +12,7 @@
             <div class="card">
                 <div class="card-header justify-content-between bg-primary">
                     <div class="card-title text-white">
-                        Genrate Invoice
+                        Generate Invoice
                     </div>
                 </div>
                 <div class="card-body">
@@ -47,6 +47,16 @@
                             <div id="tableContainer"></div>
                         </div>
                     </div>
+
+                    <!-- Invoice Preview Section -->
+                    <div class="row mt-4" id="invoicePreviewSection" style="display: none;">
+                        <div class="col-xl-12">
+                            <h4 class="text-success mb-3">
+                                Invoice Preview
+                            </h4>
+                            <div id="invoicePreviewContainer"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -75,6 +85,7 @@
 
             poSelect.prop('disabled', true).html('<option value="">Select PO</option>');
             $('#po_details').hide();
+            $('#invoicePreviewSection').hide();
 
             if (vendorId) {
                 $.ajax({
@@ -106,6 +117,8 @@
         $('#po_id').on('change', function() {
             var poId = $(this).val();
             var vendor_id = $("#vendor_id").val();
+            $('#invoicePreviewSection').hide();
+
             $.ajax({
                 url: '{{ route("get_packging_list") }}',
                 method: 'POST',
@@ -138,6 +151,100 @@
             }
         });
 
+        function displayInvoicePreview(invoiceData) {
+            let previewHtml = `
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <strong>Invoice No:</strong> ${invoiceData.invoice.ref_no}
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Invoice Date:</strong> ${invoiceData.invoice.inv_date}
+                    </div>
+                    <div class="col-md-4">
+                        <strong>GST Rate:</strong> ${invoiceData.invoice.gst_rate}%
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>SI No</th>
+                                <th>Description</th>
+                                <th>HSN</th>
+                                <th>Style</th>
+                                <th>Colors</th>
+                                <th>Size</th>
+                                <th>UOM</th>
+                                <th>Qty</th>
+                                <th>Rate</th>
+                                <th>Amount</th>
+                                <th>Discount</th>
+                                <th>Taxable Value</th>
+                                <th>GST Rate</th>
+                                <th>GST Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+            let totalAmount = 0;
+            let totalDiscount = 0;
+            let totalTaxable = 0;
+            let totalGstAmount = 0;
+            let totalQty = 0;
+
+            invoiceData.items.forEach((item, index) => {
+                totalAmount += parseFloat(item.amount);
+                totalDiscount += parseFloat(item.discount);
+                totalTaxable += parseFloat(item.taxable_value);
+                totalGstAmount += parseFloat(item.gst_amount);
+                totalQty += parseInt(item.qty);
+
+                previewHtml += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${item.description}, ${item.size}</td>
+                        <td>${item.hsn_code}</td>
+                        <td>${item.style}</td>
+                        <td>${item.colors}</td>
+                        <td>${item.size}</td>
+                        <td>${item.unit}</td>
+                        <td class="text-right">${item.qty}</td>
+                        <td class="text-right">₹${parseFloat(item.rate).toFixed(2)}</td>
+                        <td class="text-right">₹${parseFloat(item.amount).toFixed(2)}</td>
+                        <td class="text-right">₹${parseFloat(item.discount).toFixed(2)}</td>
+                        <td class="text-right">₹${parseFloat(item.taxable_value).toFixed(2)}</td>
+                        <td class="text-center">${parseFloat(item.gst_rate).toFixed(2)}%</td>
+                        <td class="text-right">₹${parseFloat(item.gst_amount).toFixed(2)}</td>
+                    </tr>`;
+            });
+
+            let finalAmount = totalTaxable + totalGstAmount;
+
+            previewHtml += `
+                        </tbody>
+                        <tfoot class="table-secondary">
+                            <tr>
+                                <td colspan="7" class="text-right"><strong>Total</strong></td>
+                                <td class="text-right"><strong>${totalQty}</strong></td>
+                                <td></td>
+                                <td class="text-right"><strong>₹${totalAmount.toFixed(2)}</strong></td>
+                                <td class="text-right"><strong>₹${totalDiscount.toFixed(2)}</strong></td>
+                                <td class="text-right"><strong>₹${totalTaxable.toFixed(2)}</strong></td>
+                                <td></td>
+                                <td class="text-right"><strong>₹${totalGstAmount.toFixed(2)}</strong></td>
+                            </tr>
+                            <tr>
+                                <td colspan="13" class="text-right"><strong>Final Amount</strong></td>
+                                <td class="text-right"><strong>₹${finalAmount.toFixed(2)}</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>`;
+
+            $('#invoicePreviewContainer').html(previewHtml);
+            $('#invoicePreviewSection').show();
+        }
+
         // Generate Invoice button click
         $(document).on('click', '#generateInvoiceBtn', function() {
             let selectedIds = $('.po_pack:checked')
@@ -147,12 +254,21 @@
             // grab invoice fields
             let invoiceNo = $('#invoice_no').val().trim();
             let invoiceDate = $('#invoice_date').val();
+            let gstRate = $('#gst_rate').val().trim();
 
-            if (!invoiceNo || !invoiceDate) {
+            if (!invoiceNo || !invoiceDate || !gstRate) {
                 return Swal.fire({
                     icon: 'warning',
                     title: 'Oops!',
-                    text: 'Please enter both Invoice No. and Invoice Date'
+                    text: 'Please enter Invoice No., Invoice Date, and GST Rate'
+                });
+            }
+
+            if (isNaN(gstRate) || parseFloat(gstRate) < 0 || parseFloat(gstRate) > 100) {
+                return Swal.fire({
+                    icon: 'warning',
+                    title: 'Invalid GST Rate',
+                    text: 'GST rate must be a number between 0 and 100'
                 });
             }
 
@@ -179,6 +295,7 @@
                         selected_vendor_id: $('.selected_vendor_id').val(),
                         invoice_no: invoiceNo,
                         invoice_date: invoiceDate,
+                        gst: parseFloat(gstRate),
                         _token: $('meta[name="csrf-token"]').attr('content')
                     })
                     .done(response => {
@@ -188,7 +305,9 @@
                             text: response.message,
                             timer: response.success ? 2000 : null
                         }).then(() => {
-                            if (response.success) window.location.reload();
+                            if (response.success && response.invoice_data) {
+                                displayInvoicePreview(response.invoice_data);
+                            }
                         });
                     })
                     .fail(xhr => {
