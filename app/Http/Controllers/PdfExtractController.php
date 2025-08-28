@@ -223,6 +223,8 @@ class PdfExtractController extends BaseController
                 $view = 'pdf_extract.puma_response_view';
             } elseif ($extraction_no === '4') {
                 $view = 'pdf_extract.benetton_response_view';
+            } elseif ($extraction_no === '5') {
+                $view = 'pdf_extract.aditiya_response_view';
             } else {
                 $view = 'pdf_extract.jack_jones_response_view';
             }
