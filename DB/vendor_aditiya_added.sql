@@ -1,0 +1,4 @@
+SET NAMES utf8mb4;
+
+INSERT INTO `vendor_master` (`id`, `name`, `mobile`, `email`, `excess`, `shortage`, `discount`, `payment_terms`, `extraction_no`, `custom_field_no`, `notes`, `billing_legal_name`, `billing_address_1`, `billing_address_2`, `billing_city_town_village`, `billing_pincode`, `billing_gst_no`, `billing_pan_no`, `billing_gst_type`, `billing_state_id`, `shipping_legal_name`, `shipping_address_1`, `shipping_address_2`, `shipping_city_town_village`, `shipping_pincode`, `shipping_gst_no`, `shipping_pan_no`, `shipping_place_supply`, `shipping_state_id`, `created_by`, `created_at`, `status`) VALUES
+(7,	'Aditiya',	'9360041255',	'ac01@carnationworld.com',	'2.9',	'2',	NULL,	NULL,	'5',	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	1,	'2025-05-25 21:41:35',	0);

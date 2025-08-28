@@ -1559,7 +1559,9 @@ class PackingListController extends BaseController
             $totals = [
                 'carton_count' => 0,
                 'per_size'     => array_fill_keys($sizeOrder, 0),
-                'total_pieces' => 0
+                'total_pieces' => 0,
+                'total_net_weight' => 0,
+                'total_gross_weight' => 0
             ];
 
             foreach ($mergedRanges as $rangeKey => $rangeData) {
@@ -1578,8 +1580,11 @@ class PackingListController extends BaseController
                 $firstItem = $allItems->first();
                 $carton = $firstItem->carton;
 
-                $netWeightPerCarton = $carton->net_weight ?? 0;
-                $grossWeightPerCarton = $carton->gross_weight ?? 0;
+                $netWeightPerCarton = $firstItem->net_weight ?? 0;
+                $grossWeightPerCarton = ($firstItem->net_weight ?? 0) + 1.50;
+
+                $totalNetWeightForRange = $netWeightPerCarton * $cartonCount;
+                $totalGrossWeightForRange = $grossWeightPerCarton * $cartonCount;
 
                 $dimension = '';
                 if (
@@ -1609,6 +1614,8 @@ class PackingListController extends BaseController
                     'total'           => $totalQty,
                     'net_wt_per'      => $netWeightPerCarton,
                     'grs_wt_per'      => $grossWeightPerCarton,
+                    'net_wt_total'    => $totalNetWeightForRange,
+                    'grs_wt_total'    => $totalGrossWeightForRange,
                     'ctn_dim'         => $dimension,
                     'mrp'             => $mrp,
                     'po_item_id'      => $firstItem->po_item_id,
@@ -1634,6 +1641,9 @@ class PackingListController extends BaseController
                     }
                 }
                 $totals['total_pieces'] += $totalQty;
+                $totals['total_net_weight'] += $totalNetWeightForRange;
+                $totals['total_gross_weight'] += $totalGrossWeightForRange;
+
 
                 $tableRows[] = $row;
             }

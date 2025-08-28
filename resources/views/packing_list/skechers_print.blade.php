@@ -275,11 +275,12 @@
                 {{-- TOTAL pieces across all rows --}}
                 <td>{{ $tableData['totals']['total_pieces'] }}</td>
 
-                {{-- G.WT total blank (or you may compute aggregated gross weight if desired) --}}
-                <td></td>
+                {{-- G.WT total - now showing the calculated total --}}
+                <td>{{ number_format($tableData['totals']['total_gross_weight'] ?? 0, 2) }}</td>
 
-                {{-- N.WT total blank (or aggregated net weight) --}}
-                <td></td>
+                {{-- N.WT total - now showing the calculated total --}}
+                <td>{{ number_format($tableData['totals']['total_net_weight'] ?? 0, 2) }}</td>
+
             </tr>
         </tbody>
     </table>

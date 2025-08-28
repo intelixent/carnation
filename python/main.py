@@ -1807,6 +1807,376 @@ def extract_benetton(pdf_path):
     
     return results
 
+def extract_aditiya(pdf_path):
+    print("Starting extraction from:", pdf_path)
+    results = {}
+    
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            print(f"PDF opened successfully with {len(pdf.pages)} pages")
+            
+            # Extract all tables from every page
+            all_tables = []
+            page_texts = []  # Store text from each page separately
+            
+            for i, page in enumerate(pdf.pages):
+                print(f"\nProcessing Page {i+1} tables...")
+                
+                # Extract tables
+                tables = page.extract_tables({
+                    "vertical_strategy": "lines",
+                    "horizontal_strategy": "lines",
+                    "explicit_vertical_lines": page.curves + page.edges,
+                    "explicit_horizontal_lines": page.curves + page.edges,
+                })
+                
+                for table_num, table in enumerate(tables):
+                    print(f"\nTable {table_num+1} on page {i+1}:")
+                    for row_num, row in enumerate(table):
+                        print(f"Row {row_num}: {row}")
+                    all_tables.append({'table': table, 'page': i})  # Track which page each table is from
+                
+                # Extract and store text from each page separately
+                page_text = page.extract_text()
+                page_texts.append(page_text)
+                print(f"\n--- Page {i+1} Text Preview ---")
+                print(page_text[:500] + "..." if len(page_text) > 500 else page_text)
+            
+            # Store raw tables for template to handle
+            results["raw_tables"] = [item['table'] for item in all_tables]
+            
+            # Combine all page texts for general extraction
+            text = "\n".join(page_texts)
+            
+            # Extract PO details (same as before)
+            print("\n--- DEBUGGING: Looking for PO details in text ---")
+            
+            # Extract PO Number
+            po_no_patterns = [
+                r'P\.O No\.?\s*([A-Z0-9]+)',
+                r'PO No\.?\s*([A-Z0-9]+)',
+                r'Purchase Order No\.?\s*([A-Z0-9]+)'
+            ]
+            
+            po_no = ""
+            for pattern in po_no_patterns:
+                po_no_match = re.search(pattern, text)
+                if po_no_match:
+                    po_no = po_no_match.group(1)
+                    print(f"Found PO Number: {po_no}")
+                    break
+            
+            if not po_no:
+                print("PO Number not found with standard patterns")
+            
+            # Extract PO Date
+            po_date_patterns = [
+                r'Date\s*(\d{2}\.\d{2}\.\d{4})',
+                r'P\.O Date\s*(\d{2}\.\d{2}\.\d{4})',
+                r'Order Date\s*(\d{2}\.\d{2}\.\d{4})'
+            ]
+            
+            po_date = ""
+            for pattern in po_date_patterns:
+                po_date_match = re.search(pattern, text)
+                if po_date_match:
+                    po_date = po_date_match.group(1)
+                    print(f"Found PO Date: {po_date}")
+                    break
+            
+            if not po_date:
+                print("PO Date not found with standard patterns")
+            
+            results.update({
+                "po_number": po_no,
+                "po_date": po_date
+            })
+            
+            # Extract Bill To / Ship To Address (same as before)
+            print("\n--- DEBUGGING: Looking for Bill To/Ship To address ---")
+            bill_to_address = []
+            bill_to_pos = text.find("Bill to/Ship to address.")
+            if bill_to_pos >= 0:
+                search_start = bill_to_pos + len("Bill to/Ship to address.")
+                gst_pos = text.find("GST No.", search_start)
+                
+                if gst_pos > bill_to_pos:
+                    bill_to_text = text[search_start:gst_pos].strip()
+                    lines = bill_to_text.split('\n')
+                    filtered_lines = []
+                    for line in lines:
+                        clean_line = line.strip()
+                        if clean_line and not any(skip_word in clean_line.upper() for skip_word in ['SUPPLIER:', 'YOUR VENDOR', 'VENDOR GST']):
+                            filtered_lines.append(clean_line)
+                    bill_to_address = filtered_lines
+
+            results["bill_to_ship_address"] = bill_to_address if bill_to_address else "Not found"
+            
+            # ENHANCED PO Items extraction with correct column mapping
+            print("\n--- DEBUGGING: Looking for PO Items with correct column mapping ---")
+            po_items = []
+            
+            # First, identify all PO item tables and combine them
+            po_item_tables = []
+            headers = None
+            
+            for table_info in all_tables:
+                table = table_info['table']
+                page_num = table_info['page']
+                
+                print(f"\nAnalyzing table on page {page_num + 1} for PO items...")
+                
+                if len(table) > 0:
+                    first_row = table[0] if table[0] else []
+                    first_row_str = ' '.join([str(cell) for cell in first_row if cell])
+                    
+                    # Check if this is a PO items table (header row)
+                    if any(header in first_row_str.upper() for header in ['MATERIAL CODE', 'HSN NUMBER', 'QTY', 'RATE/UNIT']):
+                        print("Found PO Items table header!")
+                        headers = []
+                        for cell in first_row:
+                            if cell:
+                                clean_header = str(cell).replace('\n', ' ').strip()
+                                headers.append(clean_header)
+                            else:
+                                headers.append('')
+                        
+                        print(f"Headers: {headers}")
+                        
+                        # Add data rows from this table
+                        for row_idx, row in enumerate(table[1:], 1):
+                            if row and row[0]:
+                                po_item_tables.append({
+                                    'row': row, 
+                                    'page': page_num, 
+                                    'table_row': row_idx
+                                })
+                    
+                    # Check if this is a continuation of PO items table
+                    elif headers and len(table) > 0 and any(row and row[0] and 'VDSHESKF' in str(row[0]) for row in table):
+                        print("Found continuation of PO Items table!")
+                        for row_idx, row in enumerate(table):
+                            if row and row[0]:
+                                po_item_tables.append({
+                                    'row': row, 
+                                    'page': page_num, 
+                                    'table_row': row_idx
+                                })
+            
+            print(f"\nTotal raw PO item rows found: {len(po_item_tables)}")
+            
+            # Function to find continuation data in next page's text
+            def find_continuation_in_next_page(incomplete_row, current_page_idx):
+                """Find continuation data for incomplete rows in subsequent pages"""
+                if current_page_idx + 1 >= len(page_texts):
+                    return []
+                
+                next_page_text = page_texts[current_page_idx + 1]
+                next_page_lines = next_page_text.split('\n')
+                
+                print(f"\n--- Searching for continuation in page {current_page_idx + 2} ---")
+                
+                continuation_data = []
+                
+                for line_idx, line in enumerate(next_page_lines):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # Updated regex to match your actual patterns: U62773, 391417, etc.
+                    # This matches: letter+digits OR just digits, followed by space and more data
+                    if re.match(r'^([A-Z]?\d+)\s+\d+\s+[A-Z]\s+[A-Z]\d*', line):
+                        parts = line.split()
+                        print(f"Found potential continuation line: {line}")
+                        print(f"Parts: {parts}")
+                        
+                        # Collect this line's data
+                        continuation_parts = parts[:]
+                        
+                        # Look ahead for the next line which should contain more data
+                        if line_idx + 1 < len(next_page_lines):
+                            next_line = next_page_lines[line_idx + 1].strip()
+                            # Check if next line has numeric data and doesn't start with VDSHESKF
+                            if next_line and not next_line.startswith('VDSHESKF') and re.match(r'^\d+', next_line):
+                                next_parts = next_line.split()
+                                continuation_parts.extend(next_parts)
+                                print(f"Added from next line: {next_parts}")
+                        
+                        return continuation_parts
+                
+                return []
+            
+            # Process and combine split rows with correct column mapping
+            if headers and po_item_tables:
+                print("\n--- DEBUGGING: Combining split rows with correct column mapping ---")
+                
+                combined_rows = []
+                
+                for item_idx, item_info in enumerate(po_item_tables):
+                    row = item_info['row']
+                    page_num = item_info['page']
+                    
+                    print(f"\nProcessing row {item_idx + 1} from page {page_num + 1}: {row}")
+                    
+                    # Skip total/subtotal rows
+                    if any(word in str(row[0]).upper() for word in ['TOTAL', 'SUBTOTAL']):
+                        print("Skipping total/subtotal row")
+                        continue
+                    
+                    # Clean the row
+                    cleaned_row = []
+                    for cell in row:
+                        cleaned_cell = str(cell).strip().replace('\n', '') if cell else ''
+                        cleaned_row.append(cleaned_cell)
+                    
+                    # Check if this row seems incomplete (Row 10 pattern)
+                    is_incomplete = False
+                    
+                    # Specific check for the problematic row pattern
+                    # Row 10: Material code is just 'VDSHESKF' (missing G12522 part) and Per field is empty
+                    if (len(cleaned_row) > 0 and 
+                        cleaned_row[0] == 'VDSHESKF' and 
+                        len(cleaned_row) > 4 and 
+                        cleaned_row[4] == ''):  # Missing 'Per' field
+                        
+                        print("Detected incomplete row - searching for continuation...")
+                        is_incomplete = True
+                        
+                        # Find continuation data
+                        continuation_data = find_continuation_in_next_page(cleaned_row, page_num)
+                        
+                        if continuation_data:
+                            print(f"Found continuation data: {continuation_data}")
+                            
+                            # Map continuation data according to your specification:
+                            # G12522 - Material Code (append to existing)
+                            # 69 - Val1 
+                            # H - Size (append to existing)
+                            # Q1 - Store Loc (append to existing) 
+                            # 1 - Per
+                            # 3115 - Store Loc (append to existing)
+                            
+                            # Map continuation data according to your specification:
+                            if len(continuation_data) >= 5:
+                                # G12522 - append to Material Code (index 0)
+                                cleaned_row[0] = cleaned_row[0] + continuation_data[0]  # VDSHESKF + G12522
+                                
+                                # 1 - Per field (index 4)
+                                cleaned_row[4] = continuation_data[4]  # '1'
+                                
+                                # 69 - Val1 field (index 11) - ADD to existing value, don't replace
+                                if len(cleaned_row) > 11:
+                                    cleaned_row[11] = cleaned_row[11] + continuation_data[1]  # '044' + 'H'
+                                
+                                # H - append to Size field (index 14)
+                                if len(cleaned_row) > 14:
+                                    cleaned_row[14] = cleaned_row[14] + continuation_data[2]  # '044' + 'H'
+                                
+                                # Q1 and 3115 - append to Store Location field (index 17)
+                                if len(cleaned_row) > 17:
+                                    cleaned_row[17] = cleaned_row[17] + continuation_data[3] + continuation_data[5]  # 'DM' + 'Q1' + '3115'
+                                
+                                print(f"Reconstructed complete row with correct mapping: {cleaned_row}")
+                                print("Column mapping applied:")
+                                print(f"  Material Code: {cleaned_row[0]}")
+                                print(f"  Per: {cleaned_row[4]}")
+                                print(f"  Val1: {cleaned_row[11] if len(cleaned_row) > 11 else 'N/A'}")
+                                print(f"  Size: {cleaned_row[14] if len(cleaned_row) > 14 else 'N/A'}")
+                                print(f"  Store Loc: {cleaned_row[17] if len(cleaned_row) > 17 else 'N/A'}")
+                            else:
+                                print("Insufficient continuation data found")
+                    
+                    # Add the row (complete or incomplete) to results
+                    combined_rows.append(cleaned_row)
+                
+                print(f"\nTotal combined rows: {len(combined_rows)}")
+                
+                # Convert combined rows to item dictionaries
+                for row in combined_rows:
+                    item = {}
+                    for col_idx, cell in enumerate(row):
+                        if col_idx < len(headers) and headers[col_idx]:
+                            item[headers[col_idx]] = cell if cell else ''
+                    
+                    if item and item.get(headers[0]):  # Only add items with material code
+                        po_items.append(item)
+                        print(f"Added item: {item}")
+                
+                results["po_items"] = po_items
+                print(f"Total PO items extracted: {len(po_items)}")
+            
+            # Extract Material Description (same as before)
+            print("\n--- DEBUGGING: Looking for Material Description in text ---")
+            material_descriptions = []
+            
+            header_pattern = "Material Material description Colour Warer Trail"
+            header_pos = text.find(header_pattern)
+            
+            if header_pos != -1:
+                end_pattern = "FOB Landed"
+                end_pos = text.find(end_pattern, header_pos)
+                
+                if end_pos != -1:
+                    section_text = text[header_pos + len(header_pattern):end_pos].strip()
+                    section_lines = section_text.split('\n')
+                    
+                    for line in section_lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            desc_item = {
+                                "Material": parts[0],
+                                "Material description": ' '.join(parts[1:-2]),
+                                "Colour": parts[-2],
+                                "Warer Trail": parts[-1]
+                            }
+                            material_descriptions.append(desc_item)
+            
+            results["material_descriptions"] = material_descriptions
+            
+            # Extract additional details (same as before)
+            total_value_match = re.search(r'Total Value\s*([\d,]+\.?\d*)\s*INR', text)
+            if total_value_match:
+                results["total_value"] = total_value_match.group(1)
+            
+            total_qty_match = re.search(r'Total Quantity\s*([\d,]+\.?\d*)', text)
+            if total_qty_match:
+                results["total_quantity"] = total_qty_match.group(1)
+            
+            payment_terms_match = re.search(r'Payment terms:\s*([^\n]+)', text)
+            if payment_terms_match:
+                results["payment_terms"] = payment_terms_match.group(1).strip()
+            
+            vendor_match = re.search(r'Your Vendor Number With Us\s*:\s*(\d+)', text)
+            if vendor_match:
+                results["vendor_number"] = vendor_match.group(1)
+            
+            vendor_gst_match = re.search(r'Vendor GST No\.\s*:\s*([A-Z0-9]+)', text)
+            if vendor_gst_match:
+                results["vendor_gst"] = vendor_gst_match.group(1)
+            
+            print("\n--- FINAL RESULTS SUMMARY ---")
+            print(f"PO Number: {results.get('po_number', 'Not found')}")
+            print(f"PO Date: {results.get('po_date', 'Not found')}")
+            print(f"Bill To/Ship Address: {results.get('bill_to_ship_address', 'Not found')}")
+            print(f"PO Items count: {len(results.get('po_items', []))}")
+            print(f"Material Descriptions count: {len(results.get('material_descriptions', []))}")
+            print(f"Total Value: {results.get('total_value', 'Not found')}")
+            print(f"Total Quantity: {results.get('total_quantity', 'Not found')}")
+            print(f"Payment Terms: {results.get('payment_terms', 'Not found')}")
+            print(f"Vendor Number: {results.get('vendor_number', 'Not found')}")
+            print(f"Vendor GST: {results.get('vendor_gst', 'Not found')}")
+            
+    except Exception as e:
+        print(f"Error during extraction: {str(e)}")
+        import traceback
+        traceback.print_exc()
+    
+    return results
+
 @app.post("/process")
 async def process_pdf(request: dict = Body(...)):
     extraction_no = request.get("extraction_no", "")
@@ -1832,7 +2202,9 @@ async def process_pdf(request: dict = Body(...)):
             elif "3" in extraction_no:
                 result = extract_puma(temp_path)
             elif "4" in extraction_no:
-                result = extract_benetton(temp_path)    
+                result = extract_benetton(temp_path)
+            elif "5" in extraction_no:
+                result = extract_aditiya(temp_path)
             else:
                 result = None
 
