@@ -68,6 +68,7 @@ class EInvoiceController extends BaseController
                         ]);
                     });
             })
+            ->orderBy('inv_date', 'desc')
             ->get();
 
         // Calculate totals for each invoice
@@ -254,12 +255,16 @@ class EInvoiceController extends BaseController
             'to_date' => 'required|date|after_or_equal:from_date'
         ]);
 
-        $from_date = $request->from_date;
-        $to_date = $request->to_date;
+        // $from_date = $request->from_date;
+        // $to_date = $request->to_date;
+        $from_date = $request->query('from_date');
+        $to_date   = $request->query('to_date');
+        $selected = array_map('intval', (array) $request->query('selected_invoice', []));
+
 
         // Generate filename
         $filename = "E-Invoice-{$from_date}-{$to_date}.xlsx";
 
-        return Excel::download(new EInvoiceExport($from_date, $to_date), $filename);
+        return Excel::download(new EInvoiceExport($from_date, $to_date,$selected), $filename);
     }
 }

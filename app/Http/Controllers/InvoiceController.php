@@ -475,20 +475,39 @@ class InvoiceController extends BaseController
                 : '',
         ];
 
-        return view('invoice.update_pdf', [
-            'invoice' => $invoiceData,
-            'po_details' => $po_details,
-            'vendor' => $vendor,
-            'state' => $state,
+        // return view('invoice.update_pdf', [
+        //     'invoice' => $invoiceData,
+        //     'po_details' => $po_details,
+        //     'vendor' => $vendor,
+        //     'state' => $state,
+        //     'invoice_item_details' => $items,
+        //     'packCartonCounts' => $packCartonCounts,
+        //     'totalCartonsInInvoice' => $totalCartonsInInvoice,
+        //     'bill_to_details' => $billTo,
+        //     'ship_to_details' => $shipTo,
+        //     'transporter_details' => $transpDet,
+        //     'irn_details' => $irnDetails,
+        //     'business_settings' => $businessSettings,
+        // ]);
+
+         return Pdf::loadView('invoice.update_pdf', [
+            'invoice'              => $invoiceData,
+            'po_details'           => $po_details,
+            'vendor'               => $vendor,
+            'state'                => $state,
             'invoice_item_details' => $items,
-            'packCartonCounts' => $packCartonCounts,
+             'packCartonCounts' => $packCartonCounts,
             'totalCartonsInInvoice' => $totalCartonsInInvoice,
-            'bill_to_details' => $billTo,
-            'ship_to_details' => $shipTo,
-            'transporter_details' => $transpDet,
-            'irn_details' => $irnDetails,
-            'business_settings' => $businessSettings,
-        ]);
+            'bill_to_details'      => $billTo,
+            'ship_to_details'      => $shipTo,
+            'transporter_details'  => $transpDet,
+            'irn_details'          => $irnDetails,
+            'business_settings'    => $businessSettings,
+        ])
+            ->setOption('isHtml5ParserEnabled', true)
+            ->setOption('isRemoteEnabled', true)
+            ->setPaper('a4', 'portrait')
+            ->stream('invoice.pdf');
     }
 
     public function master()
@@ -609,6 +628,9 @@ class InvoiceController extends BaseController
                 'transport_vehicle_no' => $request->transport_vehicle_no,
                 'transport_distance' => $request->transport_distance,
                 'transport_date_time' => $request->transport_date_time,
+                'transport_doc_no' => $request->transport_doc_no,
+                'transport_vehicle_type' => "Regular",
+
             ];
 
             $invoice->update([

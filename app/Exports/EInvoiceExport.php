@@ -17,6 +17,8 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use App\Models\InvoiceMaster;
 use App\Models\PackingListItem;
+use App\Models\TransportMaster; 
+
 use App\Models\StateMaster;
 use App\Models\PoItems;
 use App\Models\PoSizes;
@@ -27,11 +29,13 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
     protected $fromDate;
     protected $toDate;
     protected $data;
+    protected array $selectedIds;
 
-    public function __construct($fromDate, $toDate)
+    public function __construct($fromDate, $toDate, array $selectedIds = [])
     {
         $this->fromDate = $fromDate;
         $this->toDate = $toDate;
+        $this->selectedIds = array_filter($selectedIds);
         $this->data = $this->getInvoiceData();
     }
 
@@ -236,6 +240,9 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
         $invoiceData = $invoice['invoice'];
         $billToDetails = json_decode($invoiceData->bill_to_details, true) ?: [];
         $shipToDetails = json_decode($invoiceData->ship_to_details, true) ?: [];
+       
+
+        $transport_details = $this->getTransporterInfo($invoiceData->transporter_details);
 
         // Get state information
         $billedStateId = $billToDetails['billed_state'] ?? null;
@@ -351,14 +358,14 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
             '',
 
             // E-way Bill Details 
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            '',
+            $transport_details['gst_id'],
+            $transport_details['trans_mode'],
+            $transport_details['trans_distance'],
+            $transport_details['name'],
+            $transport_details['trans_doc_no'],
+            $transport_details['trans_doc_date'],
+            $transport_details['vehicle_no'],
+            $transport_details['vehicle_type'],
 
             // Receipt / Contract References
             '',
@@ -805,19 +812,25 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
     private function getInvoiceData()
     {
         // Load invoice with PO and vendor relationships
-        $invoices = InvoiceMaster::with(['po', 'vendor'])
-            ->where(function ($query) {
-                $query->where(function ($q) {
-                    $q->whereBetween('inv_date', [$this->fromDate, $this->toDate]);
-                })
-                    ->orWhere(function ($q) {
-                        $q->whereRaw("STR_TO_DATE(inv_date, '%d-%m-%Y') BETWEEN ? AND ?", [
-                            $this->fromDate,
-                            $this->toDate
-                        ]);
-                    });
-            })
-            ->get();
+        $query = InvoiceMaster::with(['po', 'vendor']);
+        if (!empty($this->selectedIds)) {
+            $query->whereIn('id', $this->selectedIds);
+        } else {
+            // fallback: filter by date range
+            $query->where(function ($q) {
+                // If your inv_date is stored as Y-m-d, use whereBetween
+                $q->whereBetween('inv_date', [$this->from, $this->to])
+
+                  // If inv_date sometimes comes as d-m-Y, handle it too
+                  ->orWhereRaw(
+                      "STR_TO_DATE(inv_date, '%d-%m-%Y') BETWEEN ? AND ?",
+                      [$this->from, $this->to]
+                  );
+            });
+            
+                }
+            // ->get();
+        $invoices = $query->orderBy('id', 'desc')->get();
 
         $invoiceData = [];
         foreach ($invoices as $invoice) {
@@ -1000,5 +1013,45 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
             'hsn_code' => $hsn_code ?: '',
             'uom' => $uom ?: 'PCS'
         ];
+    }
+
+    private function getTransporterInfo($transporterDetails)
+    {
+        if (empty($transporterDetails)) {
+            return '';
+        }
+
+        $td = json_decode($transporterDetails, true);
+       
+        $transport_id = $td['transport_name'];
+        if($transport_id!="")
+        {
+         $transport_deta = TransportMaster::where('id', $transport_id)->first();
+          return [
+                'gst_id' => $transport_deta->description,
+                'trans_mode' => $td['mode_of_transport'],
+                'trans_distance' => $td['transport_distance'],
+                'name' => $transport_deta->name,
+                'trans_doc_no' => $td['transport_doc_no'],
+                'trans_doc_date' => $td['transport_date_time'],
+                'vehicle_no' => $td['transport_vehicle_no'],
+                'vehicle_type' => $td['transport_vehicle_type'],
+            ];
+        }
+        else
+        {
+            return [
+                'gst_id' => '',
+                'trans_mode' => '',
+                'trans_distance' => '',
+                'name' => '',
+                'trans_doc_no' => '',
+                'trans_doc_date' => '',
+                'vehicle_no' => '',
+                'vehicle_type' => '',
+            ];
+        }
+
+        
     }
 }
