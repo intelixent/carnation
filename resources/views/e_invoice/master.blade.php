@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('pagetitle', $page_title)
 @section('content')
-@push('styles')
+
 <style>
     .error-border {
         border: 1px solid #dc3545 !important;
@@ -33,8 +33,21 @@
     .d-flex.flex-column.gap-2 {
         position: relative;
     }
+
+    #fixedbutton {
+    position: fixed;
+    bottom: 3px;
+    /* right: 0px;  */
+	z-index:10001;
+    width:75%;
+}
+.myTable .input-group
+{
+	display: block;
+}
+
 </style>
-@endpush
+
 
 <div class="container-fluid">
     <!-- BreadCrumbs -->
@@ -89,6 +102,8 @@
                             <div id="tableContainer"></div>
                         </div>
                     </div>
+                    
+                   
                 </div>
             </div>
         </div>
@@ -98,6 +113,7 @@
 @endsection
 @push('scripts')
 <script type="text/javascript">
+    var selectedCheckBoxArray = [] ;
     $(document).ready(function() {
         $.ajaxSetup({
             headers: {
@@ -165,6 +181,7 @@
 
             // Disable submit button during loading
             $('#submit_btn').prop('disabled', true).text('Loading...');
+selectedCheckBoxArray = [];
 
             $.ajax({
                 url: "{{ route('e_invoice_master_table') }}",
@@ -213,11 +230,16 @@
             });
         });
 
-        $(document).on('click', '#downloadExcelData', function(e) {
+        $(document).on('click', '.downloadExcelData', function(e) {
             e.preventDefault();
 
             const from_date = $('#from_date').val();
             const to_date = $('#to_date').val();
+
+            //var selected_invoice = selectedCheckBoxArray;
+            const selected_invoice = Array.isArray(selectedCheckBoxArray) ? selectedCheckBoxArray : [];
+
+            var update_values = [];
 
             // Validation
             if (!from_date || !to_date) {
@@ -244,7 +266,17 @@
             });
 
             // Create download URL
-            const downloadUrl = "{{ route('e_invoice_excel_download') }}" + `?from_date=${from_date}&to_date=${to_date}`;
+            // const downloadUrl = "{{ route('e_invoice_excel_download') }}" + `?from_date=${from_date}&to_date=${to_date}`;
+
+            // Build query string safely
+            const params = new URLSearchParams();
+            params.set('from_date', from_date);
+            params.set('to_date', to_date);
+
+            // add selected_invoice[]=1&selected_invoice[]=2...
+            selected_invoice.forEach(id => params.append('selected_invoice[]', id));
+
+            const downloadUrl = `{{ route('e_invoice_excel_download') }}?${params.toString()}`;
 
             // Create iframe for download (better than direct link)
             const iframe = document.createElement('iframe');
@@ -270,5 +302,53 @@
             }, 2000);
         });
     });
+
+     $(document).on('click',".check_all",function(){
+
+      
+	// loadera_show('Loading...');
+    $('input:checkbox').not(this).prop('checked', this.checked);
+	//var arrs = [];
+	$("input:checkbox").each(function(){
+		//console.log($(this).val());
+		if($(this).val() > "0" )
+		{
+		checkbox_oper($(this).val())
+    //arrs.push($(this).val());
+		}
+});
+//loadera_hide();
+});
+
+function checkbox_oper(check_box_id)
+{
+var checkBoxId = check_box_id.toString();
+var rowIndex = $.inArray(checkBoxId, selectedCheckBoxArray); //Checking if the Element is in the array.
+
+if($('#'+check_box_id).is(':checked') == true && rowIndex === -1) {
+selectedCheckBoxArray.push(checkBoxId); 
+}
+else if ($('#'+check_box_id).is(':checked') == false && rowIndex !== -1) {
+selectedCheckBoxArray.splice(rowIndex, 1); // Remove it from the array.
+}
+$(".total_selec").html(selectedCheckBoxArray.length);
+if(selectedCheckBoxArray.length > 0) 
+{
+   $(".update_graph_points").removeClass("d-none");
+   $(".update_graph_points").html("<i class='fa fa-download'></i> Excel( "+selectedCheckBoxArray.length+" )");
+}
+else{
+	$(".update_graph_points").addClass("d-none");
+}
+console.log(selectedCheckBoxArray);
+}
+
+$(document).on('click', '.myTable tbody input[type="checkbox"]', function(e) 
+{
+    var checkBoxId = $(this).val();
+    checkbox_oper(checkBoxId)
+});
+
+
 </script>
 @endpush

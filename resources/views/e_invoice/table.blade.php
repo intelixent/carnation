@@ -1,4 +1,4 @@
-<div class="mt-4 d-flex justify-content-end gap-2">
+<!-- <div class="mt-4 d-flex justify-content-end gap-2">
     <a id="downloadExcelData"
         href="{{ route('e_invoice_excel_download', ['from_date' => $from_date ?? request('from_date'), 'to_date' => $to_date ?? request('to_date')]) }}"
         class="btn btn-success btn-lg"
@@ -6,13 +6,14 @@
         <i class="fa fa-file-excel"></i> Download Excel
     </a>
 
-</div>
+</div> -->
+
 
 <div class="table-responsive mt-2">
-    <table class="table table-bordered text-nowrap w-100" id="DataTable">
+    <table class="table table-bordered text-nowrap myTable w-100" >
         <thead class="bg-primary text-white">
             <tr>
-                <th>S.No</th>
+                <th>S.No <input type="checkbox" class="check_all" id="0" value="0" /></th>
                 <th>Invoice Date</th>
                 <th>Invoice No</th>
                 <th>Vendor</th>
@@ -48,8 +49,12 @@
             $grandTotalFinal += $data['total_amount'];
             @endphp
             <tr>
-                <td>{{ $key + 1 }}</td>
-                <td>{{ $invoiceData->inv_date ? \Carbon\Carbon::parse($invoiceData->inv_date)->format('d-m-Y') : '' }}</td>
+                <td>{{ $key + 1 }}
+
+                <input type="checkbox" class="batch_sno" name="batch_sno[]" id="<?php echo $invoice->id;?>" value="<?php echo $invoice->id;?>"/>
+
+                </td>
+                <td>{{ $invoice->inv_date ? \Carbon\Carbon::parse($invoice->inv_date)->format('d-m-Y') : '' }}</td>
                 <td>{{ $invoice->ref_no }}</td>
                 <td>{{ $data['vendor_name'] }}</td>
                 <td>{{ $data['billing_legal_name'] }}</td>
@@ -69,4 +74,16 @@
             @endforelse
         </tbody>
     </table>
+</div>
+
+<!-- <a id="downloadExcelData"
+        href="{{ route('e_invoice_excel_download', ['from_date' => $from_date ?? request('from_date'), 'to_date' => $to_date ?? request('to_date')]) }}"
+        class="btn btn-success btn-lg"
+        target="_blank">
+        <i class="fa fa-file-excel"></i> Download Excel
+    </a> -->
+
+<div class="d-grid gap-2 d-md-block" >
+  <a  class="btn btn-primary update_graph_points download_excel d-none downloadExcelData" id="fixedbutton"  type="button"><i class="fa fa-download"></i> Excel</a>
+
 </div>

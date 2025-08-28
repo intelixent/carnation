@@ -135,7 +135,7 @@
         <!-- Row 5 -->
         <tr>
             <td style="border: none; text-align: left;">Customs Code</td>
-            <td style="border: none; text-align: left;"></td>
+            <td style="border: none; text-align: left;">MEE</td>
             <td style="border: none;"></td>
             <td style="border: none; text-align: left;">INDIA</td>
             <td style="border: none;"></td>

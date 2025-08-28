@@ -16,7 +16,7 @@
                         <i class="fas fa-table me-2"></i>Address
                     </a>
                     <a class="nav-link rounded-pill" data-bs-toggle="tab" role="tab" href="#nav-transport" aria-selected="false">
-                        <i class="fas fa-table me-2"></i>Transport
+                        <i class="fas fa-table me-2"></i>Transport (E-way Bill)
                     </a>
                 </nav>
 
@@ -232,8 +232,31 @@
                         <div class="row mb-3">
                             <div class="col-sm-6">
                                 <div class="form-floating">
+                                    <input type="text" class="form-control" id="transport_doc_no" name="transport_doc_no" placeholder="Transporter DOC No" value="{{ $transportDetails['transport_doc_no'] ?? '' }}" required>
+                                    <label for="transport_doc_no">Transporter Doc No</label>
+                                </div>
+                            </div>
+
+                            <div class="col-sm-6">
+                                <div class="form-floating">
                                     <input type="text" class="form-control" id="transport_date_time" name="transport_date_time" placeholder="Transport Supply Date and Time" value="{{ $transportDetails['transport_date_time'] ?? '' }}" required>
                                     <label for="transport_date_time">Transport Supply Date and Time</label>
+                                </div>
+                            </div>
+</div>
+                                 <div class="row mb-3">
+                           
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="transport_vehicle_no" name="transport_vehicle_no" placeholder="Vehicle No" value="{{ $transportDetails['transport_vehicle_no'] ?? '' }}" required>
+                                    <label for="transport_vehicle_no">Transporter Vehicle No</label>
+                                </div>
+                            </div>
+
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="transport_distance" name="transport_distance" placeholder="Distance(KM)" value="{{ $transportDetails['transport_distance'] ?? '' }}" required>
+                                    <label for="transport_distance">Distance(KM)</label>
                                 </div>
                             </div>
                         </div>
