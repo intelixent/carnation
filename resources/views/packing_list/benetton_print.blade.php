@@ -46,10 +46,17 @@
             font-weight: bold;
             background-color: #f5f5f5;
         }
+         @media print {
+
+         @page {
+    size: A4 landscape;
+	margin: 10mm 5mm 10mm 5mm !important;  
+	}
+}
     </style>
 </head>
 
-<body>
+<body onLoad="window.print()">
     <table style="width:100%; border-collapse: collapse; border: 1px solid black; font-weight: bold;">
         <!-- Header -->
         <tr>

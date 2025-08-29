@@ -66,10 +66,20 @@
         }
 
         @media print {
+
+         @page {
+    size: A4 landscape;
+	margin: 10mm 5mm 10mm 5mm !important;  
+	}
+
             .carton-group {
                 page-break-inside: avoid;
                 break-inside: avoid-page;
             }
+
+           
+  
+
         }
 
         .debug-info {
@@ -80,7 +90,8 @@
     </style>
 </head>
 
-<body>
+<body onLoad="window.print()">
+
     <div class="header">PACKING LIST</div>
 
     <div class="header-section" style="page-break-inside: avoid; margin-bottom: 10px;">
@@ -213,7 +224,7 @@
         </tbody>
         @endforeach
 
-        <tfoot>
+        <!-- <tfoot> -->
             <tr>
                 <td colspan="6"></td>
                 <td><strong>{{ $grandQty }}</strong></td>
@@ -222,7 +233,7 @@
                 <td><strong>{{ round($grandGross, 2) }}</strong></td>
                 <td></td>
             </tr>
-        </tfoot>
+        <!-- </tfoot> -->
     </table>
 
     <div class="summary-section">
@@ -303,5 +314,6 @@
         </table>
     </div>
 </body>
+
 
 </html>

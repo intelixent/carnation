@@ -2400,12 +2400,14 @@ class PackingListController extends BaseController
         }
 
         // Generate PDF
-        $pdf = PDF::loadView($viewTemplate, $viewData)
-            ->set_option('isHtml5ParserEnabled', true)
-            ->set_option('isRemoteEnabled', true)
-            ->setPaper('a4', 'landscape');
+        // $pdf = PDF::loadView($viewTemplate, $viewData)
+        //     ->set_option('isHtml5ParserEnabled', true)
+        //     ->set_option('isRemoteEnabled', true)
+        //     ->setPaper('a4', 'landscape');
 
-        return $pdf->stream('Packing_list_print.pdf');
+        // return $pdf->stream('Packing_list_print.pdf');
+
+        return view($viewTemplate, $viewData);
     }
 
     public function packing_list_complete(Request $request)
