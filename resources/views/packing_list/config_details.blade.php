@@ -18,14 +18,29 @@
 </div>
 
 @if($hasPackingListItems)
-    <div class="row mt-3">
-        <div class="col-md-12">
-            <div class="alert alert-info text-center">
-                <i class="fas fa-info-circle"></i>
-                <strong>Thank you!</strong> Packing list items have already been created for this PO. Configuration cannot be modified.
-            </div>
+<div class="row mt-3">
+    <div class="col-md-12">
+        <div class="alert alert-info text-center">
+            <i class="fas fa-info-circle"></i>
+            <strong>Thank you!</strong> Packing list items have already been created for this PO. Configuration cannot be modified.
         </div>
     </div>
+</div>
+@endif
+
+@if(in_array($po->vendor_id, [1, 5, 6]))
+<div class="row mt-2">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-end">
+            <button type="button" class="btn btn-sm btn-info me-2 reset-positions" {{ $hasPackingListItems ? 'disabled' : '' }}>
+                <i class="fas fa-sort-numeric-up"></i> Reset Positions
+            </button>
+            <button type="button" class="btn btn-sm btn-warning clear-carton-qty" {{ $hasPackingListItems ? 'disabled' : '' }}>
+                <i class="fas fa-eraser"></i> Clear Per Carton Qty
+            </button>
+        </div>
+    </div>
+</div>
 @endif
 
 <form id="packingConfigForm">
@@ -77,6 +92,65 @@
                             <td class="text-center"><strong>{{ $packQtyBySizeTotal[$size] > 0 ? $packQtyBySizeTotal[$size] : '-' }}</strong></td>
                             @endforeach
                         </tr>
+
+                        @if(in_array($po->vendor_id, [1, 5, 6]))
+                        <!-- POSITION Row (common for all colors) -->
+                        <tr class="bg-light">
+                            <td><strong>POSITION</strong></td>
+                            <td class="text-center"><strong>COMMON</strong></td>
+                            @foreach($allSizes as $size)
+                            <td class="text-center">
+                                @if($packQtyBySizeTotal[$size] > 0)
+                                <input type="number"
+                                    name="positions[{{ $size }}]"
+                                    class="form-control form-control-sm text-center position-input"
+                                    value="{{ $positionData[$size] ?? 1 }}"
+                                    min="1"
+                                    style="width: 60px; margin: 0 auto;"
+                                    {{ $hasPackingListItems ? 'disabled' : '' }}>
+                                @else
+                                -
+                                @endif
+                            </td>
+                            @endforeach
+                        </tr>
+
+                        <!-- PER CARTON QTY Row (common for all colors) -->
+                        <tr class="bg-light">
+                            <td><strong>PER CARTON QTY</strong></td>
+                            <td class="text-center"><strong>COMMON</strong></td>
+                            @foreach($allSizes as $size)
+                            <td class="text-center">
+                                @if($packQtyBySizeTotal[$size] > 0)
+                                <input type="number"
+                                    name="per_carton_qtys[{{ $size }}]"
+                                    class="form-control form-control-sm text-center per-carton-qty-input"
+                                    value="{{ $perCartonQtyData[$size] ?? 0 }}"
+                                    min="0"
+                                    style="width: 70px; margin: 0 auto;"
+                                    {{ $hasPackingListItems ? 'disabled' : '' }}>
+                                @else
+                                -
+                                @endif
+                            </td>
+                            @endforeach
+                        </tr>
+
+                        <!-- TOTAL PER CARTON QTY Row -->
+                        <tr class="bg-secondary text-white">
+                            <td><strong>TOTAL</strong></td>
+                            <td><strong>PER CARTON QTY</strong></td>
+                            @foreach($allSizes as $size)
+                            <td class="text-center">
+                                <strong>
+                                    <span class="total-per-carton-qty" data-size="{{ $size }}">
+                                        {{ ($perCartonQtyData[$size] ?? 0) > 0 ? ($perCartonQtyData[$size] ?? 0) : '-' }}
+                                    </span>
+                                </strong>
+                            </td>
+                            @endforeach
+                        </tr>
+                        @endif
                     </tfoot>
                 </table>
             </div>
@@ -100,7 +174,7 @@
     <div class="row mt-3">
         <div class="col-md-12 text-center">
             <button type="submit" class="btn btn-primary" {{ $hasPackingListItems ? 'disabled' : '' }}>
-                Save Configuration
+                <i class="fas fa-save"></i> Save Configuration
             </button>
         </div>
     </div>
