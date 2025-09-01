@@ -384,12 +384,13 @@
             });
         }
 
-        // Handle color selection - Load table and check for position-based vendors
+        // Handle color selection - Load table and reinitialize PO search
         $('#colorSelect').on('change', function() {
             var color = $(this).val();
             var poId = $('#po_search').val();
 
             if (color && poId) {
+                $('.add-item').prop('disabled', false);
                 $('#items_section').show();
                 loadPackingListItems(poId, color);
 
@@ -415,122 +416,100 @@
                 success: function(response) {
                     var packingLists = response.packing_lists;
                     var canAddItems = response.can_add_items;
-                    var isPositionBased = response.is_position_based;
 
-                    // Enable/disable add button based on availability and vendor type
+                    // Enable/disable add button based on availability
                     $('.add-item').prop('disabled', !canAddItems);
 
-                    // Hide add button for position-based vendors
-                    if (isPositionBased) {
-                        $('.add-item').hide();
-                    } else {
-                        $('.add-item').show();
-                    }
-
                     var $container = $('#packing_lists_container').empty();
-
-                    // Show info message for position-based vendors
-                    if (isPositionBased && packingLists.length > 0) {
-                        $container.prepend(`
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle"></i> 
-                            Packing list automatically generated based on position configuration.
-                        </div>
-                    `);
-                    }
 
                     if (packingLists.length) {
                         packingLists.forEach(function(packingList, index) {
                             var statusBadge = getStatusBadge(packingList.pack_status);
 
                             var tableHtml = `
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="mb-0">
-                                        <strong>Ref: ${packingList.pack_ref_no}</strong>
-                                    </h6>
-                                    <div>
-                                        ${statusBadge}
-                                    </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">
+                                    <strong>Ref: ${packingList.pack_ref_no}</strong>
+                                </h6>
+                                <div>
+                                    ${statusBadge}
                                 </div>
-                                <table class="table table-bordered table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>Carton Name</th>
-                                            <th>Article Number</th>
-                                            <th>Color</th>
-                                            <th>Size</th>
-                                            <th>Quantity</th>
-                                            ${!isPositionBased ? '<th>Action</th>' : ''}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                        `;
+                            </div>
+                            <table class="table table-bordered table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Carton Name</th>
+                                        <th>Article Number</th>
+                                        <th>Color</th>
+                                        <th>Size</th>
+                                        <th>Quantity</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
 
                             if (packingList.items.length) {
                                 packingList.items.forEach(function(item) {
-                                    const actionButtons = !isPositionBased && packingList.pack_status === 0 ?
+                                    const actionButtons = packingList.pack_status === 0 ?
                                         `<button class="btn btn-primary btn-sm me-1 edit-item" data-id="${item.id}">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    ${packingList.items.length > 1 ? 
-                                        `<button class="btn btn-danger btn-sm remove-item" data-id="${item.id}">
-                                            <i class="fas fa-trash"></i>
-                                        </button>` : ''
-                                    }` : '';
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                ${packingList.items.length > 1 ? 
+                                    `<button class="btn btn-danger btn-sm remove-item" data-id="${item.id}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>` : ''
+                                }` :
+                                        '<span class="text-muted">No actions available</span>';
 
                                     tableHtml += `
-                                    <tr data-id="${item.id}">
-                                        <td>${item.carton_name}</td>
-                                        <td>${item.article_number}</td>
-                                        <td>${item.color}</td>
-                                        <td>${item.size}</td>
-                                        <td>${item.quantity}</td>
-                                        ${!isPositionBased ? `<td>${actionButtons}</td>` : ''}
-                                    </tr>
-                                `;
+                                <tr data-id="${item.id}">
+                                    <td>${item.carton_name}</td>
+                                    <td>${item.article_number}</td>
+                                    <td>${item.color}</td>
+                                    <td>${item.size}</td>
+                                    <td>${item.quantity}</td>
+                                    <td>${actionButtons}</td>
+                                </tr>
+                            `;
                                 });
                             } else {
-                                const colspan = isPositionBased ? '5' : '6';
-                                tableHtml += `<tr><td colspan="${colspan}" class="text-center">No items found</td></tr>`;
+                                tableHtml += `<tr><td colspan="6" class="text-center">No items found</td></tr>`;
                             }
 
                             tableHtml += `
-                                    </tbody>
-                                </table>
-                            </div>
-                        `;
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
 
                             $container.append(tableHtml);
                         });
                     } else {
-                        const message = isPositionBased ?
-                            'No packing configuration found for this color.' :
-                            'No packing lists found for this color.';
-
                         $container.append(`
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle"></i> ${message}
-                        </div>
-                    `);
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No packing lists found for this color.
+                    </div>
+                `);
                     }
 
-                    // Show status message for manual vendors
-                    if (!isPositionBased && !canAddItems) {
+                    // Show status message
+                    if (!canAddItems) {
                         $container.prepend(`
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-triangle"></i> 
-                            All items for this color have been fully packed. No more items can be added.
-                        </div>
-                    `);
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        All items for this color have been fully packed. No more items can be added.
+                    </div>
+                `);
                     }
                 },
                 error: function() {
                     $('#packing_lists_container').html(`
-                    <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-triangle"></i> Error loading packing lists
-                    </div>
-                `);
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> Error loading packing lists
+                </div>
+            `);
                 }
             });
         }
@@ -548,7 +527,7 @@
             }
         }
 
-        // Add Item button - Only for non-position-based vendors
+        // Add Item button
         $(document).on('click', '.add-item', function() {
             var poId = $('#po_search').val(),
                 vendorId = $('#vendor_id').val(),
@@ -559,17 +538,6 @@
                     icon: 'warning',
                     title: poId ? 'Color Required' : 'PO Required',
                     text: poId ? 'Please select a color first' : 'Please select a PO first',
-                    confirmButtonColor: '#3085d6'
-                });
-                return;
-            }
-
-            // Check if this is a position-based vendor
-            if ([1, 5, 6].includes(parseInt(vendorId))) {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Auto-Generated Packing',
-                    text: 'Packing list is automatically generated for this vendor based on configuration.',
                     confirmButtonColor: '#3085d6'
                 });
                 return;
@@ -595,22 +563,10 @@
             });
         });
 
-        // Edit Item button - Only for non-position-based vendors
+        // Edit Item button
         $(document).on('click', '.edit-item', function() {
             var itemId = $(this).data('id'),
-                poId = $('#po_search').val(),
-                vendorId = $('#vendor_id').val();
-
-            // Check if this is a position-based vendor
-            if ([1, 5, 6].includes(parseInt(vendorId))) {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Cannot Edit',
-                    text: 'Items cannot be edited for auto-generated packing lists.',
-                    confirmButtonColor: '#3085d6'
-                });
-                return;
-            }
+                poId = $('#po_search').val();
 
             $.ajax({
                 url: "{{ route('packing_list_item_edit') }}",
@@ -630,22 +586,9 @@
             });
         });
 
-        // Delete Item - Only for non-position-based vendors
+        // Delete Item
         $(document).on('click', '.remove-item', function() {
             var itemId = $(this).data('id');
-            var vendorId = $('#vendor_id').val();
-
-            // Check if this is a position-based vendor
-            if ([1, 5, 6].includes(parseInt(vendorId))) {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Cannot Delete',
-                    text: 'Items cannot be deleted from auto-generated packing lists.',
-                    confirmButtonColor: '#3085d6'
-                });
-                return;
-            }
-
             Swal.fire({
                 title: 'Are you sure?',
                 text: "You won't be able to revert this!",
@@ -684,7 +627,7 @@
             });
         });
 
-        // Handle article selection - load sizes table (for non-position-based vendors)
+        // Handle article selection - load sizes table
         $(document).on('change', '.articleSelect', function() {
             const $block = $(this).closest('.article-block');
             const poId = $('#po_id').val();
@@ -709,21 +652,21 @@
             }
         });
 
-        // Function to load sizes table (for non-position-based vendors)
+        // Function to load sizes table
         function loadSizesTable(sizes, $container) {
             let tableHtml = `
-            <div class="sizes-table">
-                <table class="table table-sm table-bordered">
-                    <thead>
-                        <tr>
-                            <th style="width: 60px;">
-                                <input type="checkbox" class="selectAllSizes" id="selectAllSizes" class="form-check-input">
-                            </th>
-                            <th style="width: 40%;">Size</th>
-                            <th style="width: 60%;">Quantity</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+        <div class="sizes-table">
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">
+                            <input type="checkbox" class="selectAllSizes" id="selectAllSizes" class="form-check-input">
+                        </th>
+                        <th style="width: 40%;">Size</th>
+                        <th style="width: 60%;">Quantity</th>
+                    </tr>
+                </thead>
+                <tbody>
         `;
 
             sizes.forEach(function(item) {
@@ -736,27 +679,27 @@
                     }
 
                     tableHtml += `
-                    <tr>
-                        <td>
-                            <input type="checkbox" class="form-check-input size-checkbox" value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
-                        </td>
-                        <td>
-                            <strong>${item.size}</strong><br>
-                            <small class="text-muted">${qtyText}</small>
-                        </td>
-                        <td>
-                            <input type="number" class="form-control quantity-input w-100" style="min-width: 120px;" min="1" max="${item.remaining_qty}" data-size="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}" disabled>
-                        </td>
-                    </tr>
-                `;
+                <tr>
+                    <td>
+                        <input type="checkbox" class="form-check-input size-checkbox" value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
+                    </td>
+                    <td>
+                        <strong>${item.size}</strong><br>
+                        <small class="text-muted">${qtyText}</small>
+                    </td>
+                    <td>
+                        <input type="number" class="form-control quantity-input w-100" style="min-width: 120px;" min="1" max="${item.remaining_qty}" data-size="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}" disabled>
+                    </td>
+                </tr>
+            `;
                 }
             });
 
             tableHtml += `
-                    </tbody>
-                </table>
-            </div>
-        `;
+                </tbody>
+            </table>
+        </div>
+    `;
 
             $container.html(tableHtml).show();
         }
@@ -976,79 +919,56 @@
             });
         }
 
-        // Error handler function for save operations
+        // Error handler
         function handleSaveError(xhr) {
-            Swal.close();
-
-            let errorMessage = 'An error occurred while saving';
-
-            if (xhr.responseJSON) {
-                if (xhr.responseJSON.error) {
-                    errorMessage = xhr.responseJSON.error;
-                } else if (xhr.responseJSON.errors) {
-                    // Handle validation errors
-                    const errors = xhr.responseJSON.errors;
-                    const firstError = Object.values(errors)[0];
-                    errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
-                } else if (xhr.responseJSON.message) {
-                    errorMessage = xhr.responseJSON.message;
-                }
-            } else if (xhr.responseText) {
-                try {
-                    const response = JSON.parse(xhr.responseText);
-                    if (response.error) {
-                        errorMessage = response.error;
-                    }
-                } catch (e) {
-                    // If not JSON, use status text
-                    errorMessage = xhr.statusText || errorMessage;
-                }
+            let errorMessage = 'Something went wrong';
+            if (xhr.responseJSON && xhr.responseJSON.errors) {
+                errorMessage = Object.values(xhr.responseJSON.errors).flat().join('<br>');
+            } else if (xhr.responseJSON && xhr.responseJSON.error) {
+                errorMessage = xhr.responseJSON.error;
             }
-
             Swal.fire({
                 title: 'Error!',
-                text: errorMessage,
+                html: errorMessage,
                 icon: 'error',
                 confirmButtonColor: '#3085d6'
             });
         }
 
-        // Dynamic save button enablement for add mode
-        $(document).on('change input', '.size-checkbox, .quantity-input', function() {
-            updateSaveButtonState();
-        });
+        // Add article functionality
+        $(document).on('click', '#addArticleBtn', function() {
+            // Destroy Select2 before cloning
+            const $original = $('.article-block').first();
+            $original.find('.select2m').select2('destroy');
 
-        function updateSaveButtonState() {
-            let hasValidItems = false;
+            // Clone the block
+            let newBlock = $original.clone();
 
-            $('.article-block').each(function() {
-                const $block = $(this);
-                const articleSelected = $block.find('.articleSelect').val();
-
-                if (articleSelected) {
-                    $block.find('.size-checkbox:checked').each(function() {
-                        const size = $(this).val();
-                        const quantity = $block.find(`.quantity-input[data-size="${size}"]`).val();
-
-                        if (quantity && parseInt(quantity) > 0) {
-                            hasValidItems = true;
-                            return false; // break out of each loop
-                        }
-                    });
-                }
-
-                if (hasValidItems) {
-                    return false; // break out of each loop
-                }
+            // Reinitialize Select2 for the original block
+            $original.find('.select2m').select2({
+                dropdownParent: $('#articlesWrapper')
             });
 
-            $('#saveItemBtn').prop('disabled', !hasValidItems);
-        }
+            // Reset values in cloned block
+            newBlock.find('input, select').val('');
+            newBlock.find('.sizesTableContainer').hide().empty();
 
-        // Initialize save button state when modal opens
-        $(document).on('shown.bs.modal', '#add_modal', function() {
-            // Small delay to ensure DOM is ready
-            setTimeout(updateSaveButtonState, 100);
+            // Append cloned block
+            $('#articlesWrapper').append(newBlock);
+
+            // Reinitialize Select2 in the new block
+            newBlock.find('.select2m').select2({
+                dropdownParent: $('#articlesWrapper')
+            });
+        });
+
+        // Remove article functionality
+        $(document).on('click', '.remove-article', function() {
+            if ($('.article-block').length > 1) {
+                $(this).closest('.article-block').remove();
+            } else {
+                alert("At least one article is required.");
+            }
         });
     });
 </script>

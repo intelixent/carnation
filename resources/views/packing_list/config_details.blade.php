@@ -28,7 +28,7 @@
 </div>
 @endif
 
-@if(in_array($po->vendor_id, [1, 5, 6]))
+{{-- Position and Per Carton Qty controls --}}
 <div class="row mt-2">
     <div class="col-md-12">
         <div class="d-flex justify-content-end">
@@ -41,9 +41,8 @@
         </div>
     </div>
 </div>
-@endif
 
-<form id="packingConfigForm">
+<form id="packingConfigForm" data-vendor-id="{{ $po->vendor_id }}">
     @csrf
     <input type="hidden" name="po_id" value="{{ $po->id }}">
 
@@ -93,11 +92,9 @@
                             @endforeach
                         </tr>
 
-                        @if(in_array($po->vendor_id, [1, 5, 6]))
-                        <!-- POSITION Row (common for all colors) -->
+                        {{-- POSITION Row (common for all colors) - Available for ALL vendors --}}
                         <tr class="bg-light">
-                            <td><strong>POSITION</strong></td>
-                            <td class="text-center"><strong>COMMON</strong></td>
+                            <td class="text-center" colspan="2"><strong>POSITION</strong></td>
                             @foreach($allSizes as $size)
                             <td class="text-center">
                                 @if($packQtyBySizeTotal[$size] > 0)
@@ -115,10 +112,9 @@
                             @endforeach
                         </tr>
 
-                        <!-- PER CARTON QTY Row (common for all colors) -->
+                        {{-- PER CARTON QTY Row (common for all colors) - Available for ALL vendors --}}
                         <tr class="bg-light">
-                            <td><strong>PER CARTON QTY</strong></td>
-                            <td class="text-center"><strong>COMMON</strong></td>
+                            <td class="text-center" colspan="2"><strong>PER CARTON QTY</strong></td>
                             @foreach($allSizes as $size)
                             <td class="text-center">
                                 @if($packQtyBySizeTotal[$size] > 0)
@@ -135,22 +131,6 @@
                             </td>
                             @endforeach
                         </tr>
-
-                        <!-- TOTAL PER CARTON QTY Row -->
-                        <tr class="bg-secondary text-white">
-                            <td><strong>TOTAL</strong></td>
-                            <td><strong>PER CARTON QTY</strong></td>
-                            @foreach($allSizes as $size)
-                            <td class="text-center">
-                                <strong>
-                                    <span class="total-per-carton-qty" data-size="{{ $size }}">
-                                        {{ ($perCartonQtyData[$size] ?? 0) > 0 ? ($perCartonQtyData[$size] ?? 0) : '-' }}
-                                    </span>
-                                </strong>
-                            </td>
-                            @endforeach
-                        </tr>
-                        @endif
                     </tfoot>
                 </table>
             </div>

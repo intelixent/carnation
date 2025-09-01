@@ -11,6 +11,7 @@ use App\Http\Controllers\PackingListController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\TransportController;
 use App\Http\Controllers\EInvoiceController;
+use App\Http\Controllers\AutoPackingListController;
 
 /*
 |--------------------------------------------------------------------------
@@ -103,6 +104,9 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/save_config_po_details', [PackingListController::class, 'save_config_po_details'])->name('save_config_po_details');
         Route::get('/get-available-sizes', [PackingListController::class, 'getAvailableSizes'])->name('get_available_sizes');
         Route::get('/check-size-availability', [PackingListController::class, 'checkSizeAvailability'])->name('check_size_availability');
+        Route::get('/auto', [AutoPackingListController::class, 'auto'])->name('packing_list_auto');
+        Route::get('/auto_items', [AutoPackingListController::class, 'get_auto_packing_list_items'])->name('auto_packing_list_items');
+        Route::get('auto-packing-list/print/{po_id}/{color}', [AutoPackingListController::class, 'print'])->name('auto_packing_list_print');
     });
 
     Route::group(['prefix' => 'invoice'], function () {
