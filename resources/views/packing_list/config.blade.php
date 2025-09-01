@@ -69,9 +69,9 @@
             width: '100%'
         });
 
-        // Function to initialize position and per carton qty functionality
+        // Function to initialize position and per carton qty functionality for ALL vendors
         function initializePositionAndCartonQty() {
-            // Auto-increment positions when page loads (now common for all colors)
+            // Auto-increment positions when page loads (now common for all colors and ALL vendors)
             var positionCounter = 1;
             $('.position-input').each(function() {
                 if ($(this).val() == '' || $(this).val() == '0') {
@@ -83,15 +83,15 @@
             updateTotalPerCartonQty();
         }
 
-        // Function to update total per carton qty for each size (simplified for common values)
+        // Function to update total per carton qty for each size (for ALL vendors)
         function updateTotalPerCartonQty() {
             $('.total-per-carton-qty').each(function() {
                 var size = $(this).data('size');
-                
-                // Since it's now common for all colors, just get the single input value for this size
+
+                // Get the single input value for this size
                 var inputValue = $('input[name="per_carton_qtys[' + size + ']"]').val() || 0;
                 var total = parseInt(inputValue);
-                
+
                 $(this).text(total > 0 ? total : '-');
             });
         }
@@ -149,8 +149,8 @@
                         $('.select2').select2({
                             width: '100%'
                         });
-                        
-                        // Initialize position and per carton qty functionality
+
+                        // Initialize position and per carton qty functionality for ALL vendors
                         setTimeout(function() {
                             initializePositionAndCartonQty();
                         }, 100);
@@ -170,7 +170,7 @@
             }
         });
 
-        // Handle per carton qty input changes (delegated event)
+        // Handle per carton qty input changes (delegated event) - for ALL vendors
         $(document).on('input', '.per-carton-qty-input', function() {
             // Validate input value
             var value = parseInt($(this).val()) || 0;
@@ -178,11 +178,11 @@
                 $(this).val(0);
                 value = 0;
             }
-            
+
             updateTotalPerCartonQty();
         });
 
-        // Handle position input changes (delegated event)
+        // Handle position input changes (delegated event) - for ALL vendors
         $(document).on('input', '.position-input', function() {
             var value = parseInt($(this).val()) || 1;
             if (value < 1) {
@@ -190,9 +190,12 @@
             }
         });
 
-        // Handle form submission
+        // Handle form submission - Updated validation for ALL vendors
         $(document).on('submit', '#packingConfigForm', function(e) {
             e.preventDefault();
+
+            // Get vendor ID
+            var vendorId = parseInt($(this).data('vendor-id'));
 
             // Validate required fields
             var cartonId = $('#carton_select').val();
@@ -208,7 +211,7 @@
                 return;
             }
 
-            // Validate position inputs for vendors 1, 5, 6
+            // Validate position inputs for ALL vendors
             var hasInvalidPosition = false;
             var invalidPositionField = null;
             $('.position-input').each(function() {
@@ -235,7 +238,7 @@
                 return;
             }
 
-            // Validate per carton qty inputs for vendors 1, 5, 6
+            // Validate per carton qty inputs for ALL vendors
             var hasInvalidCartonQty = false;
             var invalidCartonQtyField = null;
             $('.per-carton-qty-input').each(function() {
@@ -262,66 +265,46 @@
                 return;
             }
 
-            // Check if any position or per carton qty values are set for vendors 1, 5, 6
-            var hasPositionData = $('.position-input').length > 0;
-            var hasCartonQtyData = $('.per-carton-qty-input').length > 0;
-            
-            if (hasPositionData || hasCartonQtyData) {
-                var positionSummary = [];
-                var cartonQtySummary = [];
-                
-                $('.position-input').each(function() {
-                    var size = $(this).attr('name').match(/\[([^\]]+)\]$/)[1];
-                    var value = $(this).val();
-                    positionSummary.push(size + ': ' + value);
-                });
-                
-                $('.per-carton-qty-input').each(function() {
-                    var size = $(this).attr('name').match(/\[([^\]]+)\]$/)[1];
-                    var value = $(this).val();
-                    if (value > 0) {
-                        cartonQtySummary.push(size + ': ' + value);
-                    }
-                });
-                
-                var summaryText = 'Configuration Summary:\n';
-                if (positionSummary.length > 0) {
-                    summaryText += 'Positions - ' + positionSummary.join(', ') + '\n';
+            // Show configuration summary for ALL vendors
+            var positionSummary = [];
+            var cartonQtySummary = [];
+
+            $('.position-input').each(function() {
+                var size = $(this).attr('name').match(/\[([^\]]+)\]$/)[1];
+                var value = $(this).val();
+                positionSummary.push(size + ': ' + value);
+            });
+
+            $('.per-carton-qty-input').each(function() {
+                var size = $(this).attr('name').match(/\[([^\]]+)\]$/)[1];
+                var value = $(this).val();
+                if (value > 0) {
+                    cartonQtySummary.push(size + ': ' + value);
                 }
-                if (cartonQtySummary.length > 0) {
-                    summaryText += 'Per Carton Qty - ' + cartonQtySummary.join(', ');
-                }
-                
-                Swal.fire({
-                    title: 'Save Configuration?',
-                    text: summaryText + '\n\nAre you sure you want to save this packing list configuration?',
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonText: 'Yes, Save it!',
-                    cancelButtonText: 'Cancel',
-                    confirmButtonColor: '#28a745',
-                    cancelButtonColor: '#6c757d'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        submitConfiguration();
-                    }
-                });
-            } else {
-                Swal.fire({
-                    title: 'Save Configuration?',
-                    text: 'Are you sure you want to save this packing list configuration?',
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonText: 'Yes, Save it!',
-                    cancelButtonText: 'Cancel',
-                    confirmButtonColor: '#28a745',
-                    cancelButtonColor: '#6c757d'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        submitConfiguration();
-                    }
-                });
+            });
+
+            var summaryText = 'Vendor ' + vendorId + ' Configuration Summary:\n';
+            if (positionSummary.length > 0) {
+                summaryText += 'Positions - ' + positionSummary.join(', ') + '\n';
             }
+            if (cartonQtySummary.length > 0) {
+                summaryText += 'Per Carton Qty - ' + cartonQtySummary.join(', ');
+            }
+
+            Swal.fire({
+                title: 'Save Configuration?',
+                text: summaryText + '\n\nAre you sure you want to save this packing list configuration?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Save it!',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#28a745',
+                cancelButtonColor: '#6c757d'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    submitConfiguration();
+                }
+            });
         });
 
         // Function to handle the actual form submission
@@ -392,11 +375,13 @@
             });
         }
 
-        // Reset position counter for new data
+        // Reset position counter for ALL vendors
         $(document).on('click', '.reset-positions', function() {
+            var vendorId = $('#packingConfigForm').data('vendor-id');
+
             Swal.fire({
                 title: 'Reset Positions?',
-                text: 'This will reset all position values to sequential order (1, 2, 3, ...).',
+                text: 'This will reset all position values for Vendor ' + vendorId + ' to sequential order (1, 2, 3, ...).',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Yes, Reset!',
@@ -409,11 +394,11 @@
                     $('.position-input').each(function() {
                         $(this).val(counter++);
                     });
-                    
+
                     Swal.fire({
                         icon: 'success',
                         title: 'Positions Reset!',
-                        text: 'All positions have been reset to sequential order.',
+                        text: 'All positions have been reset to sequential order for Vendor ' + vendorId + '.',
                         timer: 2000,
                         timerProgressBar: true,
                         showConfirmButton: false
@@ -422,11 +407,13 @@
             });
         });
 
-        // Clear all per carton quantities
+        // Clear all per carton quantities for ALL vendors
         $(document).on('click', '.clear-carton-qty', function() {
+            var vendorId = $('#packingConfigForm').data('vendor-id');
+
             Swal.fire({
                 title: 'Clear All Per Carton Quantities?',
-                text: 'This will set all per carton quantity values to 0.',
+                text: 'This will set all per carton quantity values for Vendor ' + vendorId + ' to 0.',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Yes, Clear!',
@@ -437,11 +424,11 @@
                 if (result.isConfirmed) {
                     $('.per-carton-qty-input').val(0);
                     updateTotalPerCartonQty();
-                    
+
                     Swal.fire({
                         icon: 'success',
                         title: 'Quantities Cleared!',
-                        text: 'All per carton quantities have been set to 0.',
+                        text: 'All per carton quantities have been set to 0 for Vendor ' + vendorId + '.',
                         timer: 2000,
                         timerProgressBar: true,
                         showConfirmButton: false
@@ -450,17 +437,18 @@
             });
         });
 
-        // Auto-save draft functionality (optional)
+        // Auto-save draft functionality (optional) - for ALL vendors
         var autoSaveTimer;
         $(document).on('input', '.position-input, .per-carton-qty-input', function() {
             clearTimeout(autoSaveTimer);
+            var vendorId = $('#packingConfigForm').data('vendor-id');
             autoSaveTimer = setTimeout(function() {
                 // Could implement auto-save draft here if needed
-                console.log('Auto-save triggered (draft functionality can be added here)');
+                console.log('Auto-save triggered for Vendor ' + vendorId + ' (draft functionality can be added here)');
             }, 5000);
         });
 
-        // Keyboard shortcuts
+        // Keyboard shortcuts - for ALL vendors
         $(document).on('keydown', function(e) {
             // Ctrl+S to save
             if (e.ctrlKey && e.which == 83) {
@@ -469,20 +457,36 @@
                     $('#packingConfigForm').submit();
                 }
             }
-            
+
             // Esc to clear focus
             if (e.which == 27) {
                 $('.position-input, .per-carton-qty-input').blur();
             }
         });
 
-        // Add loading states for better UX
+        // Add loading states for better UX - for ALL vendors
         $(document).on('focus', '.position-input, .per-carton-qty-input', function() {
             $(this).addClass('border-primary');
         });
 
         $(document).on('blur', '.position-input, .per-carton-qty-input', function() {
             $(this).removeClass('border-primary');
+        });
+
+        // Add vendor-specific styling based on vendor ID
+        $(document).on('change', '#po_id', function() {
+            setTimeout(function() {
+                var vendorId = $('#packingConfigForm').data('vendor-id');
+                if (vendorId) {
+                    // Add vendor-specific CSS classes or styling
+                    $('#tableContainer').removeClass('vendor-1 vendor-3 vendor-4 vendor-5 vendor-6');
+                    $('#tableContainer').addClass('vendor-' + vendorId);
+
+                    // Optional: Add vendor-specific tooltips
+                    $('.position-input').attr('title', 'Position for Vendor ' + vendorId);
+                    $('.per-carton-qty-input').attr('title', 'Per Carton Quantity for Vendor ' + vendorId);
+                }
+            }, 200);
         });
     });
 </script>

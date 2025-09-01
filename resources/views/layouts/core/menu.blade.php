@@ -91,6 +91,9 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                             <a href="{{ route('packing_list_config') }}" class="side-menu__item {{ request()->routeIs('packing_list_config') ? 'active' : '' }}">Config</a>
                         </li>
                         <li class="slide">
+                            <a href="{{ route('packing_list_auto') }}" class="side-menu__item {{ request()->routeIs('packing_list_auto') ? 'active' : '' }}">Auto</a>
+                        </li>
+                        <li class="slide">
                             <a href="{{ route('packing_list_add') }}" class="side-menu__item {{ request()->routeIs('packing_list_add') ? 'active' : '' }}">Entry</a>
                         </li>
                         <li class="slide">
@@ -108,17 +111,17 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                     <ul class="slide-menu child1">
                         <li class="slide">
                             <a href="{{ route('invoice_genrate') }}" class="side-menu__item {{ request()->routeIs('invoice_genrate') ? 'active' : '' }}">Generate</a>
-                        </li>  
+                        </li>
                         <li class="slide">
                             <a href="{{ route('invoice_master') }}" class="side-menu__item {{ request()->routeIs('invoice_master') ? 'active' : '' }}">Master</a>
                         </li>
                         <li class="slide">
                             <a href="{{ route('e_invoice_master') }}" class="side-menu__item {{ request()->routeIs('e_invoice_master') ? 'active' : '' }}">E-invoice Download</a>
-                        </li> 
+                        </li>
                     </ul>
                 </li>
 
-                
+
 
                 @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor', 'list-vendor', 'view-vendor']))
                 <li class="slide has-sub {{ request()->is('settings*') ? 'active open' : '' }}">
