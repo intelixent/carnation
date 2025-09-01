@@ -560,9 +560,35 @@ class InvoiceController extends BaseController
                 'shipped_pan_no' => $vendor->shipping_pan_no ?? '',
                 'shipped_pincode' => $vendor->shipping_pincode ?? '',
                 'shipped_place_of_supply' => $vendor->shipping_place_supply ?? '',
+                //'shipped_distance' => $vendor->shipping_distance ?? '',
             ];
         }
+            if(isset($transportDetails['transport_distance']) && $transportDetails['transport_distance']!="")
+            {
+                $transportDetails['transport_distance'] = $transportDetails['transport_distance'] ?? '';
+            }
+            else
+            {
+                $transportDetails['transport_distance']= $vendor->shipping_distance ?? '';
+                    
+            }
 
+            if($invoice['ref_no']!="")
+            {
+                
+                $transportDetails['transport_doc_no'] = $this->extractSlashNumbers($invoice['ref_no']);
+            }
+            else
+            {
+                $transportDetails['transport_doc_no'] = "";
+            }
+                
+            
+
+           
+        
+
+        // print_r($invoice['ref_no']);
         return view('invoice.invoice_details', compact(
             'invoice',
             'vendor',
@@ -654,4 +680,19 @@ class InvoiceController extends BaseController
             ]);
         }
     }
+
+    public  function extractSlashNumbers(string $code): string
+        {
+        // Split into up to 3 parts and pad missing with a space
+        $parts = explode('/', $code, 3);
+        $parts = array_pad($parts, 3, ' ');
+
+        // Get only digits for the middle part (e.g., 250277)
+        $firstNum  = (preg_match('/\d+/', $parts[1], $m1)) ? $m1[0] : ' ';
+
+        // Get digits or digit-range (e.g., 25-26) for the last part
+        //$secondNum = (preg_match('/\d+(?:-\d+)?/', $parts[2], $m2)) ? $m2[0] : ' ';
+
+        return $firstNum;
+        }
 }

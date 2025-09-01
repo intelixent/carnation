@@ -149,6 +149,7 @@ class VendorController extends BaseController
                 'shipping_gst_no' => $request->shipping_gst_no,
                 'shipping_pan_no' => $request->shipping_pan_no,
                 'shipping_place_supply' => $request->shipping_place_supply,
+                'shipping_distance'=>$request->shipping_distance,
                 'shipping_state_id' => $request->shipping_state_id,
                 // Other Fields
                 'excess' => $request->excess,

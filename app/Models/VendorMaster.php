@@ -42,6 +42,7 @@ class VendorMaster extends Model
         'shipping_gst_type',
         'shipping_place_supply',
         'shipping_state_id',
+        'shipping_distance',
         // Other Fields
         'excess',
         'shortage',
