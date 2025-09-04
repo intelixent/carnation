@@ -91,7 +91,7 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                             <a href="{{ route('packing_list_config') }}" class="side-menu__item {{ request()->routeIs('packing_list_config') ? 'active' : '' }}">Config</a>
                         </li>
                         <li class="slide">
-                            <a href="{{ route('packing_list_auto') }}" class="side-menu__item {{ request()->routeIs('packing_list_auto') ? 'active' : '' }}">Auto</a>
+                            <a href="{{ route('packing_list_auto') }}" class="side-menu__item {{ request()->routeIs('packing_list_auto') ? 'active' : '' }}">Auto Packaging</a>
                         </li>
                         <li class="slide">
                             <a href="{{ route('packing_list_add') }}" class="side-menu__item {{ request()->routeIs('packing_list_add') ? 'active' : '' }}">Entry</a>

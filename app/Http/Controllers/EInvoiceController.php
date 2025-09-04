@@ -265,6 +265,8 @@ class EInvoiceController extends BaseController
         // Generate filename
         $filename = "E-Invoice-{$from_date}-{$to_date}.xlsx";
 
+        //print_r(new EInvoiceExport($from_date, $to_date,$selected));
+
         return Excel::download(new EInvoiceExport($from_date, $to_date,$selected), $filename);
     }
 }
