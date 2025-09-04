@@ -17,7 +17,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use App\Models\InvoiceMaster;
 use App\Models\PackingListItem;
-use App\Models\TransportMaster; 
+use App\Models\TransportMaster;
 
 use App\Models\StateMaster;
 use App\Models\PoItems;
@@ -240,7 +240,7 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
         $invoiceData = $invoice['invoice'];
         $billToDetails = json_decode($invoiceData->bill_to_details, true) ?: [];
         $shipToDetails = json_decode($invoiceData->ship_to_details, true) ?: [];
-       
+
 
         $transport_details = $this->getTransporterInfo($invoiceData->transporter_details);
 
@@ -818,18 +818,27 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
         } else {
             // fallback: filter by date range
             $query->where(function ($q) {
-                // If your inv_date is stored as Y-m-d, use whereBetween
-                $q->whereBetween('inv_date', [$this->from, $this->to])
-
-                  // If inv_date sometimes comes as d-m-Y, handle it too
-                  ->orWhereRaw(
-                      "STR_TO_DATE(inv_date, '%d-%m-%Y') BETWEEN ? AND ?",
-                      [$this->from, $this->to]
-                  );
+                $q->where(function ($subQ) {
+                    // For Y-m-d format (2025-07-31)
+                    $subQ->whereBetween('inv_date', [$this->fromDate, $this->toDate]);
+                })
+                    ->orWhere(function ($subQ) {
+                        // For d-m-Y format (31-07-2025)
+                        $subQ->whereRaw("STR_TO_DATE(inv_date, '%d-%m-%Y') BETWEEN ? AND ?", [
+                            $this->fromDate,
+                            $this->toDate
+                        ]);
+                    })
+                    ->orWhere(function ($subQ) {
+                        // For d.m.Y format (31.07.2025)
+                        $subQ->whereRaw("STR_TO_DATE(inv_date, '%d.%m.%Y') BETWEEN ? AND ?", [
+                            $this->fromDate,
+                            $this->toDate
+                        ]);
+                    });
             });
-            
-                }
-            // ->get();
+        }
+
         $invoices = $query->orderBy('id', 'desc')->get();
 
         $invoiceData = [];
@@ -839,24 +848,143 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
             $po_details = $invoice->po;
             $vendor = $invoice->vendor;
 
-            // Get total quantity
-            $totalQty = PackingListItem::whereIn('packing_list_id', $packIds)
-                ->sum('quantity');
-
-            // Calculate amounts
-            $poUnitPrice = $po_details ? floatval($po_details->vcp) : 0;
-            $totalAmount = $totalQty * $poUnitPrice;
-            $discountPct = $vendor ? (floatval($vendor->discount) ?? 0) : 0;
-            $totalDiscountAmount = ($totalAmount * $discountPct) / 100;
-            $totalTaxableValue = $totalAmount - $totalDiscountAmount;
+            // Get invoice GST rate
             $invoiceGstRate = floatval($invoice->gst);
-            $totalGstAmount = ($totalTaxableValue * $invoiceGstRate) / 100;
-            $totalFinalAmount = $totalTaxableValue + $totalGstAmount;
+
+            // Group items by size and color for calculation (same as your table method)
+            $packedItems = PackingListItem::whereIn('packing_list_id', $packIds)
+                ->select([
+                    'size',
+                    'color',
+                    DB::raw('SUM(quantity) AS total_quantity'),
+                ])
+                ->groupBy(['size', 'color'])
+                ->get();
+
+            $totalQty = 0;
+            $totalAmount = 0;
+            $totalDiscountAmount = 0;
+            $totalTaxableValue = 0;
+            $totalGstAmount = 0;
+            $totalFinalAmount = 0;
+            $weightedRateSum = 0;
+
+            // Get base unit price from PO
+            $poUnitPrice = $po_details ? floatval($po_details->vcp) : 0;
+            $articleInfo = $po_details ? (json_decode($po_details->article_info, true) ?: []) : [];
+
+            foreach ($packedItems as $pi) {
+                $unit_price = $poUnitPrice;
+
+                // Get PoItems for this specific color and size
+                $itm = null;
+                if ($po_details) {
+                    $itm = PoItems::where('po_id', $po_details->id)
+                        ->where('size', $pi->size)
+                        ->where('color', $pi->color)
+                        ->first();
+                }
+
+                // Apply vendor-specific pricing logic (same as your table method)
+                if ($vendor) {
+                    switch ($vendor->id) {
+                        case 1:
+                        case 5:
+                        case 6:
+                            // Use PO unit price (already set)
+                            break;
+
+                        case 4:
+                            $poSize = PoSizes::where('po_id', $po_details->id)
+                                ->where('size', $pi->size)
+                                ->where('color', $pi->color)
+                                ->first();
+                            if ($poSize) {
+                                $unit_price = floatval($poSize->unit_price) ?: $unit_price;
+                            }
+                            if ($itm) {
+                                $unit_price = $unit_price ?: floatval($itm->unit_price ?? 0);
+                            }
+                            break;
+
+                        case 2:
+                            if ($itm) {
+                                $unit_price = floatval($itm->unit_price ?? 0);
+                            }
+                            break;
+
+                        case 3:
+                            if ($itm) {
+                                // For vendor ID 3, use unit_price from po_items table
+                                $unit_price = floatval($itm->unit_price ?? 0);
+                            }
+                            break;
+
+                        default:
+                            // Use PO unit price
+                            break;
+                    }
+                }
+
+                // Fallback: If unit_price is still 0 or empty, try to get from po_items
+                if (empty($unit_price) && $itm) {
+                    $unit_price = floatval($itm->unit_price ?? 0);
+                }
+
+                // Calculate amounts for this item
+                $itemAmount = $pi->total_quantity * $unit_price;
+                $discountPct = $vendor ? (floatval($vendor->discount) ?? 0) : 0;
+                $discountAmount = ($itemAmount * $discountPct) / 100;
+                $taxableValue = $itemAmount - $discountAmount;
+                $gstAmount = ($taxableValue * $invoiceGstRate) / 100;
+                $itemTotalAmount = $taxableValue + $gstAmount;
+
+                // Add to totals
+                $totalQty += $pi->total_quantity;
+                $totalAmount += $itemAmount;
+                $totalDiscountAmount += $discountAmount;
+                $totalTaxableValue += $taxableValue;
+                $totalGstAmount += $gstAmount;
+                $totalFinalAmount += $itemTotalAmount;
+
+                // Calculate weighted rate sum (unit_price * quantity)
+                $weightedRateSum += ($unit_price * $pi->total_quantity);
+            }
+
+            // Calculate effective rate (weighted average)
+            $effectiveRate = $totalQty > 0 ? $weightedRateSum / $totalQty : $poUnitPrice;
+
+            // If no packed items found, calculate with basic method
+            if ($packedItems->isEmpty()) {
+                $totalQty = PackingListItem::whereIn('packing_list_id', $packIds)
+                    ->sum('quantity');
+
+                if ($vendor && $vendor->id == 3 && $po_details) {
+                    $avgUnitPrice = PoItems::where('po_id', $po_details->id)
+                        ->whereNotNull('unit_price')
+                        ->where('unit_price', '>', 0)
+                        ->avg(DB::raw('CAST(unit_price AS DECIMAL(10,2))'));
+                    if ($avgUnitPrice) {
+                        $effectiveRate = floatval($avgUnitPrice);
+                    } else {
+                        $effectiveRate = $poUnitPrice;
+                    }
+                } else {
+                    $effectiveRate = $poUnitPrice;
+                }
+
+                $totalAmount = $totalQty * $effectiveRate;
+                $discountPct = $vendor ? (floatval($vendor->discount) ?? 0) : 0;
+                $totalDiscountAmount = ($totalAmount * $discountPct) / 100;
+                $totalTaxableValue = $totalAmount - $totalDiscountAmount;
+                $totalGstAmount = ($totalTaxableValue * $invoiceGstRate) / 100;
+                $totalFinalAmount = $totalTaxableValue + $totalGstAmount;
+            }
 
             $invoiceData[] = [
                 'invoice' => $invoice,
                 'total_qty' => $totalQty,
-                'rate' => $poUnitPrice,
+                'rate' => $effectiveRate,
                 'amount' => $totalAmount,
                 'po_number' => $po_details->po_num ?? '',
                 'po_date' => $po_details->po_date ?? '',
@@ -1017,29 +1145,8 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
 
     private function getTransporterInfo($transporterDetails)
     {
+        // Return default array structure when empty
         if (empty($transporterDetails)) {
-            return '';
-        }
-
-        $td = json_decode($transporterDetails, true);
-       
-        $transport_id = $td['transport_name'];
-        if($transport_id!="")
-        {
-         $transport_deta = TransportMaster::where('id', $transport_id)->first();
-          return [
-                'gst_id' => $transport_deta->description,
-                'trans_mode' => $td['mode_of_transport'],
-                'trans_distance' => $td['transport_distance'],
-                'name' => $transport_deta->name,
-                'trans_doc_no' => $td['transport_doc_no'],
-                'trans_doc_date' => $td['transport_date_time'],
-                'vehicle_no' => $td['transport_vehicle_no'],
-                'vehicle_type' => $td['transport_vehicle_type'],
-            ];
-        }
-        else
-        {
             return [
                 'gst_id' => '',
                 'trans_mode' => '',
@@ -1052,6 +1159,33 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
             ];
         }
 
-        
+        $td = json_decode($transporterDetails, true);
+
+        $transport_id = $td['transport_name'] ?? '';
+
+        if ($transport_id != "") {
+            $transport_deta = TransportMaster::where('id', $transport_id)->first();
+            return [
+                'gst_id' => $transport_deta->description ?? '',
+                'trans_mode' => $td['mode_of_transport'] ?? '',
+                'trans_distance' => $td['transport_distance'] ?? '',
+                'name' => $transport_deta->name ?? '',
+                'trans_doc_no' => $td['transport_doc_no'] ?? '',
+                'trans_doc_date' => $td['transport_date_time'] ?? '',
+                'vehicle_no' => $td['transport_vehicle_no'] ?? '',
+                'vehicle_type' => $td['transport_vehicle_type'] ?? '',
+            ];
+        } else {
+            return [
+                'gst_id' => '',
+                'trans_mode' => '',
+                'trans_distance' => '',
+                'name' => '',
+                'trans_doc_no' => '',
+                'trans_doc_date' => '',
+                'vehicle_no' => '',
+                'vehicle_type' => '',
+            ];
+        }
     }
 }

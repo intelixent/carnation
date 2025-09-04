@@ -55,14 +55,20 @@ class EInvoiceController extends BaseController
         // Query invoices with date range filtering
         $invoices = InvoiceMaster::with(['po', 'vendor'])
             ->where(function ($query) use ($from_date, $to_date) {
-                // Handle both date formats: d-m-Y and Y-m-d
                 $query->where(function ($q) use ($from_date, $to_date) {
-                    // For Y-m-d format
+                    // For Y-m-d format (2025-07-31)
                     $q->whereBetween('inv_date', [$from_date, $to_date]);
                 })
                     ->orWhere(function ($q) use ($from_date, $to_date) {
-                        // For d-m-Y format - convert dates for comparison
+                        // For d-m-Y format (31-07-2025)
                         $q->whereRaw("STR_TO_DATE(inv_date, '%d-%m-%Y') BETWEEN ? AND ?", [
+                            $from_date,
+                            $to_date
+                        ]);
+                    })
+                    ->orWhere(function ($q) use ($from_date, $to_date) {
+                        // For d.m.Y format (31.07.2025)
+                        $q->whereRaw("STR_TO_DATE(inv_date, '%d.%m.%Y') BETWEEN ? AND ?", [
                             $from_date,
                             $to_date
                         ]);
@@ -267,6 +273,6 @@ class EInvoiceController extends BaseController
 
         //print_r(new EInvoiceExport($from_date, $to_date,$selected));
 
-        return Excel::download(new EInvoiceExport($from_date, $to_date,$selected), $filename);
+        return Excel::download(new EInvoiceExport($from_date, $to_date, $selected), $filename);
     }
 }
