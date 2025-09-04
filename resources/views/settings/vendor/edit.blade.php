@@ -223,6 +223,13 @@
                                     <label for="shipping_place_supply">Place Supply</label>
                                 </div>
                             </div>
+
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control form-control-sm" id="shipping_distance" name="shipping_distance" value="{{ $vendor_details['shipping_distance'] }}" placeholder="Distance">
+                                    <label for="shipping_distance">Distance</label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
