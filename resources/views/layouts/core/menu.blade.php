@@ -121,7 +121,20 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                     </ul>
                 </li>
 
-
+                <!-- Start::slide -->
+                <li class="slide has-sub {{ request()->is('report*') ? 'active open' : '' }}">
+                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('report*') ? 'active' : '' }}">
+                        <i class="side-menu__icon fa-solid fa-chart-line"></i>
+                        <span class="side-menu__label ">Report</span>
+                        <i class="fe fe-chevron-right side-menu__angle"></i>
+                    </a>
+                    <ul class="slide-menu child1">
+                        <li class="slide">
+                            <a href="{{ route('dispatch_status_report_master') }}" class="side-menu__item {{ request()->routeIs('dispatch_status_report_master') ? 'active' : '' }}">Dispatch Status</a>
+                        </li>
+                    </ul>
+                </li>
+                <!-- End::slide -->
 
                 @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor', 'list-vendor', 'view-vendor']))
                 <li class="slide has-sub {{ request()->is('settings*') ? 'active open' : '' }}">

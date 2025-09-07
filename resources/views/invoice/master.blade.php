@@ -53,6 +53,7 @@
 
     <div class="modal fade" id="detail_modal"></div>
     <div class="modal fade" id="invoice_modal"></div>
+    <div class="modal fade" id="grn_modal"></div>
 
     <!-- row -->
     <div class="row">
@@ -74,7 +75,6 @@
                                     <th>PO Number</th>
                                     <th>Vendor Name</th>
                                     <th>Created at</th>
-                                    
                                 </tr>
                             </thead>
                             <tbody>
@@ -89,7 +89,8 @@
                                             <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton1">
                                                 <li><a class="dropdown-item view_invoice" data-id="{{ $invoice->id }}" href="javascript:void(0);">View</a></li>
                                                 <li><a class="dropdown-item update_invoice" data-id="{{ $invoice->id }}" href="javascript:void(0);">Update Invoice Details</a></li>
-                                                <li><a class="dropdown-item" target="_blank" href="{{route('generateInvoice',['id' => $invoice->id])}}" >Print</a></li>
+                                                <li><a class="dropdown-item update_grn" data-id="{{ $invoice->id }}" href="javascript:void(0);">Update GRN Details</a></li>
+                                                <li><a class="dropdown-item" target="_blank" href="{{route('generateInvoice',['id' => $invoice->id])}}">Print</a></li>
                                                 <li><a class="dropdown-item delete_invoice" data-id="{{ $invoice->id }}" href="javascript:void(0);">Delete</a></li>
                                             </ul>
                                         </div>
@@ -97,8 +98,7 @@
                                     <td>{{ $invoice->inv_date }}</td>
                                     <td>{{ $invoice->po->po_num }}</td>
                                     <td>{{ $invoice->po->vendor->name ?? 'N/A' }}</td>
-                                    <td>{{  \Carbon\Carbon::parse($invoice->created_at)->format('d-m-Y h:i A'); }}</td>
-                                    
+                                    <td>{{ \Carbon\Carbon::parse($invoice->created_at)->format('d-m-Y h:i A'); }}</td>
                                 </tr>
                                 @endforeach
                             </tbody>
@@ -211,6 +211,23 @@
             });
         });
 
+        $(document).on('click', '.update_grn', function() {
+            var id = $(this).data('id');
+            $.ajax({
+                url: "{{route('grn_details_edit')}}",
+                method: 'POST',
+                data: {
+                    id: id,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    $("#grn_modal").html(response);
+                    initGrnValidation();
+                    $("#grn_modal").modal('show');
+                }
+            });
+        });
+
         function initValidation() {
             $('.select2').select2({
                 width: '100%',
@@ -269,6 +286,133 @@
                     return false;
                 }
             });
+        }
+
+        function initGrnValidation() {
+            $('.select2').select2({
+                width: '100%',
+                dropdownParent: $('.modal-body')
+            });
+
+            // Auto-calculate when GRN qty changes
+            $(document).off('input', 'input[name="grn_qty"]');
+            $(document).on('input', 'input[name="grn_qty"]', function() {
+                calculateGrnValues();
+            });
+
+            // Auto-calculate debit note tax amount and total value
+            $(document).off('input', 'input[name="debit_note_value"], input[name="debit_note_tax_rate"]');
+            $(document).on('input', 'input[name="debit_note_value"], input[name="debit_note_tax_rate"]', function() {
+                calculateDebitNoteValues();
+            });
+
+            // Handle discrepancy change
+            $(document).off('change', 'input[name="discrepancy"]');
+            $(document).on('change', 'input[name="discrepancy"]', function() {
+                if ($(this).val() === 'yes') {
+                    $('#remarks').val('shortage');
+                } else {
+                    $('#remarks').val('');
+                }
+            });
+
+            // Initialize calculations on page load
+            calculateGrnValues();
+            calculateDebitNoteValues();
+
+            $("#GrnUpdateForm").validate({
+                rules: {},
+                messages: {},
+                errorElement: 'span',
+                errorClass: 'error',
+                errorPlacement: function(error, element) {
+                    error.insertAfter(element);
+                },
+                highlight: function(element) {
+                    $(element).addClass('error-border');
+                },
+                unhighlight: function(element) {
+                    $(element).removeClass('error-border');
+                },
+                submitHandler: function(form) {
+                    var formData = new FormData(form);
+                    $.ajax({
+                        url: "{{ route('grn_details_update') }}",
+                        type: "POST",
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        success: function(response) {
+                            if (response.success) {
+                                $("#grn_modal").modal('hide');
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Success',
+                                    text: response.message,
+                                    timer: 3000
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error',
+                                    text: response.message || 'An error occurred'
+                                });
+                            }
+                        },
+                        error: function() {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: 'An error occurred while submitting the form'
+                            });
+                        }
+                    });
+                    return false;
+                }
+            });
+        }
+
+        function calculateGrnValues() {
+            var invoiceQty = parseFloat($('input[name="total_invoice_qty"]').val()) || 0;
+            var grnQty = parseFloat($('input[name="grn_qty"]').val()) || 0;
+            var unitPrice = parseFloat($('input[name="unit_price_after_discount"]').val()) || 0;
+            var gstRate = parseFloat($('input[name="invoice_gst_rate"]').val()) || 0;
+
+            // Calculate difference (Invoice Qty - GRN Qty)
+            var shortageQty = invoiceQty - grnQty;
+            $('input[name="short_inv_vs_grn"]').val(shortageQty.toFixed(2));
+
+            // If there's shortage, calculate debit note value
+            if (shortageQty > 0) {
+                var debitNoteValue = shortageQty * unitPrice;
+                $('input[name="debit_note_value"]').val(debitNoteValue.toFixed(2));
+
+                // Set GST rate if not already set
+                if (!$('input[name="debit_note_tax_rate"]').val()) {
+                    $('input[name="debit_note_tax_rate"]').val(gstRate);
+                }
+
+                // Recalculate debit note values
+                calculateDebitNoteValues();
+            } else {
+                // Reset debit note values if no shortage
+                $('input[name="debit_note_value"]').val('0.00');
+                $('input[name="debit_note_tax_amount"]').val('0.00');
+                $('input[name="total_debit_note_value"]').val('0.00');
+            }
+        }
+
+        function calculateDebitNoteValues() {
+            var debitValue = parseFloat($('input[name="debit_note_value"]').val()) || 0;
+            var taxRate = parseFloat($('input[name="debit_note_tax_rate"]').val()) || 0;
+
+            var taxAmount = (debitValue * taxRate) / 100;
+            var totalValue = debitValue + taxAmount;
+
+            $('input[name="debit_note_tax_amount"]').val(taxAmount.toFixed(2));
+            $('input[name="total_debit_note_value"]').val(totalValue.toFixed(2));
         }
     });
 </script>

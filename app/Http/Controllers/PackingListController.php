@@ -399,6 +399,34 @@ class PackingListController extends BaseController
         ]);
     }
 
+    public function get_po_locations(Request $request)
+    {
+        $poId = $request->input('po_id');
+
+        $locations = PoItems::where('po_id', $poId)
+            ->distinct()
+            ->pluck('location')
+            ->filter()
+            ->values();
+
+        return response()->json($locations);
+    }
+
+    public function get_location_colors(Request $request)
+    {
+        $poId = $request->input('po_id');
+        $location = $request->input('location');
+
+        $colors = PoItems::where('po_id', $poId)
+            ->where('location', $location)
+            ->distinct()
+            ->pluck('color')
+            ->filter()
+            ->values();
+
+        return response()->json($colors);
+    }
+
     public function get_po_colors(Request $request)
     {
         $poId = $request->input('po_id');
@@ -419,6 +447,7 @@ class PackingListController extends BaseController
         $poId     = $request->input('po_id');
         $article  = $request->input('article_number');
         $color    = $request->input('color');
+        $location = $request->input('location'); // Add this
 
         // Fetch the PO (to get vendor_id)
         $po = PoMaster::with('vendor')->find($poId);
@@ -427,10 +456,10 @@ class PackingListController extends BaseController
         }
 
         $vendorId = $po->vendor_id;
-
         $sizes = [];
 
         if ($vendorId == 4) {
+            // Existing vendor 4 logic...
             $configItems = PackingListConfigItem::where('po_id', $poId)
                 ->where('vendor_id', 4)
                 ->where('color', $color)
@@ -440,7 +469,6 @@ class PackingListController extends BaseController
                 $size   = $item->size;
                 $maxQty = $item->pack_qty;
 
-                // sum up how much has already been packed for this PO/color/size
                 $packedQty = PackingListItem::whereHas('packingList', function ($q) use ($poId) {
                     $q->where('po_id', $poId);
                 })
@@ -461,8 +489,41 @@ class PackingListController extends BaseController
                     'config_item_id' => $item->id,
                 ];
             }
+        } elseif ($vendorId == 7) {
+            // New vendor 7 logic - directly from po_items
+            $poItems = PoItems::where('po_id', $poId)
+                ->where('color', $color)
+                ->where('location', $location)
+                ->where('article_number', $article)
+                ->get();
+
+            foreach ($poItems as $poItem) {
+                $maxQty = $poItem->qty;
+
+                $packedQty = PackingListItem::whereHas('packingList', function ($q) use ($poId, $location) {
+                    $q->where('po_id', $poId)->where('location', $location);
+                })
+                    ->where('article_number', $article)
+                    ->where('color', $color)
+                    ->where('size', $poItem->size)
+                    ->sum('quantity');
+
+                $remainingQty = $maxQty - $packedQty;
+                if ($remainingQty <= 0) {
+                    continue;
+                }
+
+                $sizes[] = [
+                    'size'           => $poItem->size,
+                    'max_qty'        => $maxQty,
+                    'packed_qty'     => $packedQty,
+                    'remaining_qty'  => $remainingQty,
+                    'config_item_id' => null, // No config for vendor 7
+                    'po_item_id'     => $poItem->id,
+                ];
+            }
         } else {
-            // Other vendors: existing config‐item logic
+            // Existing other vendors logic...
             $configItems = PackingListConfigItem::whereHas('config', function ($q) use ($poId) {
                 $q->where('po_id', $poId);
             })
@@ -668,7 +729,8 @@ class PackingListController extends BaseController
     {
         $poId     = $request->input('id');
         $vendorId = $request->input('vendor_id');
-        $color     = $request->input('color');
+        $color    = $request->input('color');
+        $location = $request->input('location');
 
         $po = PoMaster::find($poId);
         if (! $po) {
@@ -690,14 +752,22 @@ class PackingListController extends BaseController
         $carton_id = $carton->id;
 
         if ($vendorId == 4) {
-            // Benetton: po_item_id wasn't stored, so just pull distinct article_numbers
+            // Existing Benetton logic...
             $articles = PoItems::where('po_id', $poId)
                 ->where('color', $color)
                 ->pluck('article_number')
                 ->unique()
                 ->values();
+        } elseif ($vendorId == 7) {
+            // New vendor 7 logic
+            $articles = PoItems::where('po_id', $poId)
+                ->where('color', $color)
+                ->where('location', $location)
+                ->pluck('article_number')
+                ->unique()
+                ->values();
         } else {
-            // All other vendors: use packed config items + grouping logic
+            // Existing other vendors logic...
             $configItems = PackingListConfigItem::whereHas('config', function ($q) use ($poId) {
                 $q->where('po_id', $poId);
             })
@@ -707,7 +777,6 @@ class PackingListController extends BaseController
 
             $filteredArticles = collect();
 
-            // Group by article_number, size, and color
             $grouped = $configItems->groupBy(function ($item) {
                 return $item->poItem->article_number . '|' . $item->size . '|' . $item->color;
             });
@@ -727,7 +796,6 @@ class PackingListController extends BaseController
                     ->where('size', $size)
                     ->sum('quantity');
 
-                // only include if still to be packed
                 if ($actualPackedQty < $totalPackQty) {
                     $filteredArticles->push($articleNumber);
                 }
@@ -740,6 +808,7 @@ class PackingListController extends BaseController
             'carton_id',
             'poId',
             'color',
+            'location',
             'articles',
             'job_num'
         ));
@@ -752,6 +821,7 @@ class PackingListController extends BaseController
 
         $po_id = $po_details['po_id'];
         $color = $po_details['color'];
+        $location = $po_details['location'] ?? null;
         $net_weight = $po_details['net_weight'];
         $carton_id = $po_details['carton_id'];
 
@@ -772,6 +842,10 @@ class PackingListController extends BaseController
             'po_details.color'          => 'required|string',
         ];
 
+        if ($vendorId == 7) {
+            $rules['po_details.location'] = 'required|string';
+        }
+
         $rules['cartondata.*.sizes']     = 'required|array|min:1';
         $rules['cartondata.sizes.size,*'] = 'required|string';
         $rules['cartondata.sizes.quantity.*'] = 'required|integer|min:1';
@@ -785,39 +859,50 @@ class PackingListController extends BaseController
             $suffix = $existingCount + 1;
             $generatedPackRefNo = "{$po->po_job_num}/{$suffix}";
 
-            // Create or fetch PackingListMaster based on po_id, color, and pack_status
+            // Create or fetch PackingListMaster based on po_id, color, location, and pack_status
+            $searchCriteria = [
+                'po_id' => $po_id,
+                'color' => $selected_color,
+                'pack_status' => 0
+            ];
+
+            $createData = [
+                'pack_ref_no' => $generatedPackRefNo,
+                'vendor_id'  => $po->vendor_id,
+                'po_no'      => $po->po_num,
+                'po_date'    => $po->po_date,
+                'color' => $selected_color,
+                'created_by' => auth()->user()->id,
+                'created_at' => now(),
+            ];
+
+            // Include location for vendor 7
+            if ($vendorId == 7) {
+                $searchCriteria['location'] = $location;
+                $createData['location'] = $location;
+            }
+
             $packingList = PackingListMaster::firstOrCreate(
-                [
-                    'po_id' => $po_id,
-                    'color' => $selected_color,  // Include color in the search criteria
-                    'pack_status' => 0
-                ],
-                [
-                    'pack_ref_no' => $generatedPackRefNo,
-                    'vendor_id'  => $po->vendor_id,
-                    'po_no'      => $po->po_num,
-                    'po_date'    => $po->po_date,
-                    'color' => $selected_color,
-                    'created_by' => auth()->user()->id,
-                    'created_at' => now(),
-                ]
+                $searchCriteria,
+                $createData
             );
 
             $currentCartonNumber = $this->getNextCartonNumber($vendorId, $packingList->id);
             $cartonName = $this->formatCartonName($vendorId, $currentCartonNumber);
             $createdAt = now();
 
-            foreach ($carton_data as $carton): //Article Loop Starts
-
+            foreach ($carton_data as $carton) {
                 $sizes = $carton['sizes'];
 
-                // Loop each entry
+                // Loop each size entry
                 foreach ($sizes as $idx => $size) {
                     $qty = $size['quantity'];
-                    $configItemId = $size['config_item_id'];
+                    $configItemId = $size['config_item_id'] ?? null;
+                    $poItemId = $size['po_item_id'] ?? null;
 
-                    // Check remaining qty for this size/color
+                    // Check remaining qty for this size/color based on vendor
                     if ($vendorId == 4) {
+                        // Vendor 4 (Benetton) logic
                         $poSize = PackingListConfigItem::where('po_id', $po_id)
                             ->where('vendor_id', 4)
                             ->where('color', $color)
@@ -834,7 +919,41 @@ class PackingListController extends BaseController
                             ->where('color', $color)
                             ->where('size', $size['size'])
                             ->sum('quantity');
+
+                        $poItemForCreate = PoItems::where('po_id', $po_id)
+                            ->where('article_number', $carton['article_number'])
+                            ->where('color', $color)
+                            ->where('size', $size['size'])
+                            ->first();
+                    } elseif ($vendorId == 7) {
+                        // Vendor 7 logic - direct from po_items
+                        $poItem = PoItems::where('po_id', $po_id)
+                            ->where('article_number', $carton['article_number'])
+                            ->where('color', $color)
+                            ->where('location', $location)
+                            ->where('size', $size['size'])
+                            ->first();
+
+                        if (!$poItem) {
+                            return response()->json(['error' => "Item not found for size {$size['size']} in location {$location}"], 400);
+                        }
+
+                        $maxQty = $poItem->qty;
+
+                        $alreadyPacked = PackingListItem::whereHas('packingList', function ($q) use ($po_id, $location) {
+                            $q->where('po_id', $po_id);
+                            if ($location) {
+                                $q->where('location', $location);
+                            }
+                        })
+                            ->where('article_number', $carton['article_number'])
+                            ->where('color', $color)
+                            ->where('size', $size['size'])
+                            ->sum('quantity');
+
+                        $poItemForCreate = $poItem;
                     } else {
+                        // Other vendors logic
                         $configItem = PackingListConfigItem::find($configItemId);
                         if (! $configItem) {
                             return response()->json(['error' => "Configuration item not found for size {$size['size']}"], 400);
@@ -847,7 +966,14 @@ class PackingListController extends BaseController
                             ->where('article_number', $carton['article_number'])
                             ->where('size', $size['size'])
                             ->sum('quantity');
+
+                        $poItemForCreate = PoItems::where('po_id', $po_id)
+                            ->where('article_number', $carton['article_number'])
+                            ->where('color', $color)
+                            ->where('size', $size['size'])
+                            ->first();
                     }
+
                     $remaining = $maxQty - $alreadyPacked;
 
                     if ($qty > $remaining) {
@@ -856,18 +982,11 @@ class PackingListController extends BaseController
                         ], 400);
                     }
 
-                    // Find PoItem if exists
-                    $poItem = PoItems::where('po_id', $po_id)
-                        ->where('article_number', $carton['article_number'])
-                        ->where('color', $color)
-                        ->where('size', $size['size'])
-                        ->first();
-
                     // Create the PackingListItem
                     PackingListItem::create([
                         'packing_list_id' => $packingList->id,
                         'vendor_id'       => $po->vendor_id,
-                        'po_item_id'      => $vendorId == 4 ? null : ($poItem->id ?? null),
+                        'po_item_id'      => ($vendorId == 4) ? null : ($poItemForCreate->id ?? null),
                         'carton_id'       => $carton_id,
                         'carton_name'     => $cartonName,
                         'article_number'  => $carton['article_number'],
@@ -879,8 +998,7 @@ class PackingListController extends BaseController
                         'created_at'      => $createdAt,
                     ]);
                 }
-
-            endforeach; // Article Multiple
+            }
 
             return response()->json([
                 'success' => true,
@@ -1981,6 +2099,254 @@ class PackingListController extends BaseController
                 'sizeOrder' => $sizeOrder,
                 'rows'      => $tableRows,
             ];
+        } elseif ($packingList->vendor_id == 7) {
+            //
+            // VENDOR ID 7 (Aditya-specific)
+            //
+
+            // Get location from packing list
+            $location = $packingList->location ?? '';
+
+            // Get all sizes from the PO for this location
+            $allSizesFromPO = collect();
+            if ($packingList->po_id && $location) {
+                $allSizesFromPO = PoItems::where('po_id', $packingList->po_id)
+                    ->where('location', $location)
+                    ->pluck('size')
+                    ->unique()
+                    ->sort()
+                    ->values();
+            }
+
+            // If no sizes found, fallback to current packing list sizes
+            if ($allSizesFromPO->isEmpty()) {
+                $allSizesFromPO = $allSizes;
+            }
+
+            // Get dynamic sizeOrder from PO items for this location
+            $sizeOrder = [];
+            if ($packingList->po_id && $location) {
+                $sizeOrder = PoItems::where('po_id', $packingList->po_id)
+                    ->where('location', $location)
+                    ->pluck('size')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+            }
+            if (empty($sizeOrder)) {
+                $sizeOrder = $allSizesFromPO->toArray();
+            }
+
+            // Get order quantities from PackingListConfigItem for this location
+            $orderQuantitiesFromConfig = collect();
+            if ($packingList->po_id && $location) {
+                $orderQuantitiesFromConfig = PackingListConfigItem::where('po_id', $packingList->po_id)
+                    ->where('status', 0)
+                    ->whereHas('poItem', function ($query) use ($location) {
+                        $query->where('location', $location);
+                    })
+                    ->groupBy('size')
+                    ->selectRaw('size, SUM(po_qty) as total_order_qty')
+                    ->pluck('total_order_qty', 'size');
+            }
+
+            // Get carton dimensions from PackingListConfigMaster
+            $ctnDimensions = '';
+            if ($packingList->po_id) {
+                $configMaster = PackingListConfigMaster::where('po_id', $packingList->po_id)->first();
+                if ($configMaster && $configMaster->carton) {
+                    $carton = $configMaster->carton;
+                    if ($carton->length || $carton->breadth || $carton->height) {
+                        $ctnDimensions = $carton->length . 'X' . $carton->breadth . 'X' . $carton->height;
+                    }
+                }
+            }
+
+            // Calculate net weight per carton_name (sum quantities but count each carton only once for weight)
+            $cartonWeights = [];
+            $cartonCbm = [];
+            foreach ($packingList->items as $item) {
+                $cartonName = $item->carton_name;
+
+                // For net weight - only count each carton_name once, use the net_weight from the item
+                if (!isset($cartonWeights[$cartonName])) {
+                    $cartonWeights[$cartonName] = $item->net_weight ?? 0;
+                }
+
+                // Calculate CBM for each item
+                if (!isset($cartonCbm[$cartonName])) {
+                    $cartonCbm[$cartonName] = 0;
+                }
+
+                $cbm = $item->quantity * (
+                    ($item->carton->length ?? 0) *
+                    ($item->carton->breadth ?? 0) *
+                    ($item->carton->height ?? 0)
+                ) / 1000000; // Convert to cubic meters
+
+                $cartonCbm[$cartonName] += $cbm;
+            }
+
+            // Group items directly by carton_name and combine quantities by size
+            $cartonGroups = [];
+
+            foreach ($packingList->items as $item) {
+                $cartonName = $item->carton_name;
+                $poItem = $item->po_item;
+
+                if (!isset($cartonGroups[$cartonName])) {
+                    $cartonGroups[$cartonName] = [
+                        'carton_name' => $cartonName,
+                        'carton_num' => intval($cartonName),
+                        'article_number' => $item->article_number,
+                        'style_description' => $poItem->style_description ?? $poItem->part_description ?? '',
+                        'color' => $item->color,
+                        'sizes' => array_fill_keys($sizeOrder, 0),
+                        'total_qty' => 0
+                    ];
+                }
+
+                // Add quantity for this size
+                if (in_array($item->size, $sizeOrder)) {
+                    $cartonGroups[$cartonName]['sizes'][$item->size] += $item->quantity;
+                    $cartonGroups[$cartonName]['total_qty'] += $item->quantity;
+                }
+            }
+
+            // Sort cartons by carton number
+            uasort($cartonGroups, function ($a, $b) {
+                return $a['carton_num'] - $b['carton_num'];
+            });
+
+            // Group consecutive cartons with same quantity pattern for ranges
+            $cartonRanges = [];
+            $currentRange = [];
+            $lastCartonNum = null;
+            $lastSizePattern = null;
+
+            foreach ($cartonGroups as $cartonData) {
+                $currentCartonNum = $cartonData['carton_num'];
+                $sizePattern = $cartonData['sizes'];
+
+                // Check if this carton can be grouped with current range
+                $canGroup = false;
+                if ($lastCartonNum !== null && $lastSizePattern !== null) {
+                    $isConsecutive = ($currentCartonNum == $lastCartonNum + 1);
+                    $samePattern = ($sizePattern == $lastSizePattern);
+                    $canGroup = $isConsecutive && $samePattern;
+                }
+
+                if ($canGroup) {
+                    // Add to current range
+                    $currentRange[] = $cartonData;
+                } else {
+                    // Save current range and start new one
+                    if (!empty($currentRange)) {
+                        $cartonRanges[] = $currentRange;
+                    }
+                    $currentRange = [$cartonData];
+                }
+
+                $lastCartonNum = $currentCartonNum;
+                $lastSizePattern = $sizePattern;
+            }
+
+            // Don't forget the last range
+            if (!empty($currentRange)) {
+                $cartonRanges[] = $currentRange;
+            }
+
+            // Create table rows from carton ranges
+            $tableRows = [];
+            $totals = [
+                'carton_count' => 0,
+                'per_size' => array_fill_keys($sizeOrder, 0),
+                'total_pieces' => 0
+            ];
+
+            foreach ($cartonRanges as $range) {
+                $cartonCount = count($range);
+                $firstCarton = $range[0];
+                $lastCarton = end($range);
+
+                // Create carton range display
+                $ctnRange = $cartonCount > 1
+                    ? $firstCarton['carton_name'] . ' to ' . $lastCarton['carton_name']
+                    : $firstCarton['carton_name'] . ' to ' . $firstCarton['carton_name'];
+
+                // Calculate totals for this range
+                $totalQty = 0;
+                $sizeQuantities = array_fill_keys($sizeOrder, 0);
+
+                foreach ($range as $carton) {
+                    $totalQty += $carton['total_qty'];
+                    foreach ($sizeOrder as $size) {
+                        $sizeQuantities[$size] += $carton['sizes'][$size];
+                    }
+                }
+
+                // Calculate per carton quantity (total divided by number of cartons)
+                $perCartonQty = $cartonCount > 0 ? round($totalQty / $cartonCount) : 0;
+
+                $row = [
+                    'article_number' => $firstCarton['article_number'],
+                    'style_description' => $firstCarton['style_description'],
+                    'color' => $firstCarton['color'],
+                    'per_size' => $sizeQuantities,
+                    'per_ctn' => $perCartonQty,
+                    'total' => $totalQty,
+                    'ctn_range' => $ctnRange,
+                    'total_ctns' => $cartonCount
+                ];
+
+                // Update totals
+                $totals['carton_count'] += $cartonCount;
+                foreach ($sizeQuantities as $size => $qty) {
+                    if (isset($totals['per_size'][$size])) {
+                        $totals['per_size'][$size] += $qty;
+                    }
+                }
+                $totals['total_pieces'] += $totalQty;
+
+                $tableRows[] = $row;
+            }
+
+            // Calculate totals for footer
+            $uniqueCartons = $packingList->items->pluck('carton_name')->unique();
+            $totalCtn = $uniqueCartons->count();
+
+            // Calculate total net weight (sum of net weights for unique cartons only)
+            $totalNetWeight = array_sum($cartonWeights);
+
+            // Calculate total gross weight (net weight + 1.5 per unique carton)
+            $totalGrossWeight = $totalNetWeight + ($totalCtn * 1.5);
+
+            // Calculate total CBM
+            $totalCbm = array_sum($cartonCbm);
+
+            // Calculate percentages for summary
+            $percentages = collect();
+            foreach ($sizeOrder as $size) {
+                $ordered = $orderQuantitiesFromConfig->get($size, 0);
+                $packed = $totals['per_size'][$size] ?? 0;
+                $percentage = $ordered > 0 ? round(($packed / $ordered) * 100) : 0;
+                $percentages[$size] = $percentage;
+            }
+
+            $tableData = [
+                'sizeOrder' => $sizeOrder,
+                'rows' => $tableRows,
+                'totals' => $totals
+            ];
+
+            // Set order quantities for summary
+            $orderedQuantities = $orderQuantitiesFromConfig;
+
+            // Set location-specific data
+            $allSizes = collect($sizeOrder);
+
+            // Override the global dimension display with the one from config
+            $ctnDimDisplay = $ctnDimensions;
         } elseif ($packingList->vendor_id == 4) {
             //
             // VENDOR ID 4 (Benetton-specific) - Group by size with continuous cartons, then merge same carton names across sizes
@@ -2140,7 +2506,7 @@ class PackingListController extends BaseController
                     'net_weight'       => $totalNetWeightForRange,
                     'empty_box_weight' => $totalEmptyBoxWeight,
                     'gross_weight'     => $totalGrossWeightForRange,
-                    'sizes_involved'   => array_unique($cartonGroup['sizes']) // Track which sizes are in this row
+                    'totalCbm'   => array_unique($cartonGroup['sizes']) // Track which sizes are in this row
                 ];
 
                 // Set quantities for each size that exists in this carton group
@@ -2423,6 +2789,7 @@ class PackingListController extends BaseController
             'totalDispatches'          => $totalDispatches,    // Add this
             'orderQuantitiesFromAllPacks' => $orderQuantitiesFromAllPacks, // Add this
             'currentDispatchNumber'    => $currentDispatchNumber, // Add this
+            'totalCbm'    => $totalCbm, // Add this
         ];
 
         //echo "<pre>".print_r($viewData,true)."</pre>";
@@ -2435,6 +2802,8 @@ class PackingListController extends BaseController
             $viewTemplate = 'packing_list.puma_print';
         } elseif ($packingList->vendor_id == 2) {
             $viewTemplate = 'packing_list.skechers_print';
+        } elseif ($packingList->vendor_id == 7) {
+            $viewTemplate = 'packing_list.aditiya_print';
         } else {
             $viewTemplate = 'packing_list.jack_print';
         }

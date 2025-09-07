@@ -248,10 +248,12 @@ class PdfExtractController extends BaseController
                     $po_num = $data['po_details']['order_no'] ?? null;
                 } elseif ($vendor_id === "4") {
                     $po_num = $data['order_no'] ?? null;
+                } elseif ($vendor_id === "7") {
+                    $po_num = $data['po_number'] ?? null;
                 }
             } else {
                 $po_details = json_decode($request->input('po_details'), true);
-                if (in_array($vendor_id, ["1", "5", "6"])) {
+                if (in_array($vendor_id, ["1", "5", "6", "7"])) {
                     $po_num = $po_details['PO Number'] ?? null;
                 } elseif ($vendor_id === "3") {
                     $po_num = $po_details['po_number'] ?? null;
@@ -441,6 +443,75 @@ class PdfExtractController extends BaseController
                     'season' => $po_details['season'] ?? null,
                 ]);
                 break;
+
+            case "7":
+                $totalQty = 0;
+                $unitPrice = 0;
+                $colors = [];
+
+                // Extract vendor information
+                $vendorInfo = [];
+                if (isset($po_details['vendor_info'])) {
+                    $vendorInfo = $po_details['vendor_info'];
+                } elseif (isset($po_details['Vendor'])) {
+                    // If vendor info is at root level
+                    $vendorInfo = [
+                        'Vendor' => $po_details['Vendor'] ?? null,
+                        'Price per unit' => $po_details['Price per unit'] ?? null,
+                        'Total unit' => $po_details['Total unit'] ?? null,
+                        'Net Value' => $po_details['Net Value'] ?? null,
+                    ];
+                }
+
+                if (isset($po_details['po_items']) && is_array($po_details['po_items'])) {
+                    foreach ($po_details['po_items'] as $item) {
+                        $totalQty += floatval($item['Qty'] ?? 0);
+                        if ($unitPrice == 0) {
+                            $unitPrice = floatval($item['Rate/Unit'] ?? 0);
+                        }
+                    }
+                }
+
+                // If no unit price from items, try to get from vendor info
+                if ($unitPrice == 0 && isset($vendorInfo['Price per unit'])) {
+                    $unitPrice = floatval(str_replace(',', '', $vendorInfo['Price per unit']));
+                }
+
+                // If no total qty from items, try to get from vendor info
+                if ($totalQty == 0 && isset($vendorInfo['Total unit'])) {
+                    $totalQty = floatval(str_replace(',', '', $vendorInfo['Total unit']));
+                }
+
+                if (isset($po_details['material_descriptions']) && is_array($po_details['material_descriptions'])) {
+                    foreach ($po_details['material_descriptions'] as $material) {
+                        if (!empty($material['Colour'])) {
+                            $colors[] = $material['Colour'];
+                        }
+                    }
+                }
+
+                $poData = array_merge($poData, [
+                    'po_num' => $po_details['po_number'] ?? null,
+                    'po_date' => $po_details['po_date'] ?? null,
+                    'goods_ready_date' => $po_details['po_items'][0]['Delivery Date'] ?? null,
+                    'vendor_del_adr' => is_array($po_details['bill_to_ship_address'] ?? null)
+                        ? implode(', ', $po_details['bill_to_ship_address'])
+                        : ($po_details['bill_to_ship_address'] ?? null),
+                    'vendor_com_adr' => is_array($po_details['bill_to_ship_address'] ?? null)
+                        ? implode(', ', $po_details['bill_to_ship_address'])
+                        : ($po_details['bill_to_ship_address'] ?? null),
+                    'vendor_gst' => $po_details['gstin'] ?? $po_details['gst_number'] ?? null,
+                    'colors' => implode(', ', array_unique($colors)),
+                    'po_unit_price' => $unitPrice,
+                    'po_qty' => $totalQty,
+                    'article_info' => json_encode([
+                        'vendor_number' => $vendorInfo['Vendor'] ?? $po_details['vendor_number'] ?? null,
+                        'price_per_unit' => $vendorInfo['Price per unit'] ?? null,
+                        'total_unit' => $vendorInfo['Total unit'] ?? null,
+                        'net_value' => $vendorInfo['Net Value'] ?? null,
+                    ]), // Store vendor info in article_info as JSON
+                ]);
+                break;
         }
 
         return PoMaster::create($poData);
@@ -472,6 +543,10 @@ class PdfExtractController extends BaseController
 
             case "4":
                 $this->createBenettonItems($po_id, $po_items, $po_details, $vendor_id);
+                break;
+
+            case "7":
+                $this->createAdityaItems($po_id, $po_items, $po_details, $hsn_code);
                 break;
         }
     }
@@ -686,6 +761,42 @@ class PdfExtractController extends BaseController
         }
     }
 
+    private function createAdityaItems($po_id, $po_items, $po_details, $hsn_code)
+    {
+        $materialDescriptions = $po_details['material_descriptions'] ?? [];
+
+        foreach ($po_items as $index => $item) {
+            // Get corresponding material description
+            $materialDesc = $materialDescriptions[$index] ?? [];
+
+            $poItemData = [
+                'po_id' => $po_id,
+                'sno' => $index + 1,
+                'article_number' => $item['Material Code'] ?? null,
+                'hsn_code' => $item['HSN Number'] ?? $hsn_code,
+                'qty' => floatval($item['Qty'] ?? 0),
+                'uom' => $item['Unit'] ?? null,
+                'material_value' => floatval($item['Rate/Unit'] ?? 0),
+                'igst_taxable_value' => $item['Net Value'] ?? 0,
+                'igst_per' => floatval($item['IGST %'] ?? 0),
+                'size' => $item['Size'] ?? null,
+                'mrp' => floatval($item['MRP'] ?? 0),
+                'location' => $item['Stor e Loc'] ?? null,
+                'due_date' => $item['Delivery Date'] ?? null,
+                'content' => $materialDesc['Material'] ?? null,
+                'style_description' => $materialDesc['Material description'] ?? null,
+                'color' => $materialDesc['Colour'] ?? null,
+                'product_character' => $materialDesc['Warer Trail'] ?? null,
+                'mrp' => $item['Mrp'] ?? null,
+                'created_at' => now(),
+                'created_by' => auth()->user()->id,
+                'status' => 0,
+            ];
+
+            PoItems::create($poItemData);
+        }
+    }
+
     public function get_po_details(Request $request)
     {
         $po_id = $request->input('po_id');
@@ -727,9 +838,10 @@ class PdfExtractController extends BaseController
             ];
         }
 
-        // Format PO items for Jack Jones (vendor 1)
+        // Format PO items for different vendors
         $formatted_po_items = [];
         if (in_array($vendor_id, [1, 5, 6])) {
+            // Jack Jones format
             foreach ($po_items as $item) {
                 $formatted_po_items[] = [
                     'sno' => $item->sno,
@@ -744,6 +856,48 @@ class PdfExtractController extends BaseController
                     'ean_code' => $item->ean_code
                 ];
             }
+        } elseif ($vendor_id == 7) {
+            $po_items_array = [];
+            $material_descriptions_array = [];
+
+            foreach ($po_items as $index => $item) {
+                $po_items_array[] = [
+                    'Material Code' => $item->article_number,
+                    'HSN Number' => $item->hsn_code,
+                    'Qty' => $item->qty,
+                    'Unit' => $item->uom,
+                    'Per' => '1', // Default value
+                    'Rate/Unit' => $item->material_value,
+                    'Net Value' => $item->igst_taxable_value,
+                    'IGST %' => $item->igst_per,
+                    'CGST %' => '', // Empty as specified
+                    'SGST %' => '', // Empty as specified
+                    'UGST %' => '', // Empty as specified
+                    'Val1' => $item->total_amount, // Tax amount
+                    'Val2' => '', // Empty as specified
+                    'Delivery Date' => $item->due_date,
+                    'Size' => $item->size,
+                    'Sizewise Qty' => $item->qty,
+                    'MRP' => $item->mrp,
+                    'Stor e Loc' => $item->location,
+                ];
+
+                $material_descriptions_array[] = [
+                    'Material' => $item->content,
+                    'Material description' => $item->style_description,
+                    'Colour' => $item->color,
+                    'Warer Trail' => $item->product_character,
+                ];
+            }
+
+            $data = [
+                'po_number' => $po_master->po_num,
+                'po_date' => $po_master->po_date,
+                'vendor_number' => $article_info['vendor_number'] ?? '',
+                'bill_to_ship_address' => explode(', ', $po_master->vendor_del_adr ?? ''),
+                'po_items' => $po_items_array,
+                'material_descriptions' => $material_descriptions_array,
+            ];
         }
 
         $data = compact(
@@ -754,6 +908,11 @@ class PdfExtractController extends BaseController
             'formatted_po_items',
             'size_breakdown'
         );
+
+        // Add reconstructed data for Aditiya
+        if ($vendor_id == 7) {
+            $data['data'] = $data;
+        }
 
         // Choose view by vendor
         switch ($vendor_id) {
@@ -770,6 +929,9 @@ class PdfExtractController extends BaseController
                 break;
             case 4:
                 $view = 'pdf_extract.benetton_details';
+                break;
+            case 7:
+                $view = 'pdf_extract.aditiya_details';
                 break;
             default:
                 $view = 'pdf_extract.details';

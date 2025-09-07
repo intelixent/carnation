@@ -25,7 +25,8 @@ class PackingListMaster extends Model
         'created_by',
         'status',
         'pack_status',
-        'color'
+        'color',
+        'location'
     ];
 
     public function vendor()

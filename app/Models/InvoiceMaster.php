@@ -23,6 +23,7 @@ class InvoiceMaster extends Model
         'pack_ids',
         'irn_details',
         'transporter_details',
+        'grn_details',
         'vendor_id',
         'created_at',
         'created_by',

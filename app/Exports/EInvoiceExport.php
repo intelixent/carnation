@@ -1031,11 +1031,56 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
     private function getItemDescription($invoice)
     {
         $po_details = $invoice->po;
-        if ($po_details) {
-            $articleInfo = json_decode($po_details->article_info, true) ?: [];
-            return $articleInfo['Article description'] ?? 'Garment Items';
+        $vendor = $invoice->vendor;
+
+        if (!$po_details) return '';
+
+        $articleInfo = json_decode($po_details->article_info, true) ?: [];
+        $packIds = explode(',', $invoice->pack_ids);
+
+        // Get first packing item for size and color
+        $firstPackingItem = PackingListItem::whereIn('packing_list_id', $packIds)->first();
+
+        if (!$firstPackingItem) {
+            return $articleInfo['Article description'] ?? $articleInfo['ARTICLE'] ?? '';
         }
-        return 'Garment Items';
+
+        $size = $firstPackingItem->size;
+        $color = $firstPackingItem->color;
+
+        // Get PoItems for this specific color and size
+        $itm = PoItems::where('po_id', $po_details->id)
+            ->where('size', $size)
+            ->where('color', $color)
+            ->first();
+
+        // Apply vendor-specific logic for style/description
+        if ($vendor) {
+            switch ($vendor->id) {
+                case 1:
+                case 5:
+                case 6:
+                    // For vendors 1, 5, 6 - use article description from article_info
+                    return $articleInfo['Article description'] ?? $articleInfo['ARTICLE'] ?? '';
+
+                case 4:
+                    // For vendor 4 - use part_description from po_items
+                    return $itm ? ($itm->part_description ?? '') : '';
+
+                case 2:
+                    // For vendor 2 - use type from po_items
+                    return $itm ? ($itm->type ?? '') : '';
+
+                case 3:
+                    // For vendor 3 - use style_description from po_items
+                    return $itm ? ($itm->style_description ?? '') : '';
+
+                default:
+                    return $articleInfo['Article description'] ?? $articleInfo['ARTICLE'] ?? '';
+            }
+        }
+
+        return $articleInfo['Article description'] ?? $articleInfo['ARTICLE'] ?? '';
     }
 
     private function getHsnCodeAndUom($invoice)

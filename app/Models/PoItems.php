@@ -50,5 +50,6 @@ class PoItems extends Model
         'material_value',
         'total_value',
         'due_date',
+        'location',
     ];
 }

@@ -490,13 +490,13 @@ class InvoiceController extends BaseController
         //     'business_settings' => $businessSettings,
         // ]);
 
-         return Pdf::loadView('invoice.update_pdf', [
+        return Pdf::loadView('invoice.update_pdf', [
             'invoice'              => $invoiceData,
             'po_details'           => $po_details,
             'vendor'               => $vendor,
             'state'                => $state,
             'invoice_item_details' => $items,
-             'packCartonCounts' => $packCartonCounts,
+            'packCartonCounts' => $packCartonCounts,
             'totalCartonsInInvoice' => $totalCartonsInInvoice,
             'bill_to_details'      => $billTo,
             'ship_to_details'      => $shipTo,
@@ -563,30 +563,23 @@ class InvoiceController extends BaseController
                 //'shipped_distance' => $vendor->shipping_distance ?? '',
             ];
         }
-            if(isset($transportDetails['transport_distance']) && $transportDetails['transport_distance']!="")
-            {
-                $transportDetails['transport_distance'] = $transportDetails['transport_distance'] ?? '';
-            }
-            else
-            {
-                $transportDetails['transport_distance']= $vendor->shipping_distance ?? '';
-                    
-            }
+        if (isset($transportDetails['transport_distance']) && $transportDetails['transport_distance'] != "") {
+            $transportDetails['transport_distance'] = $transportDetails['transport_distance'] ?? '';
+        } else {
+            $transportDetails['transport_distance'] = $vendor->shipping_distance ?? '';
+        }
 
-            if($invoice['ref_no']!="")
-            {
-                
-                $transportDetails['transport_doc_no'] = $this->extractSlashNumbers($invoice['ref_no']);
-            }
-            else
-            {
-                $transportDetails['transport_doc_no'] = "";
-            }
-                
-            
+        if ($invoice['ref_no'] != "") {
 
-           
-        
+            $transportDetails['transport_doc_no'] = $this->extractSlashNumbers($invoice['ref_no']);
+        } else {
+            $transportDetails['transport_doc_no'] = "";
+        }
+
+
+
+
+
 
         // print_r($invoice['ref_no']);
         return view('invoice.invoice_details', compact(
@@ -682,7 +675,7 @@ class InvoiceController extends BaseController
     }
 
     public  function extractSlashNumbers(string $code): string
-        {
+    {
         // Split into up to 3 parts and pad missing with a space
         $parts = explode('/', $code, 3);
         $parts = array_pad($parts, 3, ' ');
@@ -694,5 +687,171 @@ class InvoiceController extends BaseController
         //$secondNum = (preg_match('/\d+(?:-\d+)?/', $parts[2], $m2)) ? $m2[0] : ' ';
 
         return $firstNum;
+    }
+
+    public function grn_details_edit(Request $request)
+    {
+        $invoice = InvoiceMaster::with(['po.vendor'])->find($request->id);
+        $GrnDetails = json_decode($invoice->grn_details, true) ?? [];
+
+        // Get invoice data for calculations
+        $invoiceData = $this->getInvoiceCalculationData($invoice);
+
+        return view('invoice.grn_details', compact(
+            'invoice',
+            'GrnDetails',
+            'invoiceData'
+        ));
+    }
+
+    private function getInvoiceCalculationData($invoice)
+    {
+        $po_details = $invoice->po;
+        $vendor = $po_details->vendor;
+
+        // Get all packing list IDs for this invoice
+        $packIds = explode(',', $invoice->pack_ids);
+
+        // Get total quantity from packing lists
+        $totalInvoiceQty = PackingListItem::whereIn('packing_list_id', $packIds)
+            ->sum('quantity');
+
+        // Get GST rate from invoice
+        $gstRate = floatval($invoice->gst);
+
+        // Get vendor discount
+        $discountPct = $vendor->discount ?? 0;
+
+        // Calculate unit price based on vendor-specific logic (same as generateInvoice)
+        $poUnitPrice = floatval($po_details->vcp);
+        $articleInfo = json_decode($po_details->article_info, true) ?: [];
+
+        // Group items by size to get representative items for unit price calculation
+        $packedItems = PackingListItem::whereIn('packing_list_id', $packIds)
+            ->select([
+                'size',
+                'color',
+                DB::raw('SUM(quantity) AS total_quantity'),
+            ])
+            ->groupBy(['size', 'color'])
+            ->get();
+
+        $weightedUnitPrice = 0;
+        $totalCalculatedQty = 0;
+
+        foreach ($packedItems as $pi) {
+            $unit_price = $poUnitPrice; // Default unit price
+
+            // Get PoItems for this specific color and size
+            $itm = PoItems::where('po_id', $po_details->id)
+                ->where('size', $pi->size)
+                ->where('color', $pi->color)
+                ->first();
+
+            // Apply vendor-specific logic for unit price
+            switch ($vendor->id) {
+                case 1:
+                case 5:
+                case 6:
+                    // Use PO VCP price (already set as default)
+                    break;
+
+                case 4:
+                    $poSize = PoSizes::where('po_id', $po_details->id)
+                        ->where('size', $pi->size)
+                        ->where('color', $pi->color)
+                        ->first();
+                    if ($poSize) {
+                        $unit_price = $poSize->unit_price ?: $unit_price;
+                    }
+                    if ($itm) {
+                        $unit_price = $unit_price ?: floatval($itm->unit_price);
+                    }
+                    break;
+
+                case 2:
+                case 3:
+                    if ($itm) {
+                        $unit_price = floatval($itm->unit_price ?? 0);
+                    }
+                    break;
+
+                default:
+                    // Use PO VCP price (already set as default)
+                    break;
+            }
+
+            // Calculate weighted unit price
+            $itemQty = $pi->total_quantity;
+            $weightedUnitPrice += ($unit_price * $itemQty);
+            $totalCalculatedQty += $itemQty;
         }
+
+        // Calculate average unit price across all items
+        $averageUnitPrice = $totalCalculatedQty > 0 ? ($weightedUnitPrice / $totalCalculatedQty) : $poUnitPrice;
+
+        // Apply discount to get final unit price
+        $discountAmount = ($averageUnitPrice * $discountPct) / 100;
+        $unitPriceAfterDiscount = $averageUnitPrice - $discountAmount;
+
+        return [
+            'total_invoice_qty' => $totalInvoiceQty,
+            'unit_price_after_discount' => $unitPriceAfterDiscount,
+            'unit_price_before_discount' => $averageUnitPrice,
+            'discount_percentage' => $discountPct,
+            'discount_amount_per_unit' => $discountAmount,
+            'gst_rate' => $gstRate,
+            'vendor_id' => $vendor->id,
+            'vendor_name' => $vendor->name
+        ];
+    }
+
+    public function grn_details_update(Request $request)
+    {
+        try {
+            $invoice = InvoiceMaster::find($request->id);
+
+            // Prepare GRN details JSON with all fields
+            $GrnDetails = [
+                'asn_no' => $request->asn_no,
+                'asn_date' => $request->asn_date,
+                'lr_no' => $request->lr_no,
+                'transport_name' => $request->transport_name,
+                'transporter_per_cost' => $request->transporter_per_cost,
+                'dispatched_date' => $request->dispatched_date,
+                'reached_date' => $request->reached_date,
+                'pod_date' => $request->pod_date,
+                'grn_date' => $request->grn_date,
+                'grn_qty' => $request->grn_qty,
+                'short_inv_vs_grn' => $request->short_inv_vs_grn,
+                'discrepancy' => $request->discrepancy,
+                'remarks' => $request->remarks,
+                'transport_cost_total' => $request->transport_cost_total,
+                'debit_note_value' => $request->debit_note_value,
+                'debit_note_tax_rate' => $request->debit_note_tax_rate,
+                'debit_note_tax_amount' => $request->debit_note_tax_amount,
+                'total_debit_note_value' => $request->total_debit_note_value,
+                'business_head' => $request->business_head,
+                'grn_status' => $request->grn_status,
+                'status' => $request->status,
+                'week' => $request->week,
+                'fl_clear_date' => $request->fl_clear_date,
+            ];
+
+            $invoice->update([
+                'grn_details' => json_encode($GrnDetails),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'GRN Details updated successfully!',
+                'invoice_id' => $request->id
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
 }

@@ -12,6 +12,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\TransportController;
 use App\Http\Controllers\EInvoiceController;
 use App\Http\Controllers\AutoPackingListController;
+use App\Http\Controllers\ReportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -85,6 +86,8 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/items_by_id', [PackingListController::class, 'get_packing_list_items_by_id'])->name('packing_list_items_by_id');
         Route::get('/po_search', [PackingListController::class, 'search_po'])->name('packing_list_search');
         Route::get('/po_details', [PackingListController::class, 'get_packing_po_details'])->name('get_packing_po_details');
+        Route::get('/get-_po_locations', [PackingListController::class, 'get_po_locations'])->name('get_po_locations');
+        Route::get('/get_location_colors', [PackingListController::class, 'get_location_colors'])->name('get_location_colors');
         Route::get('/po_colors', [PackingListController::class, 'get_po_colors'])->name('get_po_colors');
         Route::get('/sizes_with_qty', [PackingListController::class, 'get_sizes_with_qty'])->name('get_sizes_with_qty');
         Route::post('/details', [PackingListController::class, 'packing_list_details'])->name('packing_list_details');
@@ -119,12 +122,22 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/store_invoice', [InvoiceController::class, 'store_invoice'])->name('store_invoice');
         Route::get('/download', [InvoiceController::class, 'generateInvoice'])->name('generateInvoice');
         Route::get('/e_invoicemaster', [EInvoiceController::class, 'e_invoice_master'])->name('e_invoice_master');
+        Route::post('/grn_details_edit', [InvoiceController::class, 'grn_details_edit'])->name('grn_details_edit');
+        Route::post('/grn_details_update', [InvoiceController::class, 'grn_details_update'])->name('grn_details_update');
     });
 
     Route::group(['prefix' => 'e_invoice'], function () {
         //Route::get('/master', [EInvoiceController::class, 'e_invoice_master'])->name('e_invoice_master');
         Route::post('/table', [EInvoiceController::class, 'e_invoice_master_table'])->name('e_invoice_master_table');
         Route::get('/excel_download', [EInvoiceController::class, 'e_invoice_excel_download'])->name('e_invoice_excel_download');
+    });
+
+    Route::group(['prefix' => 'report'], function () {
+        Route::get('/dispatch_status', [ReportController::class, 'dispatch_status_report_master'])->name('dispatch_status_report_master');
+        Route::post('/dispatch_status_table', [ReportController::class, 'dispatch_status_report_table'])->name('dispatch_status_report_table');
+        Route::post('/dispatch_status_report_edit', [ReportController::class, 'dispatch_status_report_edit'])->name('dispatch_status_report_edit');
+        Route::post('/dispatch_status_report_update', [ReportController::class, 'dispatch_status_report_update'])->name('dispatch_status_report_update');
+        Route::get('/dispatch_status_excel_download', [ReportController::class, 'dispatch_status_report_excel_download'])->name('dispatch_status_report_excel_download');
     });
 
     Route::group(['prefix' => 'settings'], function () {
