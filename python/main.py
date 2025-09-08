@@ -2208,6 +2208,7 @@ async def process_pdf(request: dict = Body(...)):
             else:
                 result = None
 
+
             if result is None:
                 return JSONResponse(
                     content={"success": False, "message": "Failed to extract table from PDF"},
