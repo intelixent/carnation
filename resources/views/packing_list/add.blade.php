@@ -32,7 +32,7 @@
                 <div class="card-body">
                     @csrf
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div class="form-group">
                                 <label for="po_search">Search JobNo/PO No/Vendor</label>
                                 <select class="form-control select2-po-search"
@@ -44,11 +44,21 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Color</label>
-                            <select class="form-control select2" id="colorSelect" required disabled>
-                                <option value="">Select Color</option>
-                            </select>
+                        <div class="col-md-4" id="locationSelectDiv" style="display: none;">
+                            <div class="form-group">
+                                <label for="locationSelect">Location</label>
+                                <select class="form-control select2" id="locationSelect" required disabled>
+                                    <option value="">Select Location</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="colorSelect">Color</label>
+                                <select class="form-control select2" id="colorSelect" required disabled>
+                                    <option value="">Select Color</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -100,7 +110,6 @@
         // helper to toggle PO-search enabled state
         function togglePOSearch(enabled) {
             $('#po_search').prop('disabled', !enabled);
-            // redraw Select2 so it reflects the disabled state
             $('#po_search').trigger('change.select2');
         }
 
@@ -169,6 +178,7 @@
         function loadAvailableSizesForEdit() {
             const poId = $('#po_id').val();
             const color = $('#color').val();
+            const location = $('#location').val();
             const articleNumber = $('#articleSelect').val();
             const originalSize = $('#originalSize').val();
 
@@ -178,6 +188,7 @@
                 data: {
                     po_id: poId,
                     color: color,
+                    location: location,
                     article_number: articleNumber
                 },
                 success: function(response) {
@@ -190,7 +201,6 @@
                             sizeSelect.append(`<option value="${size.size}" ${isSelected}>${size.size}</option>`);
                         });
 
-                        // If original size is selected, trigger change to load its data
                         if (originalSize) {
                             sizeSelect.trigger('change');
                         }
@@ -214,24 +224,26 @@
             const selectedSize = $(this).val();
             const poId = $('#po_id').val();
             const color = $('#color').val();
+            const location = $('#location').val();
             const articleNumber = $('#articleSelect').val();
             const itemId = $('#itemId').val();
 
             if (selectedSize) {
-                checkSizeAvailability(poId, color, articleNumber, selectedSize, itemId);
+                checkSizeAvailability(poId, color, articleNumber, selectedSize, itemId, location);
             } else {
                 resetSizeInfo();
             }
         });
 
         // Check size availability for edit mode
-        function checkSizeAvailability(poId, color, articleNumber, size, itemId) {
+        function checkSizeAvailability(poId, color, articleNumber, size, itemId, location) {
             $.ajax({
                 url: '{{ route("check_size_availability") }}',
                 method: 'GET',
                 data: {
                     po_id: poId,
                     color: color,
+                    location: location,
                     article_number: articleNumber,
                     size: size,
                     item_id: itemId
@@ -267,8 +279,6 @@
             $('#packedQtyDisplay').text(data.packed_qty);
             $('#availableQtyDisplay').text(data.remaining_qty);
             $('#sizeInfoCard').show();
-
-            // Update config_item_id
             $('#currentConfigId').val(data.config_item_id);
         }
 
@@ -281,16 +291,13 @@
             quantityInput.attr('max', maxAvailable);
             quantityInput.data('max-qty', maxAvailable);
 
-            // Update help text
             $('#quantityHelp').text(`Available: ${maxAvailable}`);
 
-            // Reset quantity if it exceeds available
             const currentQty = parseInt(quantityInput.val());
             if (currentQty > maxAvailable) {
                 quantityInput.val(maxAvailable > 0 ? 1 : 0);
             }
 
-            // Enable/disable save button based on availability
             if (maxAvailable > 0) {
                 quantityInput.trigger('input');
             } else {
@@ -327,7 +334,9 @@
             var poId = $(this).val();
             if (poId) {
                 // Reset dependent fields
+                $('#locationSelect').prop('disabled', true).html('<option value="">Select Location</option>');
                 $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
+                $('#locationSelectDiv').hide();
                 $('.add-item').prop('disabled', true);
                 $('#items_section').hide();
                 $('#itemsTable tbody').empty();
@@ -351,7 +360,15 @@
                         }
 
                         $('#po_details').show();
-                        loadColors(poId);
+
+                        // Show location select for vendor 7, otherwise load colors directly
+                        if (data.vendor_id == 7) {
+                            $('#locationSelectDiv').show();
+                            loadLocations(poId);
+                        } else {
+                            $('#locationSelectDiv').hide();
+                            loadColors(poId);
+                        }
                     },
                     error: function(xhr) {
                         console.error('Error fetching PO details');
@@ -361,12 +378,65 @@
             } else {
                 $('#po_details, #items_section').hide();
                 $('#itemsTable tbody').empty();
+                $('#locationSelect').prop('disabled', true).html('<option value="">Select Location</option>');
                 $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
+                $('#locationSelectDiv').hide();
                 $('.add-item').prop('disabled', true);
             }
         });
 
-        // Load colors for selected PO
+        // Load locations for vendor 7
+        function loadLocations(poId) {
+            $.ajax({
+                url: '{{ route("get_po_locations") }}',
+                type: 'GET',
+                data: {
+                    po_id: poId
+                },
+                success: function(locations) {
+                    var options = '<option value="">Select Location</option>';
+                    locations.forEach(function(location) {
+                        options += '<option value="' + location + '">' + location + '</option>';
+                    });
+                    $('#locationSelect').html(options).prop('disabled', false);
+                }
+            });
+        }
+
+        // Handle location selection for vendor 7
+        $('#locationSelect').on('change', function() {
+            var location = $(this).val();
+            var poId = $('#po_search').val();
+
+            if (location && poId) {
+                loadLocationColors(poId, location);
+            } else {
+                $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
+                $('.add-item').prop('disabled', true);
+                $('#items_section').hide();
+            }
+        });
+
+        // Load colors for selected location (vendor 7)
+        function loadLocationColors(poId, location) {
+            $.ajax({
+                url: '{{ route("get_location_colors") }}',
+                type: 'GET',
+                data: {
+                    po_id: poId,
+                    location: location
+                },
+                success: function(colors) {
+                    var options = '<option value="">Select Color</option>';
+                    colors.forEach(function(color) {
+                        options += '<option value="' + color + '">' + color + '</option>';
+                    });
+                    $('#colorSelect').html(options).prop('disabled', false);
+                }
+            });
+        }
+
+        // Load colors for selected PO (non-vendor 7)
         function loadColors(poId) {
             $.ajax({
                 url: '{{ route("get_po_colors") }}',
@@ -388,11 +458,12 @@
         $('#colorSelect').on('change', function() {
             var color = $(this).val();
             var poId = $('#po_search').val();
+            var location = $('#locationSelect').val();
 
             if (color && poId) {
                 $('.add-item').prop('disabled', false);
                 $('#items_section').show();
-                loadPackingListItems(poId, color);
+                loadPackingListItems(poId, color, location);
 
                 // Refresh PO-search so dropdown stays usable but empty
                 setTimeout(reinitializePOSearch, 100);
@@ -403,11 +474,12 @@
             }
         });
 
-        function loadPackingListItems(poId, color = null) {
+        function loadPackingListItems(poId, color = null, location = null) {
             var requestData = {
                 po_id: poId
             };
             if (color) requestData.color = color;
+            if (location) requestData.location = location;
 
             $.ajax({
                 url: '{{ route("packing_list_items") }}',
@@ -417,7 +489,6 @@
                     var packingLists = response.packing_lists;
                     var canAddItems = response.can_add_items;
 
-                    // Enable/disable add button based on availability
                     $('.add-item').prop('disabled', !canAddItems);
 
                     var $container = $('#packing_lists_container').empty();
@@ -494,7 +565,6 @@
                 `);
                     }
 
-                    // Show status message
                     if (!canAddItems) {
                         $container.prepend(`
                     <div class="alert alert-warning">
@@ -531,7 +601,8 @@
         $(document).on('click', '.add-item', function() {
             var poId = $('#po_search').val(),
                 vendorId = $('#vendor_id').val(),
-                color = $('#colorSelect').val();
+                color = $('#colorSelect').val(),
+                location = $('#locationSelect').val();
 
             if (!poId || !color) {
                 Swal.fire({
@@ -543,17 +614,28 @@
                 return;
             }
 
+            // Check location requirement for vendor 7
+            if (vendorId == 7 && !location) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Location Required',
+                    text: 'Please select a location first',
+                    confirmButtonColor: '#3085d6'
+                });
+                return;
+            }
+
             $.ajax({
                 url: "{{ route('packing_list_item_add') }}",
                 method: 'POST',
                 data: {
                     id: poId,
                     vendor_id: vendorId,
-                    color: color
+                    color: color,
+                    location: location
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
-                    // init any select2 inside modal
                     $('.select2m', '#add_modal').select2({
                         width: '100%',
                         dropdownParent: $('.modal-body')
@@ -613,7 +695,8 @@
                             timer: 1500,
                             showConfirmButton: false
                         });
-                        loadPackingListItems($('#po_search').val(), $('#colorSelect').val());
+                        var location = $('#locationSelect').val();
+                        loadPackingListItems($('#po_search').val(), $('#colorSelect').val(), location);
                     },
                     error: function(xhr) {
                         Swal.fire({
@@ -632,6 +715,7 @@
             const $block = $(this).closest('.article-block');
             const poId = $('#po_id').val();
             const color = $('#color').val();
+            const location = $('#location').val();
             const article = $(this).val();
             const $container = $block.find('.sizesTableContainer');
 
@@ -641,6 +725,7 @@
                     data: {
                         po_id: poId,
                         color: color,
+                        location: location,
                         article_number: article
                     },
                     success: function(data) {
@@ -678,17 +763,18 @@
                         qtyText = `Pack Qty: ${item.remaining_qty}`;
                     }
 
+                    // Include both config_item_id and po_item_id for different vendors
                     tableHtml += `
                 <tr>
                     <td>
-                        <input type="checkbox" class="form-check-input size-checkbox" value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}">
+                        <input type="checkbox" class="form-check-input size-checkbox" value="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id || ''}" data-po-item-id="${item.po_item_id || ''}">
                     </td>
                     <td>
                         <strong>${item.size}</strong><br>
                         <small class="text-muted">${qtyText}</small>
                     </td>
                     <td>
-                        <input type="number" class="form-control quantity-input w-100" style="min-width: 120px;" min="1" max="${item.remaining_qty}" data-size="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id}" disabled>
+                        <input type="number" class="form-control quantity-input w-100" style="min-width: 120px;" min="1" max="${item.remaining_qty}" data-size="${item.size}" data-max-qty="${item.remaining_qty}" data-config-id="${item.config_item_id || ''}" data-po-item-id="${item.po_item_id || ''}" disabled>
                     </td>
                 </tr>
             `;
@@ -784,6 +870,7 @@
                     carton_id: $('#carton_id').val(),
                     article_number: $('#articleSelect').val(),
                     color: $('#color').val(),
+                    location: $('#location').val(),
                     quantity: quantity,
                     size: selectedSize,
                     config_item_id: $('#currentConfigId').val()
@@ -801,12 +888,14 @@
                         const size = $(this).val();
                         const quantity = $block.find(`.quantity-input[data-size="${size}"]`).val();
                         const configId = $(this).data('config-id');
+                        const poItemId = $(this).data('po-item-id');
 
                         if (quantity && parseInt(quantity) > 0) {
                             selectedSizes.push({
                                 size: size,
                                 quantity: parseInt(quantity),
                                 config_item_id: configId,
+                                po_item_id: poItemId
                             });
                         }
                     });
@@ -864,7 +953,8 @@
                     });
                     if (response.po_id) {
                         const color = $('#colorSelect').val() || $('#color').val();
-                        loadPackingListItems(response.po_id, color);
+                        const location = $('#locationSelect').val() || $('#location').val();
+                        loadPackingListItems(response.po_id, color, location);
                     }
                 },
                 error: function(xhr) {
@@ -879,6 +969,7 @@
                 po_id: $('#po_id').val(),
                 carton_id: $('#carton_id').val(),
                 color: $('#color').val(),
+                location: $('#location').val(),
                 net_weight: $("#net_weight").val()
             };
 
@@ -910,7 +1001,8 @@
                     });
                     if (response.po_id) {
                         const color = $('#colorSelect').val();
-                        loadPackingListItems(response.po_id, color);
+                        const location = $('#locationSelect').val();
+                        loadPackingListItems(response.po_id, color, location);
                     }
                 },
                 error: function(xhr) {

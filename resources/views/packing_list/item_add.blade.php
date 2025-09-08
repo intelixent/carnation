@@ -1,45 +1,41 @@
 <div class="modal-dialog modal-lg">
     <div class="modal-content">
         <div class="modal-header">
-            <h5 class="modal-title">Add Packing List Item - # {{ $job_num }} | {{ $color }}</h5>
+            <h5 class="modal-title">Add Packing List Item - # {{ $job_num }} | {{ $color }}{{ isset($location) ? ' | ' . $location : '' }}</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body" >
-
+        <div class="modal-body">
             <input type="hidden" id="po_id" value="{{ $poId }}">
             <input type="hidden" id="color" value="{{ $color }}">
+            <input type="hidden" id="location" value="{{ $location ?? '' }}">
             <input type="hidden" id="carton_id" value="{{ $carton_id }}">
 
             <div id="articlesWrapper">
-            <div class="article-block mb-4 border p-3 rounded">
-                 <button type="button" class="btn-close float-end remove-article" title="Remove this article"></button>
+                <div class="article-block mb-4 border p-3 rounded">
+                    <button type="button" class="btn-close float-end remove-article" title="Remove this article"></button>
+                    <div class="mb-3">
+                        <div class="input-group">
+                            <label class="form-label">Article Number</label>
+                            <select class="form-control select2m articleSelect" required style="width:100%">
+                                <option value="">Select Article</option>
+                                @foreach($articles as $article)
+                                <option value="{{ $article }}">{{ $article }}</option>
+                                @endforeach
+                            </select>
+                            <button type="button" class="btn btn-sm btn-underline text-primary" id="addArticleBtn">+ Add Another Article</button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 sizesTableContainer">
+                        <label class="form-label">Select Sizes and Quantities</label>
+                        <!-- Sizes table will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
             <div class="mb-3">
-                <div class="input-group">
-                <label class="form-label">Article Number</label>
-                <select class="form-control select2m articleSelect"  required style="width:100%">
-                    <option value="">Select Article</option>
-                    @foreach($articles as $article)
-                    <option value="{{ $article }}">{{ $article }}</option>
-                    @endforeach
-                </select>
-          
-                <button type="button" class="btn btn-sm btn-underline text-primary" id="addArticleBtn">+ Add Another Article</button>
-               
-            </div>
-            </div>
-                
-
-            <div class="mb-3 sizesTableContainer">
-                <label class="form-label">Select Sizes and Quantities</label>
-                <!-- Sizes table will be loaded here -->
-            </div>
-
-</div>
-</div>
-
-             <div class="mb-3">
                 <label class="form-label">Net Weight</label>
-                 <input type="text" class="form-control" id="net_weight" class="net_weight">
+                <input type="text" class="form-control" id="net_weight" class="net_weight">
             </div>
         </div>
         <div class="modal-footer">
