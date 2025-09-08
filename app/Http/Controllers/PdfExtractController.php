@@ -494,12 +494,12 @@ class PdfExtractController extends BaseController
                     'po_num' => $po_details['po_number'] ?? null,
                     'po_date' => $po_details['po_date'] ?? null,
                     'goods_ready_date' => $po_details['po_items'][0]['Delivery Date'] ?? null,
-                    'vendor_del_adr' => is_array($po_details['bill_to_ship_address'] ?? null)
-                        ? implode(', ', $po_details['bill_to_ship_address'])
-                        : ($po_details['bill_to_ship_address'] ?? null),
-                    'vendor_com_adr' => is_array($po_details['bill_to_ship_address'] ?? null)
-                        ? implode(', ', $po_details['bill_to_ship_address'])
-                        : ($po_details['bill_to_ship_address'] ?? null),
+                    'vendor_del_adr' => is_array($po_details['bill_to_address'] ?? null)
+                        ? implode(', ', $po_details['bill_to_address'])
+                        : ($po_details['bill_to_address'] ?? null),
+                    'vendor_com_adr' => is_array($po_details['ship_to_address'] ?? null)
+                        ? implode(', ', $po_details['ship_to_address'])
+                        : ($po_details['ship_to_address'] ?? null),
                     'vendor_gst' => $po_details['gstin'] ?? $po_details['gst_number'] ?? null,
                     'colors' => implode(', ', array_unique($colors)),
                     'po_unit_price' => $unitPrice,
@@ -894,7 +894,8 @@ class PdfExtractController extends BaseController
                 'po_number' => $po_master->po_num,
                 'po_date' => $po_master->po_date,
                 'vendor_number' => $article_info['vendor_number'] ?? '',
-                'bill_to_ship_address' => explode(', ', $po_master->vendor_del_adr ?? ''),
+                'bill_to_address' => explode(', ', $po_master->vendor_com_adr ?? ''),
+                'ship_to_address' => explode(', ', $po_master->vendor_del_adr ?? ''),
                 'po_items' => $po_items_array,
                 'material_descriptions' => $material_descriptions_array,
             ];

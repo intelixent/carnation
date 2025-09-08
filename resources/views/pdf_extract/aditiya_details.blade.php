@@ -64,7 +64,7 @@
                             aria-labelledby="headingPoDetails" data-bs-parent="#pdfAccordion">
                             <div class="accordion-body">
                                 <div class="row">
-                                    <div class="col-md-6">
+                                    <div class="col-md-4">
                                         <h5>PO Information</h5>
                                         <ul class="list-group mb-3">
                                             <li class="list-group-item">
@@ -79,17 +79,33 @@
                                         </ul>
                                     </div>
 
-                                    <div class="col-md-6">
+                                    <div class="col-md-4">
+                                        <h5>Bill To</h5>
+                                        <ul class="list-group mb-3">
+                                            <li class="list-group-item">
+                                                <strong>Address:</strong><br>
+                                                @if(is_array($viewData['bill_to_address']))
+                                                @foreach($viewData['bill_to_address'] as $addressLine)
+                                                {{ $addressLine }}<br>
+                                                @endforeach
+                                                @else
+                                                {{ $viewData['bill_to_address'] ?? 'Not available' }}
+                                                @endif
+                                            </li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="col-md-4">
                                         <h5>Ship To</h5>
                                         <ul class="list-group mb-3">
                                             <li class="list-group-item">
                                                 <strong>Address:</strong><br>
-                                                @if(is_array($viewData['bill_to_ship_address']))
-                                                @foreach($viewData['bill_to_ship_address'] as $addressLine)
+                                                @if(is_array($viewData['ship_to_address']))
+                                                @foreach($viewData['ship_to_address'] as $addressLine)
                                                 {{ $addressLine }}<br>
                                                 @endforeach
                                                 @else
-                                                {{ $viewData['bill_to_ship_address'] ?? 'Not available' }}
+                                                {{ $viewData['ship_to_address'] ?? 'Not available' }}
                                                 @endif
                                             </li>
                                         </ul>

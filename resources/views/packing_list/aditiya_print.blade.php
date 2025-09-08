@@ -91,15 +91,15 @@
         <table style="border-collapse: collapse; width: 100%;">
             <tr>
                 <th style="background-color: #bbb; padding: 8px; border: 1px solid #000; text-align: left; width: 15%;">Consignee</th>
-                <td style="padding: 8px; border: 1px solid #000; text-align: left;" colspan="5">ADITYA BIRLA LIFESTYLE BRANDS LIMITED, MADURA FASHION & LIFESTYLE DIVISION, KH NO 118/110/1 BUILDING2, YEMALUR POST, OFF HAL AIRPORT ROAD, BANGALORE</td>
+                <td style="padding: 8px; border: 1px solid #000; text-align: left;" colspan="5">{{ $packing_list->po->vendor_com_adr }}</td>
             </tr>
             <tr>
                 <th style="background-color: #bbb; padding: 8px; border: 1px solid #000; text-align: left;">BUYER</th>
-                <td style="padding: 8px; border: 1px solid #000; text-align: left;" colspan="5">ADITYA BIRLA LIFESTYLE BRANDS LIMITED, Anekal Taluk,Bangalore-562107</td>
+                <td style="padding: 8px; border: 1px solid #000; text-align: left;" colspan="5">{{ $packing_list->po->vendor_del_adr }}</td>
             </tr>
             <tr>
                 <th style="background-color: #bbb; padding: 8px; border: 1px solid #000; text-align: left;">Vendor</th>
-                <td style="padding: 8px; border: 1px solid #000; text-align: left;" colspan="5">{{ $packing_list->vendor->name ?? 'CARNATION CREATIONS PRIVATE LIMITED , 376/1 , NARASIMHANAICKEN PALAYAM, COIMBATORE, TAMILNADU,INDIA.641031' }}</td>
+                <td style="padding: 8px; border: 1px solid #000; text-align: left;" colspan="5">CARNATION CREATIONS PRIVATE LIMITED , 376/1 , NARASIMHANAICKEN PALAYAM, COIMBATORE, TAMILNADU,INDIA.641031</td>
             </tr>
             <tr>
                 <th style="background-color: #bbb; padding: 8px; border: 1px solid #000; text-align: left;">LOCATION</th>

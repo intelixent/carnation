@@ -148,7 +148,9 @@
                 </option>
                 @endforeach
             </select>
+
             @if($hasPackingListItems)
+            <input type="hidden" name="carton_id" value="{{ $selectedCartonId }}">
             <small class="text-muted">Carton cannot be changed after packing list items are created.</small>
             @endif
         </div>

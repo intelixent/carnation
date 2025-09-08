@@ -13,7 +13,7 @@
                 aria-labelledby="headingPoDetails" data-bs-parent="#pdfAccordion">
                 <div class="accordion-body">
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <h5>PO Information</h5>
                             <ul class="list-group mb-3">
                                 <li class="list-group-item">
@@ -28,19 +28,37 @@
                             </ul>
                         </div>
 
-                        <div class="col-md-6">
-                            <h5>Ship To</h5>
+                        <div class="col-md-4">
+                            <h5>Bill To</h5>
                             <ul class="list-group mb-3">
-                                @if(isset($data['bill_to_ship_address']) && is_array($data['bill_to_ship_address']))
+                                @if(isset($data['bill_to_address']) && is_array($data['bill_to_address']))
                                 <li class="list-group-item">
                                     <strong>Address:</strong><br>
-                                    @foreach($data['bill_to_ship_address'] as $addressLine)
+                                    @foreach($data['bill_to_address'] as $addressLine)
                                     {{ $addressLine }}<br>
                                     @endforeach
                                 </li>
                                 @else
                                 <li class="list-group-item">
-                                    <strong>Address:</strong> {{ $data['bill_to_ship_address'] ?? 'Not available' }}
+                                    <strong>Address:</strong> {{ $data['bill_to_address'] ?? 'Not available' }}
+                                </li>
+                                @endif
+                            </ul>
+                        </div>
+
+                        <div class="col-md-4">
+                            <h5>Ship To</h5>
+                            <ul class="list-group mb-3">
+                                @if(isset($data['ship_to_address']) && is_array($data['ship_to_address']))
+                                <li class="list-group-item">
+                                    <strong>Address:</strong><br>
+                                    @foreach($data['ship_to_address'] as $addressLine)
+                                    {{ $addressLine }}<br>
+                                    @endforeach
+                                </li>
+                                @else
+                                <li class="list-group-item">
+                                    <strong>Address:</strong> {{ $data['ship_to_address'] ?? 'Not available' }}
                                 </li>
                                 @endif
                             </ul>
@@ -90,33 +108,33 @@
                             </thead>
                             <tbody>
                                 @if(isset($data['po_items']) && is_array($data['po_items']))
-                                    @foreach($data['po_items'] as $index => $item)
-                                    <tr>
-                                        <td>{{ $index + 1 }}</td>
-                                        <td>{{ $item['Material Code'] ?? '' }}</td>
-                                        <td>{{ $item['HSN Number'] ?? '' }}</td>
-                                        <td>{{ $item['Qty'] ?? '' }}</td>
-                                        <td>{{ $item['Unit'] ?? '' }}</td>
-                                        <td>{{ $item['Per'] ?? '' }}</td>
-                                        <td>{{ $item['Rate/Unit'] ?? '' }}</td>
-                                        <td>{{ $item['Net Value'] ?? '' }}</td>
-                                        <td>{{ $item['IGST %'] ?? '' }}</td>
-                                        <td>{{ $item['CGST %'] ?? '' }}</td>
-                                        <td>{{ $item['SGST %'] ?? '' }}</td>
-                                        <td>{{ $item['UGST %'] ?? '' }}</td>
-                                        <td>{{ $item['Val1'] ?? '' }}</td>
-                                        <td>{{ $item['Val2'] ?? '' }}</td>
-                                        <td>{{ $item['Delivery Date'] ?? '' }}</td>
-                                        <td>{{ $item['Size'] ?? '' }}</td>
-                                        <td>{{ $item['Sizewise Qty'] ?? '' }}</td>
-                                        <td>{{ $item['Mrp'] ?? '' }}</td>
-                                        <td>{{ $item['Stor e Loc'] ?? '' }}</td>
-                                    </tr>
-                                    @endforeach
+                                @foreach($data['po_items'] as $index => $item)
+                                <tr>
+                                    <td>{{ $index + 1 }}</td>
+                                    <td>{{ $item['Material Code'] ?? '' }}</td>
+                                    <td>{{ $item['HSN Number'] ?? '' }}</td>
+                                    <td>{{ $item['Qty'] ?? '' }}</td>
+                                    <td>{{ $item['Unit'] ?? '' }}</td>
+                                    <td>{{ $item['Per'] ?? '' }}</td>
+                                    <td>{{ $item['Rate/Unit'] ?? '' }}</td>
+                                    <td>{{ $item['Net Value'] ?? '' }}</td>
+                                    <td>{{ $item['IGST %'] ?? '' }}</td>
+                                    <td>{{ $item['CGST %'] ?? '' }}</td>
+                                    <td>{{ $item['SGST %'] ?? '' }}</td>
+                                    <td>{{ $item['UGST %'] ?? '' }}</td>
+                                    <td>{{ $item['Val1'] ?? '' }}</td>
+                                    <td>{{ $item['Val2'] ?? '' }}</td>
+                                    <td>{{ $item['Delivery Date'] ?? '' }}</td>
+                                    <td>{{ $item['Size'] ?? '' }}</td>
+                                    <td>{{ $item['Sizewise Qty'] ?? '' }}</td>
+                                    <td>{{ $item['Mrp'] ?? '' }}</td>
+                                    <td>{{ $item['Stor e Loc'] ?? '' }}</td>
+                                </tr>
+                                @endforeach
                                 @else
-                                    <tr>
-                                        <td colspan="19" class="text-center">No PO items found</td>
-                                    </tr>
+                                <tr>
+                                    <td colspan="19" class="text-center">No PO items found</td>
+                                </tr>
                                 @endif
                             </tbody>
                         </table>
@@ -138,19 +156,19 @@
                                 </thead>
                                 <tbody>
                                     @if(isset($data['material_descriptions']) && is_array($data['material_descriptions']))
-                                        @foreach($data['material_descriptions'] as $index => $material)
-                                        <tr>
-                                            <td>{{ $index + 1 }}</td>
-                                            <td>{{ $material['Material'] ?? '' }}</td>
-                                            <td>{{ $material['Material description'] ?? '' }}</td>
-                                            <td>{{ $material['Colour'] ?? '' }}</td>
-                                            <td>{{ $material['Warer Trail'] ?? '' }}</td>
-                                        </tr>
-                                        @endforeach
+                                    @foreach($data['material_descriptions'] as $index => $material)
+                                    <tr>
+                                        <td>{{ $index + 1 }}</td>
+                                        <td>{{ $material['Material'] ?? '' }}</td>
+                                        <td>{{ $material['Material description'] ?? '' }}</td>
+                                        <td>{{ $material['Colour'] ?? '' }}</td>
+                                        <td>{{ $material['Warer Trail'] ?? '' }}</td>
+                                    </tr>
+                                    @endforeach
                                     @else
-                                        <tr>
-                                            <td colspan="5" class="text-center">No material descriptions found</td>
-                                        </tr>
+                                    <tr>
+                                        <td colspan="5" class="text-center">No material descriptions found</td>
+                                    </tr>
                                     @endif
                                 </tbody>
                             </table>
