@@ -32,10 +32,10 @@
 <div class="row mt-2">
     <div class="col-md-12">
         <div class="d-flex justify-content-end">
-            <button type="button" class="btn btn-sm btn-info me-2 reset-positions" {{ $hasPackingListItems ? 'disabled' : '' }}>
+            <button type="button" class="btn btn-sm btn-info me-2 reset-positions">
                 <i class="fas fa-sort-numeric-up"></i> Reset Positions
             </button>
-            <button type="button" class="btn btn-sm btn-warning clear-carton-qty" {{ $hasPackingListItems ? 'disabled' : '' }}>
+            <button type="button" class="btn btn-sm btn-warning clear-carton-qty">
                 <i class="fas fa-eraser"></i> Clear Per Carton Qty
             </button>
         </div>
@@ -45,6 +45,8 @@
 <form id="packingConfigForm" data-vendor-id="{{ $po->vendor_id }}">
     @csrf
     <input type="hidden" name="po_id" value="{{ $po->id }}">
+    <input type="hidden" name="po_id" value="{{ $po->id }}">
+    <input type="hidden" name="has_packing_list_items" value="{{ $hasPackingListItems ? '1' : '0' }}">
 
     <div class="row mt-3">
         <div class="col-md-12">
@@ -103,8 +105,7 @@
                                     class="form-control form-control-sm text-center position-input"
                                     value="{{ $positionData[$size] ?? 1 }}"
                                     min="1"
-                                    style="width: 60px; margin: 0 auto;"
-                                    {{ $hasPackingListItems ? 'disabled' : '' }}>
+                                    style="width: 60px; margin: 0 auto;">
                                 @else
                                 -
                                 @endif
@@ -123,8 +124,7 @@
                                     class="form-control form-control-sm text-center per-carton-qty-input"
                                     value="{{ $perCartonQtyData[$size] ?? 0 }}"
                                     min="0"
-                                    style="width: 70px; margin: 0 auto;"
-                                    {{ $hasPackingListItems ? 'disabled' : '' }}>
+                                    style="width: 70px; margin: 0 auto;">
                                 @else
                                 -
                                 @endif
@@ -140,7 +140,7 @@
     <div class="row mt-3">
         <div class="col-md-4">
             <label for="carton_select" class="form-label"><strong>Select Carton:</strong></label>
-            <select name="carton_id" id="carton_select" class="form-control select2" required>
+            <select name="carton_id" id="carton_select" class="form-control select2" required {{ $hasPackingListItems ? 'disabled' : '' }}>
                 <option value="">Select Carton</option>
                 @foreach($cartons as $carton)
                 <option value="{{ $carton->id }}" {{ $selectedCartonId == $carton->id ? 'selected' : '' }}>
@@ -148,13 +148,17 @@
                 </option>
                 @endforeach
             </select>
+            @if($hasPackingListItems)
+            <small class="text-muted">Carton cannot be changed after packing list items are created.</small>
+            @endif
         </div>
     </div>
 
     <div class="row mt-3">
         <div class="col-md-12 text-center">
-            <button type="submit" class="btn btn-primary" {{ $hasPackingListItems ? 'disabled' : '' }}>
-                <i class="fas fa-save"></i> Save Configuration
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                {{ $hasPackingListItems ? 'Update Configuration' : 'Save Configuration' }}
             </button>
         </div>
     </div>

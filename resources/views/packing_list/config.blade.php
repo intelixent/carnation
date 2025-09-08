@@ -191,27 +191,31 @@
         });
 
         // Handle form submission - Updated validation for ALL vendors
+        // Handle form submission - Updated validation to allow position and per carton qty updates
         $(document).on('submit', '#packingConfigForm', function(e) {
             e.preventDefault();
 
-            // Get vendor ID
+            // Get vendor ID and packing list status from the form
             var vendorId = parseInt($(this).data('vendor-id'));
+            var hasPackingListItems = $('input[name="has_packing_list_items"]').val() === '1';
 
-            // Validate required fields
-            var cartonId = $('#carton_select').val();
-            if (!cartonId) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Validation Error',
-                    text: 'Please select a carton before saving the configuration.',
-                    confirmButtonText: 'OK',
-                    confirmButtonColor: '#ffc107'
-                });
-                $('#carton_select').focus();
-                return;
+            // For new configurations, validate carton selection
+            if (!hasPackingListItems) {
+                var cartonId = $('#carton_select').val();
+                if (!cartonId) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Validation Error',
+                        text: 'Please select a carton before saving the configuration.',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#ffc107'
+                    });
+                    $('#carton_select').focus();
+                    return;
+                }
             }
 
-            // Validate position inputs for ALL vendors
+            // Always validate position inputs (for both new and existing configurations)
             var hasInvalidPosition = false;
             var invalidPositionField = null;
             $('.position-input').each(function() {
@@ -238,7 +242,7 @@
                 return;
             }
 
-            // Validate per carton qty inputs for ALL vendors
+            // Always validate per carton qty inputs (for both new and existing configurations)
             var hasInvalidCartonQty = false;
             var invalidCartonQtyField = null;
             $('.per-carton-qty-input').each(function() {
@@ -265,7 +269,7 @@
                 return;
             }
 
-            // Show configuration summary for ALL vendors
+            // Show configuration summary for both positions and per carton quantities
             var positionSummary = [];
             var cartonQtySummary = [];
 
@@ -283,7 +287,10 @@
                 }
             });
 
-            var summaryText = 'Vendor ' + vendorId + ' Configuration Summary:\n';
+            var actionText = hasPackingListItems ? 'Update' : 'Save';
+            var confirmText = hasPackingListItems ? 'Yes, Update!' : 'Yes, Save it!';
+
+            var summaryText = actionText + ' Configuration for Vendor ' + vendorId + ':\n';
             if (positionSummary.length > 0) {
                 summaryText += 'Positions - ' + positionSummary.join(', ') + '\n';
             }
@@ -292,11 +299,11 @@
             }
 
             Swal.fire({
-                title: 'Save Configuration?',
-                text: summaryText + '\n\nAre you sure you want to save this packing list configuration?',
+                title: actionText + ' Configuration?',
+                text: summaryText + '\n\nAre you sure you want to ' + actionText.toLowerCase() + ' this packing list configuration?',
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Yes, Save it!',
+                confirmButtonText: confirmText,
                 cancelButtonText: 'Cancel',
                 confirmButtonColor: '#28a745',
                 cancelButtonColor: '#6c757d'
@@ -309,9 +316,12 @@
 
         // Function to handle the actual form submission
         function submitConfiguration() {
+            var hasPackingListItems = $('input[name="has_packing_list_items"]').val() === '1';
+            var actionText = hasPackingListItems ? 'Updating' : 'Saving';
+
             Swal.fire({
-                title: 'Saving Configuration...',
-                text: 'Please wait while we save your packing list configuration.',
+                title: actionText + ' Configuration...',
+                text: 'Please wait while we ' + actionText.toLowerCase() + ' your packing list configuration.',
                 allowOutsideClick: false,
                 allowEscapeKey: false,
                 showConfirmButton: false,
@@ -326,10 +336,11 @@
                 data: $('#packingConfigForm').serialize(),
                 success: function(response) {
                     if (response.success) {
+                        var hasPackingListItems = $('input[name="has_packing_list_items"]').val() === '1';
                         Swal.fire({
                             icon: 'success',
                             title: 'Success!',
-                            text: response.message || 'Configuration saved successfully!',
+                            text: response.message || 'Configuration ' + (hasPackingListItems ? 'updated' : 'saved') + ' successfully!',
                             confirmButtonText: 'OK',
                             confirmButtonColor: '#28a745',
                             timer: 3000,
@@ -364,10 +375,11 @@
                         });
                     }
 
+                    var hasPackingListItems = $('input[name="has_packing_list_items"]').val() === '1';
                     Swal.fire({
                         icon: 'error',
                         title: 'Error!',
-                        text: 'Error saving configuration: ' + errorMessage,
+                        text: 'Error ' + (hasPackingListItems ? 'updating' : 'saving') + ' configuration: ' + errorMessage,
                         confirmButtonText: 'Try Again',
                         confirmButtonColor: '#dc3545'
                     });
@@ -375,7 +387,7 @@
             });
         }
 
-        // Reset position counter for ALL vendors
+        // Reset position counter - now works for both new and existing configurations
         $(document).on('click', '.reset-positions', function() {
             var vendorId = $('#packingConfigForm').data('vendor-id');
 
@@ -407,7 +419,7 @@
             });
         });
 
-        // Clear all per carton quantities for ALL vendors
+        // Clear all per carton quantities - now works for both new and existing configurations
         $(document).on('click', '.clear-carton-qty', function() {
             var vendorId = $('#packingConfigForm').data('vendor-id');
 

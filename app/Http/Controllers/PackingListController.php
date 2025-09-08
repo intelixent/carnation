@@ -307,14 +307,17 @@ class PackingListController extends BaseController
                 }
             }
 
-            // Remove any items not in the current list
-            PackingListConfigItem::where('config_id', $configMaster->id)
-                ->whereNotIn('id', $keepIds)
-                ->delete();
+            $isUpdate = PackingListItem::whereHas('packingList', function ($q) use ($po) {
+                $q->where('po_id', $po->id);
+            })->exists();
+
+            $message = $isUpdate ?
+                'Packing list configuration updated successfully' :
+                'Packing list configuration saved successfully';
 
             return response()->json([
                 'success' => true,
-                'message' => 'Packing list configuration saved successfully'
+                'message' => $message
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1554,6 +1557,7 @@ class PackingListController extends BaseController
         $totalCtn = 0;
         $totalNetWeight = 0;
         $totalGrossWeight = 0;
+        $totalCbm = null;
 
         //
         // 2. VENDOR-SPECIFIC LOGIC
