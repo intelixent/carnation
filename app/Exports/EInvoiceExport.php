@@ -1017,7 +1017,7 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
             return [
                 'code' => $state->code,
                 'name' => $state->name,
-                'code_name' => $state->code . ' - ' . $state->name
+                'code_name' => $state->code . '-' . $state->name
             ];
         }
 
