@@ -114,6 +114,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
 
     Route::group(['prefix' => 'invoice'], function () {
         Route::get('/genrate', [InvoiceController::class, 'genrate'])->name('invoice_genrate');
+        Route::post('/check_duplicate_invoice', [InvoiceController::class, 'check_duplicate_invoice'])->name('check_duplicate_invoice');
         Route::get('/master', [InvoiceController::class, 'master'])->name('invoice_master');
         Route::post('/get_complete_vendor_packing_list', [InvoiceController::class, 'get_complete_vendor_packing_list'])->name('get_complete_vendor_packing_list');
         Route::post('/get_packging_list', [InvoiceController::class, 'get_packging_list'])->name('get_packging_list');

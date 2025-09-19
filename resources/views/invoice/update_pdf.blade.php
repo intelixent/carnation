@@ -184,7 +184,7 @@
                 <strong>Date & Time of Supply</strong>
             </td>
             <td style="border: none;">
-                {{ $transporter_details['transport_date_time'] ?? '' }}
+                {{ !empty($transporter_details['transport_date_time']) ? \Carbon\Carbon::createFromFormat('Y-m-d', $transporter_details['transport_date_time'])->format('d-m-Y') : '' }}
             </td>
         </tr>
         <tr>
@@ -229,7 +229,7 @@
                 {{ $invoice['ref_no'] ?? '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
-                <strong>Invoice Date:</strong> {{ $invoice['inv_date'] ?? '' }}
+                <strong>Invoice Date:</strong> {{ !empty($invoice['inv_date']) ? \Carbon\Carbon::createFromFormat('Y-m-d', $invoice['inv_date'])->format('d-m-Y') : '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->

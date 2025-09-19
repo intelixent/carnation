@@ -35,7 +35,8 @@
                     </div>
                     <div class="col-md-6 mb-3">
                         <div class="form-floating">
-                            <input type="text" class="form-control" id="transport_name" name="transport_name" placeholder="Transport Name" value="{{ $GrnDetails['transport_name'] ?? '' }}">
+                            <input type="text" class="form-control" id="transport_name" name="transport_name" placeholder="Transport Name"
+                                value="{{ $GrnDetails['transport_name'] ?? $transportName }}">
                             <label for="transport_name">Transport Name</label>
                         </div>
                     </div>
@@ -56,7 +57,8 @@
                     <!-- Dates -->
                     <div class="col-md-6 mb-3">
                         <div class="form-floating">
-                            <input type="date" class="form-control" id="dispatched_date" name="dispatched_date" placeholder="Dispatched Date" value="{{ $GrnDetails['dispatched_date'] ?? '' }}">
+                            <input type="date" class="form-control" id="dispatched_date" name="dispatched_date" placeholder="Dispatched Date"
+                                value="{{ $GrnDetails['dispatched_date'] ?? $dispatchedDate }}">
                             <label for="dispatched_date">Dispatched Date</label>
                         </div>
                     </div>

@@ -234,9 +234,85 @@
                 dropdownParent: $('.modal-body')
             });
 
+            // Get current invoice ID for duplicate check exclusion
+            var currentInvoiceId = $('input[name="id"]').val();
+
+            // Check for duplicate invoice number on blur (excluding current invoice)
+            $(document).on('blur', '#invoice_no', function() {
+                let invoiceNo = $(this).val().trim();
+                if (invoiceNo) {
+                    checkDuplicateInvoiceForUpdate(invoiceNo, currentInvoiceId);
+                }
+            });
+
+            function checkDuplicateInvoiceForUpdate(invoiceNo, currentId) {
+                $.ajax({
+                    url: '{{ route("check_duplicate_invoice") }}',
+                    method: 'POST',
+                    data: {
+                        invoice_no: invoiceNo,
+                        current_id: currentId, // Pass current invoice ID to exclude from check
+                        _token: $('meta[name="csrf-token"]').attr('content')
+                    },
+                    success: function(response) {
+                        if (response.exists) {
+                            $('#invoice_no').addClass('is-invalid');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Duplicate Invoice Number',
+                                text: 'This invoice number already exists. Please use a different number.',
+                                confirmButtonText: 'OK'
+                            });
+                        } else {
+                            $('#invoice_no').removeClass('is-invalid');
+                        }
+                    },
+                    error: function(xhr) {
+                        console.error('Error checking duplicate invoice:', xhr);
+                    }
+                });
+            }
+
             $("#InvoiceUpdateForm").validate({
-                rules: {},
-                messages: {},
+                rules: {
+                    invoice_no: {
+                        required: true,
+                        maxlength: 100,
+                        remote: {
+                            url: '{{ route("check_duplicate_invoice") }}',
+                            type: 'POST',
+                            data: {
+                                invoice_no: function() {
+                                    return $('#invoice_no').val();
+                                },
+                                current_id: function() {
+                                    return $('input[name="id"]').val(); // Exclude current invoice
+                                },
+                                _token: function() {
+                                    return $('meta[name="csrf-token"]').attr('content');
+                                }
+                            },
+                            dataFilter: function(response) {
+                                var json = JSON.parse(response);
+                                return !json.exists; // Return true if NOT exists (valid)
+                            }
+                        }
+                    },
+                    invoice_date: {
+                        required: true,
+                        date: true
+                    },
+                },
+                messages: {
+                    invoice_no: {
+                        required: "Please enter invoice number",
+                        remote: "This invoice number already exists"
+                    },
+                    invoice_date: {
+                        required: "Please select invoice date",
+                        date: "Please enter a valid date"
+                    },
+                },
                 errorElement: 'span',
                 errorClass: 'error',
                 errorPlacement: function(error, element) {
@@ -249,43 +325,99 @@
                     $(element).removeClass('error-border');
                 },
                 submitHandler: function(form) {
-                    var formData = new FormData(form);
+                    // Additional pre-submit duplicate check
+                    var invoiceNo = $('#invoice_no').val().trim();
+                    var currentId = $('input[name="id"]').val();
+
                     $.ajax({
-                        url: "{{ route('invoice_details_update') }}",
-                        type: "POST",
-                        data: formData,
-                        processData: false,
-                        contentType: false,
+                        url: '{{ route("check_duplicate_invoice") }}',
+                        method: 'POST',
+                        data: {
+                            invoice_no: invoiceNo,
+                            current_id: currentId,
+                            _token: $('meta[name="csrf-token"]').attr('content')
+                        },
                         success: function(response) {
-                            if (response.success) {
-                                $("#invoice_modal").modal('hide');
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Success',
-                                    text: response.message,
-                                    timer: 3000
-                                }).then(() => {
-                                    location.reload();
-                                });
-                            } else {
+                            if (response.exists) {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'Error',
-                                    text: response.message || 'An error occurred'
+                                    title: 'Duplicate Invoice Number',
+                                    text: 'This invoice number already exists. Please use a different number.',
+                                    confirmButtonText: 'OK'
                                 });
+                                return;
                             }
+
+                            // Proceed with form submission
+                            submitUpdateForm(form);
                         },
-                        error: function() {
+                        error: function(xhr) {
+                            console.error('Error checking duplicate:', xhr);
+                            // Proceed anyway if check fails
+                            submitUpdateForm(form);
+                        }
+                    });
+                }
+            });
+
+            function submitUpdateForm(form) {
+                var formData = new FormData(form);
+
+                Swal.fire({
+                    title: 'Updating Invoice...',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    didOpen: () => Swal.showLoading()
+                });
+
+                $.ajax({
+                    url: "{{ route('invoice_details_update') }}",
+                    type: "POST",
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        Swal.close();
+                        if (response.success) {
+                            $("#invoice_modal").modal('hide');
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Success',
+                                text: response.message,
+                                timer: 3000
+                            }).then(() => {
+                                location.reload();
+                            });
+                        } else {
                             Swal.fire({
                                 icon: 'error',
                                 title: 'Error',
-                                text: 'An error occurred while submitting the form'
+                                text: response.message || 'An error occurred'
                             });
                         }
-                    });
-                    return false;
-                }
-            });
+                    },
+                    error: function(xhr) {
+                        Swal.close();
+                        let errorMessage = 'An error occurred while submitting the form';
+
+                        if (xhr.responseJSON) {
+                            if (xhr.responseJSON.duplicate) {
+                                errorMessage = xhr.responseJSON.message;
+                            } else if (xhr.responseJSON.errors && xhr.responseJSON.errors.invoice_no) {
+                                errorMessage = xhr.responseJSON.errors.invoice_no[0];
+                            } else {
+                                errorMessage = xhr.responseJSON.message || errorMessage;
+                            }
+                        }
+
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: errorMessage
+                        });
+                    }
+                });
+            }
         }
 
         function initGrnValidation() {

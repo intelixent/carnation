@@ -108,6 +108,27 @@ class InvoiceController extends BaseController
         ));
     }
 
+    public function check_duplicate_invoice(Request $request)
+    {
+        $invoiceNo = $request->invoice_no;
+        $currentId = $request->current_id ?? null;
+
+        $query = InvoiceMaster::where('ref_no', $invoiceNo);
+
+        // Exclude current invoice if ID is provided (for updates)
+        if ($currentId) {
+            $query->where('id', '!=', $currentId);
+        }
+
+        $exists = $query->exists();
+
+        return response()->json([
+            'exists' => $exists,
+            'message' => $exists ? 'Invoice number already exists' : 'Invoice number is available'
+        ]);
+    }
+
+
     public function store_invoice(Request $request)
     {
         $data = $request->validate([
@@ -115,16 +136,16 @@ class InvoiceController extends BaseController
             'selectedpackids.*'  => 'integer|exists:packing_list_masters,id',
             'selected_po'        => 'required|integer|exists:po_masters,id',
             'selected_vendor_id' => 'required|integer|exists:vendor_master,id',
-            'invoice_no'         => 'required|string|max:100',
+            'invoice_no'         => 'required|string|max:100|unique:invoice_masters,ref_no',
             'invoice_date'       => 'required|date',
-            'gst'                => 'required|numeric|min:0|max:100', // Added GST validation
+            'gst'                => 'required|numeric|min:0|max:100',
         ]);
 
         try {
             $invoice = InvoiceMaster::create([
                 'ref_no'           => $data['invoice_no'],
                 'inv_date'         => $data['invoice_date'],
-                'gst'              => $data['gst'], // Store GST value
+                'gst'              => $data['gst'],
                 'bill_to_details'  => '',
                 'ship_to_details'  => '',
                 'po_id'            => $data['selected_po'],
@@ -144,13 +165,27 @@ class InvoiceController extends BaseController
                 'message' => "Invoice {$invoice->ref_no} saved successfully.",
                 'invoice_data' => $invoiceData
             ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invoice number already exists. Please use a different invoice number.',
+                    'duplicate' => true
+                ], 422);
+            }
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to save invoice: ' . $e->getMessage()
+            ], 500);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to save invoice: ' . $e->getMessage()
+                'error' => 'Failed to save invoice: ' . $e->getMessage()
             ], 500);
         }
     }
+
 
     private function getInvoicePreviewData($invoiceId)
     {
@@ -451,6 +486,11 @@ class InvoiceController extends BaseController
         $transpDet = json_decode($invoice->transporter_details, true) ?: [];
         $irnDetails = json_decode($invoice->irn_details, true) ?: [];
 
+        // Format transporter date
+        if (!empty($transpDet['transport_date_time'])) {
+            $transpDet['transport_date_time'] = $this->convertDateForInput($transpDet['transport_date_time']);
+        }
+
         if (!empty($billTo['billed_state'])) {
             $bs = StateMaster::find($billTo['billed_state']);
             $billTo['billed_state_name'] = $bs->name ?? null;
@@ -560,28 +600,30 @@ class InvoiceController extends BaseController
                 'shipped_pan_no' => $vendor->shipping_pan_no ?? '',
                 'shipped_pincode' => $vendor->shipping_pincode ?? '',
                 'shipped_place_of_supply' => $vendor->shipping_place_supply ?? '',
-                //'shipped_distance' => $vendor->shipping_distance ?? '',
             ];
         }
+
+        // Handle transport distance - show stored or fallback to vendor
         if (isset($transportDetails['transport_distance']) && $transportDetails['transport_distance'] != "") {
-            $transportDetails['transport_distance'] = $transportDetails['transport_distance'] ?? '';
+            $transportDetails['transport_distance'] = $transportDetails['transport_distance'];
         } else {
             $transportDetails['transport_distance'] = $vendor->shipping_distance ?? '';
         }
 
-        if ($invoice['ref_no'] != "") {
-
-            $transportDetails['transport_doc_no'] = $this->extractSlashNumbers($invoice['ref_no']);
+        // Handle transport doc no - show stored value or extract from invoice number
+        if (!empty($transportDetails['transport_doc_no'])) {
+            // Always keep and show existing stored value, whatever it is
+            $transportDetails['transport_doc_no'] = $transportDetails['transport_doc_no'];
         } else {
-            $transportDetails['transport_doc_no'] = "";
+            // Only extract from invoice ref_no if no stored value exists
+            $transportDetails['transport_doc_no'] = $this->extractTransportDocNumber($invoice['ref_no']);
         }
 
+        // Handle transport date - convert format if needed
+        if (isset($transportDetails['transport_date_time']) && $transportDetails['transport_date_time'] != "") {
+            $transportDetails['transport_date_time'] = $this->convertDateForInput($transportDetails['transport_date_time']);
+        }
 
-
-
-
-
-        // print_r($invoice['ref_no']);
         return view('invoice.invoice_details', compact(
             'invoice',
             'vendor',
@@ -594,13 +636,67 @@ class InvoiceController extends BaseController
         ));
     }
 
+    /**
+     * Extract transport document number from invoice reference number
+     * Format: CCPL250329/25-26 -> 250329
+     */
+    private function extractTransportDocNumber($refNo)
+    {
+        if (empty($refNo)) {
+            return '';
+        }
+
+        // Check if format matches CCPL[numbers]/[numbers]-[numbers]
+        if (preg_match('/^CCPL(\d+)\/\d{2}-\d{2}$/', $refNo, $matches)) {
+            return $matches[1]; // Return the number after CCPL
+        }
+
+        return ''; // Return empty if format doesn't match
+    }
+
+    /**
+     * Convert date format for input field (Y-m-d)
+     */
+    private function convertDateForInput($dateString)
+    {
+        if (empty($dateString)) {
+            return '';
+        }
+
+        // If already in Y-m-d format, return as is
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateString)) {
+            return $dateString;
+        }
+
+        // Try to parse different formats
+        $formats = [
+            'd-M-y',     // 15-Sep-25
+            'd-m-Y',     // 15-09-2025
+            'd/m/Y',     // 15/09/2025
+            'd.m.Y'      // 15.09.2025
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                $date = \DateTime::createFromFormat($format, $dateString);
+                if ($date && $date->format($format) === $dateString) {
+                    return $date->format('Y-m-d');
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+
+        return ''; // Return empty if no format matches
+    }
+
     public function invoice_details_update(Request $request)
     {
         try {
-            $invoice = InvoiceMaster::find($request->id);
+            $invoice = InvoiceMaster::findOrFail($request->id);
 
-            // Prepare billing details JSON
-            $billedToDetails = [
+            // Prepare bill_to_details JSON
+            $billToDetails = json_encode([
                 'billed_legal_name' => $request->billed_legal_name,
                 'billed_address_1' => $request->billed_address_1,
                 'billed_address_2' => $request->billed_address_2,
@@ -610,10 +706,10 @@ class InvoiceController extends BaseController
                 'billed_pan_no' => $request->billed_pan_no,
                 'billed_pincode' => $request->billed_pincode,
                 'billed_gst_type' => $request->billed_gst_type,
-            ];
+            ]);
 
-            // Prepare shipping details JSON
-            $shippedToDetails = [
+            // Prepare ship_to_details JSON
+            $shipToDetails = json_encode([
                 'shipped_legal_name' => $request->shipped_legal_name,
                 'shipped_address_1' => $request->shipped_address_1,
                 'shipped_address_2' => $request->shipped_address_2,
@@ -623,54 +719,50 @@ class InvoiceController extends BaseController
                 'shipped_pan_no' => $request->shipped_pan_no,
                 'shipped_pincode' => $request->shipped_pincode,
                 'shipped_place_of_supply' => $request->shipped_place_of_supply,
-            ];
+            ]);
 
-            // Prepare IRN details JSON
-            $irnDetails = [
-                'irn_no' => $request->irn_no,
-                'acknowledgment_no' => $request->acknowledgment_no,
-                'document_no' => $request->document_no,
-                'supply_type_code' => $request->supply_type_code,
-                'eway_bill_no' => $request->eway_bill_no,
-                'eway_bill_date' => $request->eway_bill_date,
-                'acknowledgment_date' => $request->acknowledgment_date,
-                'document_date' => $request->document_date,
-                'reverse_charge' => $request->reverse_charge,
-                'preceeding_document_no' => $request->preceeding_document_no,
-                'preceeding_document_date' => $request->preceeding_document_date,
-            ];
-
-            // Prepare transport details JSON
-            $transportDetails = [
+            // Prepare transporter_details JSON
+            $transporterDetails = json_encode([
                 'transport_name' => $request->transport_name,
                 'mode_of_transport' => $request->mode_of_transport,
+                'transport_doc_no' => $request->transport_doc_no,
+                'transport_date_time' => $request->transport_date_time,
                 'transport_vehicle_no' => $request->transport_vehicle_no,
                 'transport_distance' => $request->transport_distance,
-                'transport_date_time' => $request->transport_date_time,
-                'transport_doc_no' => $request->transport_doc_no,
-                'transport_vehicle_type' => "Regular",
+            ]);
 
-            ];
-
+            // Update invoice
             $invoice->update([
                 'ref_no' => $request->invoice_no,
                 'inv_date' => $request->invoice_date,
-                'bill_to_details' => json_encode($billedToDetails),
-                'ship_to_details' => json_encode($shippedToDetails),
-                'irn_details' => json_encode($irnDetails),
-                'transporter_details' => json_encode($transportDetails),
+                'bill_to_details' => $billToDetails,
+                'ship_to_details' => $shipToDetails,
+                'transporter_details' => $transporterDetails,
+                'updated_at' => now(),
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Invoice Details updated successfully!',
-                'vendor_id' => $request->vendor_id
+                'message' => 'Invoice updated successfully!'
             ]);
-        } catch (\Exception $e) {
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->errorInfo[1] == 1062) { // Duplicate entry error
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invoice number already exists. Please use a different invoice number.',
+                    'duplicate' => true
+                ], 422);
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage()
-            ]);
+                'message' => 'Failed to update invoice: ' . $e->getMessage()
+            ], 500);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update invoice: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -694,13 +786,36 @@ class InvoiceController extends BaseController
         $invoice = InvoiceMaster::with(['po.vendor'])->find($request->id);
         $GrnDetails = json_decode($invoice->grn_details, true) ?? [];
 
+        // Get transport details from transporter_details
+        $transporterDetails = json_decode($invoice->transporter_details, true) ?? [];
+
+        // Get transport name from transport_master if transport_name exists
+        $transportName = '';
+        if (!empty($transporterDetails['transport_name'])) {
+            $transport = \App\Models\TransportMaster::find($transporterDetails['transport_name']);
+            $transportName = $transport ? $transport->name : '';
+        }
+
+        $dispatchedDate = '';
+        if (!empty($transporterDetails['transport_date_time'])) {
+            try {
+                $date = \DateTime::createFromFormat('d-M-y', $transporterDetails['transport_date_time']);
+                if ($date) {
+                    $dispatchedDate = $date->format('Y-m-d');
+                }
+            } catch (\Exception $e) {
+            }
+        }
+
         // Get invoice data for calculations
         $invoiceData = $this->getInvoiceCalculationData($invoice);
 
         return view('invoice.grn_details', compact(
             'invoice',
             'GrnDetails',
-            'invoiceData'
+            'invoiceData',
+            'transportName',
+            'dispatchedDate'
         ));
     }
 

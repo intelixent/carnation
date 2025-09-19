@@ -74,19 +74,53 @@
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
             }
         });
-
+        
         $('.select2').select2({
             width: '100%'
         });
 
+        // Check for duplicate invoice number on blur
+        $(document).on('blur', '#invoice_no', function() {
+            let invoiceNo = $(this).val().trim();
+            if (invoiceNo) {
+                checkDuplicateInvoice(invoiceNo);
+            }
+        });
+
+        function checkDuplicateInvoice(invoiceNo) {
+            $.ajax({
+                url: '{{ route("check_duplicate_invoice") }}',
+                method: 'POST',
+                data: {
+                    invoice_no: invoiceNo,
+                    _token: $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    if (response.exists) {
+                        $('#invoice_no').addClass('is-invalid');
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Duplicate Invoice Number',
+                            text: 'This invoice number already exists. Please use a different number.',
+                            confirmButtonText: 'OK'
+                        });
+                    } else {
+                        $('#invoice_no').removeClass('is-invalid');
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Error checking duplicate invoice:', xhr);
+                }
+            });
+        }
+
         $('#vendor_id').on('change', function() {
             var vendorId = $(this).val();
             var poSelect = $('#po_id');
-
             poSelect.prop('disabled', true).html('<option value="">Select PO</option>');
             $('#po_details').hide();
             $('#invoicePreviewSection').hide();
-
+            
             if (vendorId) {
                 $.ajax({
                     url: '{{ route("get_complete_vendor_packing_list") }}',
@@ -118,7 +152,7 @@
             var poId = $(this).val();
             var vendor_id = $("#vendor_id").val();
             $('#invoicePreviewSection').hide();
-
+            
             $.ajax({
                 url: '{{ route("get_packging_list") }}',
                 method: 'POST',
@@ -143,7 +177,6 @@
 
         $(document).on('change', '.po_pack', function() {
             let selectedCount = $('.po_pack:checked').length;
-
             if (selectedCount > 0) {
                 $('#generateBtnContainer').show();
             } else {
@@ -185,20 +218,20 @@
                             </tr>
                         </thead>
                         <tbody>`;
-
+            
             let totalAmount = 0;
             let totalDiscount = 0;
             let totalTaxable = 0;
             let totalGstAmount = 0;
             let totalQty = 0;
-
+            
             invoiceData.items.forEach((item, index) => {
                 totalAmount += parseFloat(item.amount);
                 totalDiscount += parseFloat(item.discount);
                 totalTaxable += parseFloat(item.taxable_value);
                 totalGstAmount += parseFloat(item.gst_amount);
                 totalQty += parseInt(item.qty);
-
+                
                 previewHtml += `
                     <tr>
                         <td>${index + 1}</td>
@@ -217,9 +250,8 @@
                         <td class="text-right">₹${parseFloat(item.gst_amount).toFixed(2)}</td>
                     </tr>`;
             });
-
+            
             let finalAmount = totalTaxable + totalGstAmount;
-
             previewHtml += `
                         </tbody>
                         <tfoot class="table-secondary">
@@ -240,7 +272,7 @@
                         </tfoot>
                     </table>
                 </div>`;
-
+            
             $('#invoicePreviewContainer').html(previewHtml);
             $('#invoicePreviewSection').show();
         }
@@ -251,7 +283,6 @@
                 .map((_, cb) => $(cb).val().trim())
                 .get();
 
-            // grab invoice fields
             let invoiceNo = $('#invoice_no').val().trim();
             let invoiceDate = $('#invoice_date').val();
             let gstRate = $('#gst_rate').val().trim();
@@ -259,7 +290,7 @@
             if (!invoiceNo || !invoiceDate || !gstRate) {
                 return Swal.fire({
                     icon: 'warning',
-                    title: 'Oops!',
+                    title: 'Missing Information',
                     text: 'Please enter Invoice No., Invoice Date, and GST Rate'
                 });
             }
@@ -272,6 +303,37 @@
                 });
             }
 
+            // Check for duplicate before proceeding
+            $.ajax({
+                url: '{{ route("check_duplicate_invoice") }}',
+                method: 'POST',
+                data: {
+                    invoice_no: invoiceNo,
+                    _token: $('meta[name="csrf-token"]').attr('content')
+                },
+                success: function(response) {
+                    if (response.exists) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Duplicate Invoice Number',
+                            text: 'This invoice number already exists. Please use a different number.',
+                            confirmButtonText: 'OK'
+                        });
+                        return;
+                    }
+                    
+                    // Proceed with invoice generation
+                    proceedWithInvoiceGeneration(selectedIds, invoiceNo, invoiceDate, gstRate);
+                },
+                error: function(xhr) {
+                    console.error('Error checking duplicate:', xhr);
+                    // Proceed anyway if check fails
+                    proceedWithInvoiceGeneration(selectedIds, invoiceNo, invoiceDate, gstRate);
+                }
+            });
+        });
+
+        function proceedWithInvoiceGeneration(selectedIds, invoiceNo, invoiceDate, gstRate) {
             Swal.fire({
                 title: 'Generate Invoice?',
                 text: 'This will apply to all selected lists.',
@@ -301,8 +363,8 @@
                     .done(response => {
                         Swal.fire({
                             icon: response.success ? 'success' : 'error',
-                            title: response.success ? 'Saved!' : 'Error',
-                            text: response.message,
+                            title: response.success ? 'Invoice Generated!' : 'Error',
+                            text: response.message || response.error,
                             timer: response.success ? 2000 : null
                         }).then(() => {
                             if (response.success && response.invoice_data) {
@@ -311,15 +373,27 @@
                         });
                     })
                     .fail(xhr => {
-                        let msg = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Unexpected error';
+                        let errorMessage = 'Unexpected error occurred';
+                        
+                        if (xhr.responseJSON) {
+                            if (xhr.responseJSON.duplicate) {
+                                errorMessage = xhr.responseJSON.error;
+                            } else if (xhr.responseJSON.errors && xhr.responseJSON.errors.invoice_no) {
+                                errorMessage = xhr.responseJSON.errors.invoice_no[0];
+                            } else {
+                                errorMessage = xhr.responseJSON.error || xhr.responseJSON.message || errorMessage;
+                            }
+                        }
+                        
                         Swal.fire({
                             icon: 'error',
-                            title: 'Error',
-                            text: msg
+                            title: 'Error Generating Invoice',
+                            text: errorMessage,
+                            confirmButtonText: 'OK'
                         });
                     });
             });
-        });
+        }
     });
 </script>
 @endpush

@@ -266,7 +266,7 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
             '',
             $billToDetails['billed_gst_no'] ?? '',
             $billedStateInfo['code_name'] ?? '',
-            $billToDetails['billed_address_1'] ?? '',
+            trim(($billToDetails['billed_address_1'] ?? '') . ', ' . ($billToDetails['billed_address_2'] ?? ''), ', '),
             $billToDetails['billed_city'] ?? '',
             $billedStateInfo['code_name'] ?? '',
             $billToDetails['billed_pincode'] ?? '',
@@ -342,7 +342,7 @@ class EInvoiceExport implements FromCollection, WithHeadings, WithMapping, WithS
             // Ship To Details 
             $shipToDetails['shipped_legal_name'] ?? '',
             $shipToDetails['shipped_gst_no'] ?? '',
-            $shipToDetails['shipped_address_1'] ?? '',
+            ($shipToDetails['shipped_address_1'] ?? '') . ', ' . ($shipToDetails['shipped_address_2'] ?? ''),
             $shipToDetails['shipped_city'] ?? '',
             $shipToDetails['shipped_pincode'] ?? '',
             $shippedStateInfo['code_name'] ?? '',
