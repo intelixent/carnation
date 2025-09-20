@@ -32,7 +32,7 @@
                             </div>
                             <div class="col-sm-6">
                                 <div class="form-floating">
-                                    <input type="text" class="form-control" id="invoice_date" name="invoice_date" placeholder="Invoice Date" value="{{ $invoice['inv_date'] ?? '' }}" required>
+                                    <input type="date" class="form-control" id="invoice_date" name="invoice_date" placeholder="Invoice Date" value="{{ $invoice['inv_date'] ?? '' }}" required>
                                     <label for="invoice_date">Invoice Date</label>
                                 </div>
                             </div>
@@ -236,23 +236,20 @@
                                     <label for="transport_doc_no">Transporter Doc No</label>
                                 </div>
                             </div>
-
                             <div class="col-sm-6">
                                 <div class="form-floating">
-                                    <input type="text" class="form-control" id="transport_date_time" name="transport_date_time" placeholder="Transport Supply Date and Time" value="{{ $transportDetails['transport_date_time'] ?? '' }}" required>
-                                    <label for="transport_date_time">Transport Supply Date and Time</label>
+                                    <input type="date" class="form-control" id="transport_date_time" name="transport_date_time" placeholder="Transport Supply Date" value="{{ $transportDetails['transport_date_time'] ?? '' }}" required>
+                                    <label for="transport_date_time">Transport Supply Date</label>
                                 </div>
                             </div>
-</div>
-                                 <div class="row mb-3">
-                           
+                        </div>
+                        <div class="row mb-3">
                             <div class="col-sm-6">
                                 <div class="form-floating">
                                     <input type="text" class="form-control" id="transport_vehicle_no" name="transport_vehicle_no" placeholder="Vehicle No" value="{{ $transportDetails['transport_vehicle_no'] ?? '' }}" required>
                                     <label for="transport_vehicle_no">Transporter Vehicle No</label>
                                 </div>
                             </div>
-
                             <div class="col-sm-6">
                                 <div class="form-floating">
                                     <input type="text" class="form-control" id="transport_distance" name="transport_distance" placeholder="Distance(KM)" value="{{ $transportDetails['transport_distance'] ?? '' }}" required>

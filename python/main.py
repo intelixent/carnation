@@ -1892,28 +1892,33 @@ def extract_aditiya(pdf_path):
                 "po_date": po_date
             })
             
-            # Extract Bill To / Ship To Address (same as before)
-            print("\n--- DEBUGGING: Looking for Bill To/Ship To address ---")
-            bill_to_address = []
-            bill_to_pos = text.find("Bill to/Ship to address.")
-            if bill_to_pos >= 0:
-                search_start = bill_to_pos + len("Bill to/Ship to address.")
-                gst_pos = text.find("GST No.", search_start)
-                
-                if gst_pos > bill_to_pos:
-                    bill_to_text = text[search_start:gst_pos].strip()
-                    lines = bill_to_text.split('\n')
-                    filtered_lines = []
-                    for line in lines:
-                        clean_line = line.strip()
-                        if clean_line and not any(skip_word in clean_line.upper() for skip_word in ['SUPPLIER:', 'YOUR VENDOR', 'VENDOR GST']):
-                            filtered_lines.append(clean_line)
-                    bill_to_address = filtered_lines
+            # Extract Bill To Address and Ship To Address (Static)
+            print("\n--- DEBUGGING: Setting static Bill To/Ship To addresses ---")
 
-            results["bill_to_ship_address"] = bill_to_address if bill_to_address else "Not found"
+            # Static Bill To Address
+            bill_to_address = [
+                "ADITYA BIRLA LIFESTYLE BRANDS LIMITED",
+                "KH No 118/110/1 Building 2",
+                "Divyashree Technopolis,",
+                "Yemalur Post, Off HAL Airport Road.",
+                "Bengaluru",
+                "560037"
+            ]
+
+            # Static Ship To Address  
+            ship_to_address = [
+                "Aditya Birla Lifestyle Brands Limited",
+                "517/2,28 Madivala Village,Kasa",
+                "Bangalore",
+                "562107"
+            ]
+
+            # Set results with static addresses
+            results["bill_to_address"] = bill_to_address
+            results["ship_to_address"] = ship_to_address
             
-            # ENHANCED PO Items extraction with correct column mapping
-            print("\n--- DEBUGGING: Looking for PO Items with correct column mapping ---")
+            # ENHANCED PO Items extraction with two-line continuation handling
+            print("\n--- DEBUGGING: Looking for PO Items with two-line continuation handling ---")
             po_items = []
             
             # First, identify all PO item tables and combine them
@@ -1953,28 +1958,130 @@ def extract_aditiya(pdf_path):
                                 })
                     
                     # Check if this is a continuation of PO items table
-                    elif headers and len(table) > 0 and any(row and row[0] and 'VDSHESKF' in str(row[0]) for row in table):
-                        print("Found continuation of PO Items table!")
-                        for row_idx, row in enumerate(table):
+                    elif headers and len(table) > 0:
+                        # Look for rows that start with known material code patterns
+                        has_material_rows = False
+                        for row in table:
                             if row and row[0]:
-                                po_item_tables.append({
-                                    'row': row, 
-                                    'page': page_num, 
-                                    'table_row': row_idx
-                                })
+                                row_str = str(row[0]).strip()
+                                # Check for both VDSHESKF and LRSFCNSP patterns (8 caps letters)
+                                if ('VDSHESKF' in row_str or re.match(r'^[A-Z]{8}', row_str)):
+                                    has_material_rows = True
+                                    break
+                        
+                        if has_material_rows:
+                            print("Found continuation of PO Items table!")
+                            for row_idx, row in enumerate(table):
+                                if row and row[0]:
+                                    po_item_tables.append({
+                                        'row': row, 
+                                        'page': page_num, 
+                                        'table_row': row_idx
+                                    })
             
             print(f"\nTotal raw PO item rows found: {len(po_item_tables)}")
             
-            # Function to find continuation data in next page's text
-            def find_continuation_in_next_page(incomplete_row, current_page_idx):
-                """Find continuation data for incomplete rows in subsequent pages"""
+            # Function to parse continuation data with flexible field mapping
+            def parse_continuation_data(continuation_parts, material_prefix):
+                """Parse continuation data from potentially two lines and return mapped fields"""
+                result = {
+                    'material_suffix': '',
+                    'per': '',
+                    'val1': '',
+                    'size': '',
+                    'store_loc': ''
+                }
+                
+                if not continuation_parts:
+                    return result
+                
+                print(f"Parsing continuation parts: {continuation_parts} for {material_prefix}")
+                
+                if material_prefix == 'VDSHESKF':
+                    # Expected patterns from TWO lines:
+                    # Line 1: U62773 69 H Q1
+                    # Line 2: 1 3115
+                    # Combined: ['U62773', '69', 'H', 'Q1', '1', '3115']
+                    
+                    idx = 0
+                    # Material suffix (always first)
+                    if idx < len(continuation_parts):
+                        result['material_suffix'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Check if next element is a digit (val1) - if not digit, skip to size
+                    if idx < len(continuation_parts) and continuation_parts[idx].isdigit():
+                        result['val1'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Next should be size (single letter)
+                    if idx < len(continuation_parts) and len(continuation_parts[idx]) == 1 and continuation_parts[idx].isalpha():
+                        result['size'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Next should be store location part 1 (Q1)
+                    if idx < len(continuation_parts):
+                        result['store_loc'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Next should be per (digit from second line)
+                    if idx < len(continuation_parts) and continuation_parts[idx].isdigit():
+                        result['per'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Last should be store location part 2 (3115 from second line)
+                    if idx < len(continuation_parts):
+                        result['store_loc'] += continuation_parts[idx]
+                
+                elif material_prefix.startswith('LRSFCNSP') or re.match(r'^[A-Z]{8}', material_prefix):
+                    # Expected patterns from TWO lines:
+                    # Line 1: C14910 59 F Q1 (or C14910 F Q1 without digit)
+                    # Line 2: 1 3009
+                    # Combined: ['C14910', '59', 'F', 'Q1', '1', '3009'] or ['C14910', 'F', 'Q1', '1', '3009']
+                    
+                    idx = 0
+                    # Material suffix (always first)
+                    if idx < len(continuation_parts):
+                        result['material_suffix'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Check if next element is a digit (val1) - if not digit, skip to size
+                    if idx < len(continuation_parts) and continuation_parts[idx].isdigit():
+                        result['val1'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Next should be size (single letter)
+                    if idx < len(continuation_parts) and len(continuation_parts[idx]) == 1 and continuation_parts[idx].isalpha():
+                        result['size'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Next should be store location part 1 (Q1)
+                    if idx < len(continuation_parts):
+                        result['store_loc'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Next should be per (digit from second line)
+                    if idx < len(continuation_parts) and continuation_parts[idx].isdigit():
+                        result['per'] = continuation_parts[idx]
+                        idx += 1
+                    
+                    # Last should be store location part 2 (3009 from second line)
+                    if idx < len(continuation_parts):
+                        result['store_loc'] += continuation_parts[idx]
+                
+                print(f"Parsed result: {result}")
+                return result
+            
+            # Improved function to find continuation data from TWO lines in next page's text
+            def find_continuation_in_next_page(incomplete_row, current_page_idx, material_prefix):
+                """Find continuation data for incomplete rows from TWO lines in subsequent pages"""
                 if current_page_idx + 1 >= len(page_texts):
                     return []
                 
                 next_page_text = page_texts[current_page_idx + 1]
                 next_page_lines = next_page_text.split('\n')
                 
-                print(f"\n--- Searching for continuation in page {current_page_idx + 2} ---")
+                print(f"\n--- Searching for continuation in page {current_page_idx + 2} for {material_prefix} ---")
                 
                 continuation_data = []
                 
@@ -1983,32 +2090,60 @@ def extract_aditiya(pdf_path):
                     if not line:
                         continue
                     
-                    # Updated regex to match your actual patterns: U62773, 391417, etc.
-                    # This matches: letter+digits OR just digits, followed by space and more data
-                    if re.match(r'^([A-Z]?\d+)\s+\d+\s+[A-Z]\s+[A-Z]\d*', line):
-                        parts = line.split()
-                        print(f"Found potential continuation line: {line}")
-                        print(f"Parts: {parts}")
-                        
-                        # Collect this line's data
-                        continuation_parts = parts[:]
-                        
-                        # Look ahead for the next line which should contain more data
-                        if line_idx + 1 < len(next_page_lines):
-                            next_line = next_page_lines[line_idx + 1].strip()
-                            # Check if next line has numeric data and doesn't start with VDSHESKF
-                            if next_line and not next_line.startswith('VDSHESKF') and re.match(r'^\d+', next_line):
-                                next_parts = next_line.split()
-                                continuation_parts.extend(next_parts)
-                                print(f"Added from next line: {next_parts}")
-                        
-                        return continuation_parts
+                    # Look for first line of continuation data
+                    if material_prefix == 'VDSHESKF':
+                        # Match: U62773 69 H Q1 (with or without digit)
+                        if re.match(r'^[A-Z]?\d+(\s+\d+)?\s+[A-Z]', line):
+                            parts = line.split()
+                            print(f"Found VDSHESKF continuation line 1: {line}")
+                            print(f"Parts from line 1: {parts}")
+                            
+                            # Look for the next line with additional data
+                            if line_idx + 1 < len(next_page_lines):
+                                next_line = next_page_lines[line_idx + 1].strip()
+                                print(f"Checking next line: '{next_line}'")
+                                
+                                # Second line should have: 1 3115
+                                if next_line and re.match(r'^\d+\s+\d+', next_line):
+                                    next_parts = next_line.split()
+                                    print(f"Found continuation line 2: {next_line}")
+                                    print(f"Parts from line 2: {next_parts}")
+                                    parts.extend(next_parts)
+                                    print(f"Combined parts: {parts}")
+                                    return parts
+                            
+                            # If no second line found, return first line parts
+                            return parts
+                    
+                    elif material_prefix.startswith('LRSFCNSP') or re.match(r'^[A-Z]{8}', material_prefix):
+                        # Match: C14910 59 F Q1 (with or without digit)
+                        if re.match(r'^[A-Z]?\d+(\s+\d+)?\s+[A-Z]', line):
+                            parts = line.split()
+                            print(f"Found LRSFCNSP continuation line 1: {line}")
+                            print(f"Parts from line 1: {parts}")
+                            
+                            # Look for the next line with additional data
+                            if line_idx + 1 < len(next_page_lines):
+                                next_line = next_page_lines[line_idx + 1].strip()
+                                print(f"Checking next line: '{next_line}'")
+                                
+                                # Second line should have: 1 3009
+                                if next_line and re.match(r'^\d+', next_line):
+                                    next_parts = next_line.split()
+                                    print(f"Found continuation line 2: {next_line}")
+                                    print(f"Parts from line 2: {next_parts}")
+                                    parts.extend(next_parts)
+                                    print(f"Combined parts: {parts}")
+                                    return parts
+                            
+                            # If no second line found, return first line parts
+                            return parts
                 
                 return []
             
-            # Process and combine split rows with correct column mapping
+            # Process and combine split rows with two-line continuation logic
             if headers and po_item_tables:
-                print("\n--- DEBUGGING: Combining split rows with correct column mapping ---")
+                print("\n--- DEBUGGING: Combining split rows with two-line continuation logic ---")
                 
                 combined_rows = []
                 
@@ -2029,60 +2164,59 @@ def extract_aditiya(pdf_path):
                         cleaned_cell = str(cell).strip().replace('\n', '') if cell else ''
                         cleaned_row.append(cleaned_cell)
                     
-                    # Check if this row seems incomplete (Row 10 pattern)
+                    # Check if this row seems incomplete
                     is_incomplete = False
+                    material_prefix = ""
                     
-                    # Specific check for the problematic row pattern
-                    # Row 10: Material code is just 'VDSHESKF' (missing G12522 part) and Per field is empty
-                    if (len(cleaned_row) > 0 and 
-                        cleaned_row[0] == 'VDSHESKF' and 
-                        len(cleaned_row) > 4 and 
-                        cleaned_row[4] == ''):  # Missing 'Per' field
-                        
-                        print("Detected incomplete row - searching for continuation...")
+                    # Check for incomplete rows - missing 'Per' field (index 4) is empty
+                    if len(cleaned_row) > 4 and cleaned_row[4] == '':
+                        print("Detected incomplete row - missing 'Per' field")
                         is_incomplete = True
                         
-                        # Find continuation data
-                        continuation_data = find_continuation_in_next_page(cleaned_row, page_num)
+                        # Determine material prefix
+                        if 'VDSHESKF' in cleaned_row[0]:
+                            material_prefix = 'VDSHESKF'
+                        elif 'LRSFCNSP' in cleaned_row[0]:
+                            material_prefix = 'LRSFCNSP'
+                        elif re.match(r'^[A-Z]{8}', cleaned_row[0]):
+                            material_prefix = cleaned_row[0][:8]  # Get first 8 caps letters
                         
-                        if continuation_data:
-                            print(f"Found continuation data: {continuation_data}")
+                        if material_prefix:
+                            # Find continuation data from two lines
+                            continuation_data = find_continuation_in_next_page(cleaned_row, page_num, material_prefix)
                             
-                            # Map continuation data according to your specification:
-                            # G12522 - Material Code (append to existing)
-                            # 69 - Val1 
-                            # H - Size (append to existing)
-                            # Q1 - Store Loc (append to existing) 
-                            # 1 - Per
-                            # 3115 - Store Loc (append to existing)
-                            
-                            # Map continuation data according to your specification:
-                            if len(continuation_data) >= 5:
-                                # G12522 - append to Material Code (index 0)
-                                cleaned_row[0] = cleaned_row[0] + continuation_data[0]  # VDSHESKF + G12522
+                            if continuation_data:
+                                print(f"Found continuation data: {continuation_data}")
                                 
-                                # 1 - Per field (index 4)
-                                cleaned_row[4] = continuation_data[4]  # '1'
+                                # Parse continuation data with two-line mapping
+                                parsed_data = parse_continuation_data(continuation_data, material_prefix)
                                 
-                                # 69 - Val1 field (index 11) - ADD to existing value, don't replace
-                                if len(cleaned_row) > 11:
-                                    cleaned_row[11] = cleaned_row[11] + continuation_data[1]  # '044' + 'H'
+                                # Apply the parsed data to the row
+                                if parsed_data['material_suffix']:
+                                    cleaned_row[0] = cleaned_row[0] + parsed_data['material_suffix']
                                 
-                                # H - append to Size field (index 14)
-                                if len(cleaned_row) > 14:
-                                    cleaned_row[14] = cleaned_row[14] + continuation_data[2]  # '044' + 'H'
+                                if parsed_data['per']:
+                                    cleaned_row[4] = parsed_data['per']
                                 
-                                # Q1 and 3115 - append to Store Location field (index 17)
-                                if len(cleaned_row) > 17:
-                                    cleaned_row[17] = cleaned_row[17] + continuation_data[3] + continuation_data[5]  # 'DM' + 'Q1' + '3115'
+                                if parsed_data['val1'] and len(cleaned_row) > 11:
+                                    cleaned_row[11] = cleaned_row[11] + parsed_data['val1']
                                 
-                                print(f"Reconstructed complete row with correct mapping: {cleaned_row}")
+                                if parsed_data['size'] and len(cleaned_row) > 14:
+                                    cleaned_row[14] = cleaned_row[14] + parsed_data['size']
+                                
+                                if parsed_data['store_loc'] and len(cleaned_row) > 17:
+                                    cleaned_row[17] = cleaned_row[17] + parsed_data['store_loc']
+                                
+                                print(f"Reconstructed complete row: {cleaned_row}")
                                 print("Column mapping applied:")
                                 print(f"  Material Code: {cleaned_row[0]}")
                                 print(f"  Per: {cleaned_row[4]}")
-                                print(f"  Val1: {cleaned_row[11] if len(cleaned_row) > 11 else 'N/A'}")
-                                print(f"  Size: {cleaned_row[14] if len(cleaned_row) > 14 else 'N/A'}")
-                                print(f"  Store Loc: {cleaned_row[17] if len(cleaned_row) > 17 else 'N/A'}")
+                                if len(cleaned_row) > 11:
+                                    print(f"  Val1: {cleaned_row[11]}")
+                                if len(cleaned_row) > 14:
+                                    print(f"  Size: {cleaned_row[14]}")
+                                if len(cleaned_row) > 17:
+                                    print(f"  Store Loc: {cleaned_row[17]}")
                             else:
                                 print("Insufficient continuation data found")
                     
@@ -2105,13 +2239,13 @@ def extract_aditiya(pdf_path):
                 results["po_items"] = po_items
                 print(f"Total PO items extracted: {len(po_items)}")
             
-            # Extract Material Description (same as before)
+            # Extract Material Description (fixed for multi-line descriptions)
             print("\n--- DEBUGGING: Looking for Material Description in text ---")
             material_descriptions = []
-            
+
             header_pattern = "Material Material description Colour Warer Trail"
             header_pos = text.find(header_pattern)
-            
+
             if header_pos != -1:
                 end_pattern = "FOB Landed"
                 end_pos = text.find(end_pattern, header_pos)
@@ -2120,21 +2254,51 @@ def extract_aditiya(pdf_path):
                     section_text = text[header_pos + len(header_pattern):end_pos].strip()
                     section_lines = section_text.split('\n')
                     
-                    for line in section_lines:
-                        line = line.strip()
+                    i = 0
+                    while i < len(section_lines):
+                        line = section_lines[i].strip()
                         if not line:
+                            i += 1
                             continue
-                        
+
+                        # Skip if this is a repeated header line
+                        if line.startswith("Material Material description"):
+                            i += 1
+                            continue
+
+                        # Check if this line looks like it contains just a continuation number
+                        if line.isdigit() or (len(line) <= 3 and line.isdigit()):
+                            i += 1
+                            continue
+
                         parts = line.split()
                         if len(parts) >= 4:
+                            # Check if the next line is a continuation (just a number)
+                            material_code = parts[0]
+                            colour = parts[-2]
+                            warer_trail = parts[-1]
+                            
+                            # Everything in between is the material description
+                            description_parts = parts[1:-2]
+                            
+                            # Check if next line is a continuation number
+                            if i + 1 < len(section_lines):
+                                next_line = section_lines[i + 1].strip()
+                                # If next line is just a number (continuation), include it in description
+                                if next_line.isdigit() and len(next_line) <= 3:
+                                    description_parts.append(next_line)
+                                    i += 1  # Skip the next line since we've processed it
+                            
                             desc_item = {
-                                "Material": parts[0],
-                                "Material description": ' '.join(parts[1:-2]),
-                                "Colour": parts[-2],
-                                "Warer Trail": parts[-1]
+                                "Material": material_code,
+                                "Material description": ' '.join(description_parts),
+                                "Colour": colour,
+                                "Warer Trail": warer_trail
                             }
                             material_descriptions.append(desc_item)
-            
+                        
+                        i += 1
+
             results["material_descriptions"] = material_descriptions
             
             # Extract additional details (same as before)

@@ -271,13 +271,36 @@ class ReportController extends BaseController
         $invoice = InvoiceMaster::with(['po.vendor'])->find($request->id);
         $GrnDetails = json_decode($invoice->grn_details, true) ?? [];
 
+        // Get transport details from transporter_details
+        $transporterDetails = json_decode($invoice->transporter_details, true) ?? [];
+
+        // Get transport name from transport_master if transport_name exists
+        $transportName = '';
+        if (!empty($transporterDetails['transport_name'])) {
+            $transport = \App\Models\TransportMaster::find($transporterDetails['transport_name']);
+            $transportName = $transport ? $transport->name : '';
+        }
+
+        $dispatchedDate = '';
+        if (!empty($transporterDetails['transport_date_time'])) {
+            try {
+                $date = \DateTime::createFromFormat('d-M-y', $transporterDetails['transport_date_time']);
+                if ($date) {
+                    $dispatchedDate = $date->format('Y-m-d');
+                }
+            } catch (\Exception $e) {
+            }
+        }
+
         // Get invoice data for calculations
         $invoiceData = $this->getInvoiceCalculationData($invoice);
 
         return view('report.dispatch_status_update', compact(
             'invoice',
             'GrnDetails',
-            'invoiceData'
+            'invoiceData',
+            'transportName',
+            'dispatchedDate'
         ));
     }
 
