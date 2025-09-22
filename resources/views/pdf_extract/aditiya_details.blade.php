@@ -84,12 +84,12 @@
                                         <ul class="list-group mb-3">
                                             <li class="list-group-item">
                                                 <strong>Address:</strong><br>
-                                                @if(is_array($viewData['bill_to_address']))
-                                                @foreach($viewData['bill_to_address'] as $addressLine)
+                                                @if(is_array($viewData['bill_to_ship_address']))
+                                                @foreach($viewData['bill_to_ship_address'] as $addressLine)
                                                 {{ $addressLine }}<br>
                                                 @endforeach
                                                 @else
-                                                {{ $viewData['bill_to_address'] ?? 'Not available' }}
+                                                {{ $viewData['bill_to_ship_address'] ?? 'Not available' }}
                                                 @endif
                                             </li>
                                         </ul>
@@ -100,12 +100,12 @@
                                         <ul class="list-group mb-3">
                                             <li class="list-group-item">
                                                 <strong>Address:</strong><br>
-                                                @if(is_array($viewData['ship_to_address']))
-                                                @foreach($viewData['ship_to_address'] as $addressLine)
+                                                @if(is_array($viewData['bill_to_ship_address']))
+                                                @foreach($viewData['bill_to_ship_address'] as $addressLine)
                                                 {{ $addressLine }}<br>
                                                 @endforeach
                                                 @else
-                                                {{ $viewData['ship_to_address'] ?? 'Not available' }}
+                                                {{ $viewData['bill_to_ship_address'] ?? 'Not available' }}
                                                 @endif
                                             </li>
                                         </ul>
