@@ -46,13 +46,14 @@
             font-weight: bold;
             background-color: #f5f5f5;
         }
-         @media print {
 
-         @page {
-    size: A4 landscape;
-	margin: 10mm 5mm 10mm 5mm !important;  
-	}
-}
+        @media print {
+
+            @page {
+                size: A4 landscape;
+                margin: 10mm 5mm 10mm 5mm !important;
+            }
+        }
     </style>
 </head>
 
@@ -182,15 +183,27 @@
     </table>
 
     @if($tableData)
+    @php
+    // 🔹 Determine which sizes have any values > 0
+    $displaySizes = collect($tableData['sizeOrder'])->filter(function($size) use ($tableData) {
+    // Check all rows + totals
+    foreach ($tableData['rows'] as $row) {
+    if (!empty($row['per_size'][$size]) && $row['per_size'][$size] > 0) {
+    return true;
+    }
+    }
+    if (!empty($tableData['totals']['per_size'][$size]) && $tableData['totals']['per_size'][$size] > 0) {
+    return true;
+    }
+    return false;
+    });
+    @endphp
+
     <table>
         <thead>
             {{-- Header row 1: blank over first columns, then MRP label over 2 cols, then G.WT & N.WT with rowspan --}}
             <tr class="header-row">
-                {{-- Span first columns: CTN NO(2), CTN(1), Color(1), sizes(N), PCS/CTN(1), TOTAL(1) => total N+6 columns; but we span only N+4 here because PCS/CTN and TOTAL are counted later? 
-                Actually in original code: colspan="{{ count($tableData['sizeOrder']) + 4 }}" spans CTN NO(2) + CTN(1) + Color(1) + sizes(N) = N+4. Then next two <th> are MRP subheaders, then G.WT & N.WT --}}
-                <th colspan="{{ count($tableData['sizeOrder']) + 4 }}"></th>
-
-                {{-- MRP grouping header --}}
+                <th colspan="{{ count($displaySizes) + 4 }}"></th>
                 <th>MRP</th>
                 <th></th>
 
@@ -201,14 +214,14 @@
 
             {{-- Header row 2: blank over first columns, then CTN Dimension label & its value --}}
             <tr class="header-row">
-                <th colspan="{{ count($tableData['sizeOrder']) + 4 }}"></th>
+                <th colspan="{{ count($displaySizes) + 4 }}"></th>
                 <th>CTN Dimension</th>
                 <th>{{ $ctnDimDisplay }}</th>
             </tr>
 
             {{-- Header row 3: blank over first columns, then CTN W.T label & its value --}}
             <tr class="header-row">
-                <th colspan="{{ count($tableData['sizeOrder']) + 4 }}"></th>
+                <th colspan="{{ count($displaySizes) + 4 }}"></th>
                 <th>CTN W.T</th>
                 <th>{{ $ctnWeight }}</th>
             </tr>
@@ -218,7 +231,7 @@
                 <th colspan="2">CTN NO</th>
                 <th>CTN</th>
                 <th>Color</th>
-                @foreach($tableData['sizeOrder'] as $size)
+                @foreach($displaySizes as $size)
                 <th class="rotate-text">{{ $size }}</th>
                 @endforeach
                 <th>PCS/CTN</th>
@@ -241,8 +254,7 @@
                 {{-- Color --}}
                 <td>{{ $row['color'] }}</td>
 
-                {{-- Size columns --}}
-                @foreach($tableData['sizeOrder'] as $size)
+                @foreach($displaySizes as $size)
                 <td>{{ ($row['per_size'][$size] ?? 0) > 0 ? $row['per_size'][$size] : '' }}</td>
                 @endforeach
 
@@ -271,8 +283,7 @@
                 {{-- Color column blank --}}
                 <td></td>
 
-                {{-- Size-wise totals --}}
-                @foreach($tableData['sizeOrder'] as $size)
+                @foreach($displaySizes as $size)
                 <td>{{ $tableData['totals']['per_size'][$size] > 0 ? $tableData['totals']['per_size'][$size] : '' }}</td>
                 @endforeach
 
@@ -324,82 +335,102 @@
                     <td><strong>{{ $orderTotal }}</strong></td>
                 </tr>
 
-                {{-- DISPATCH QTY Rows (1st, 2nd, etc.) --}}
+                {{-- DISPATCH QTY Rows --}}
                 @foreach($dispatchQuantities as $dispatchNumber => $dispatchQty)
                 @php
                 $dispatchTotal = 0;
                 $isCurrentPackingList = $dispatchNumber == $currentDispatchNumber;
-                if ($isCurrentPackingList) {
-                $rowLabel = 'PACKING LIST QTY';
-                $leftLabel = $genderDisplay . ' ' . $styleDescriptionsDisplay;
-                } else {
-                $ordinalNumber = $dispatchNumber == 1 ? '1st' : ($dispatchNumber == 2 ? '2nd' : ($dispatchNumber == 3 ? '3rd' : $dispatchNumber.'th'));
-                $rowLabel = $ordinalNumber . ' DISPATCH QTY';
-                $leftLabel = '';
-                }
-                @endphp
-                <tr>
-                    <td>{{ $leftLabel }}</td>
-                    <td>{{ $rowLabel }}</td>
-                    @foreach($all_sizes as $size)
-                    @php
-                    $q = $dispatchQty->get($size, 0);
-                    $dispatchTotal += $q;
-                    @endphp
-                    <td>{{ $q }}</td>
-                    @endforeach
-                    <td><strong>{{ $dispatchTotal }}</strong></td>
-                </tr>
-                @endforeach
 
-                {{-- BALANCE Row --}}
-                <tr>
-                    <td></td>
-                    <td>BALANCE</td>
-                    @foreach($all_sizes as $size)
-                    @php
-                    $totalDispatched = 0;
-                    foreach($dispatchQuantities as $dispatchQty) {
-                    $totalDispatched += $dispatchQty->get($size, 0);
-                    }
-                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
-                    $b = $orderQty - $totalDispatched;
-                    $balTotal += $b;
+                // Check if this is before the current dispatch
+                $isPreviousDispatch = $dispatchNumber < $currentDispatchNumber;
                     @endphp
-                    <td>{{ $b }}</td>
-                    @endforeach
-                    <td><strong>{{ $balTotal }}</strong></td>
-                </tr>
 
-                {{-- PACK QTY % Row --}}
-                <tr>
-                    <td>{{ $uniqueColorDisplay }}</td>
-                    <td>PACK QTY %</td>
-                    @foreach($all_sizes as $size)
+                    {{-- Show previous dispatch rows only if they have quantity --}}
+                    @if($isPreviousDispatch && $dispatchQty->sum() > 0)
                     @php
-                    $totalDispatched = 0;
-                    foreach($dispatchQuantities as $dispatchQty) {
-                    $totalDispatched += $dispatchQty->get($size, 0);
-                    }
-                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
-                    $pct = $orderQty > 0 ? ($totalDispatched / $orderQty) * 100 : 0;
+                    $ordinalNumber = $dispatchNumber == 1 ? '1st'
+                    : ($dispatchNumber == 2 ? '2nd'
+                    : ($dispatchNumber == 3 ? '3rd' : $dispatchNumber.'th'));
                     @endphp
-                    <td>{{ $pct > 0 ? round($pct) . '%' : '-' }}</td>
+                    <tr>
+                        <td></td>
+                        <td>{{ $ordinalNumber }} DISPATCH QTY</td>
+                        @foreach($all_sizes as $size)
+                        @php
+                        $q = $dispatchQty->get($size, 0);
+                        $dispatchTotal += $q;
+                        @endphp
+                        <td>{{ $q }}</td>
+                        @endforeach
+                        <td><strong>{{ $dispatchTotal }}</strong></td>
+                    </tr>
+                    @endif
+
+                    {{-- Current dispatch row (always show) --}}
+                    @if($isCurrentPackingList)
+                    <tr>
+                        <td>{{ $genderDisplay . ' ' . $styleDescriptionsDisplay }}</td>
+                        <td>PACKING LIST QTY</td>
+                        @foreach($all_sizes as $size)
+                        @php
+                        $q = $dispatchQty->get($size, 0);
+                        $dispatchTotal += $q;
+                        @endphp
+                        <td>{{ $q }}</td>
+                        @endforeach
+                        <td><strong>{{ $dispatchTotal }}</strong></td>
+                    </tr>
+                    @endif
                     @endforeach
-                    <td>
-                        <strong>
-                            @php
-                            $totalDispatched = 0;
-                            foreach($dispatchQuantities as $dispatchQty) {
-                            foreach($all_sizes as $size) {
-                            $totalDispatched += $dispatchQty->get($size, 0);
-                            }
-                            }
-                            @endphp
-                            {{ $orderTotal > 0 ? round(($totalDispatched / $orderTotal) * 100) . '%' : '-' }}
-                        </strong>
-                    </td>
-                </tr>
+
+                    {{-- BALANCE Row --}}
+                    <tr>
+                        <td></td>
+                        <td>BALANCE</td>
+                        @foreach($all_sizes as $size)
+                        @php
+                        $totalDispatched = 0;
+                        foreach($dispatchQuantities as $dispatchQty) {
+                        $totalDispatched += $dispatchQty->get($size, 0);
+                        }
+                        $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                        $b = $orderQty - $totalDispatched;
+                        $balTotal += $b;
+                        @endphp
+                        <td>{{ $b }}</td>
+                        @endforeach
+                        <td><strong>{{ $balTotal }}</strong></td>
+                    </tr>
+
+                    {{-- PACK QTY % Row --}}
+                    <tr>
+                        <td>{{ $uniqueColorDisplay }}</td>
+                        <td>PACK QTY %</td>
+                        @foreach($all_sizes as $size)
+                        @php
+                        $totalDispatched = 0;
+                        foreach($dispatchQuantities as $dispatchQty) {
+                        $totalDispatched += $dispatchQty->get($size, 0);
+                        }
+                        $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                        $pct = $orderQty > 0 ? ($totalDispatched / $orderQty) * 100 : 0;
+                        @endphp
+                        <td>{{ $pct > 0 ? round($pct) . '%' : '-' }}</td>
+                        @endforeach
+                        <td>
+                            <strong>
+                                @php
+                                $totalDispatched = 0;
+                                foreach($dispatchQuantities as $dispatchQty) {
+                                foreach($all_sizes as $size) {
+                                $totalDispatched += $dispatchQty->get($size, 0);
+                                }
+                                }
+                                @endphp
+                                {{ $orderTotal > 0 ? round(($totalDispatched / $orderTotal) * 100) . '%' : '-' }}
+                            </strong>
+                        </td>
+                    </tr>
             </tbody>
         </table>
     </div>

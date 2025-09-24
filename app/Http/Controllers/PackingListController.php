@@ -1564,7 +1564,7 @@ class PackingListController extends BaseController
         //
         if ($packingList->vendor_id == 2) {
             //
-            // VENDOR ID 2 (Skechers-specific) - Using PUMA logic
+            // VENDOR ID 2 (Skechers-specific) - Using PUMA logic with color and article_number grouping
             //
 
             // Initialize dispatch-related variables
@@ -1580,15 +1580,41 @@ class PackingListController extends BaseController
 
             $totalDispatches = $allPackingLists->count();
 
-            // Calculate ORDER QTY from all packing lists for this PO (total packed quantities across all dispatches)
-            $allPackingListIds = $allPackingLists->pluck('id')->toArray();
-            $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
+            // Get all unique color and article combinations from current packing list
+            $currentPackingListItems = PackingListItem::where('packing_list_id', $packingList->id)->get();
+            $currentColorArticleCombinations = $currentPackingListItems
+                ->groupBy(function ($item) {
+                    return $item->color . '|' . $item->article_number;
+                })
+                ->keys();
 
-            $orderQuantitiesFromAllPacks = PackingListConfigItem::where('po_id', $packingList->po_id)
-                ->where('status', 0)
-                ->groupBy('size')
-                ->selectRaw('size, SUM(po_qty) as total_pack_qty')
-                ->pluck('total_pack_qty', 'size');
+            // Calculate ORDER QTY from PackingListConfigItem - aggregate by SIZE only for the template
+            $orderQuantitiesFromAllPacks = collect();
+
+            foreach ($currentColorArticleCombinations as $colorArticleKey) {
+                list($color, $articleNumber) = explode('|', $colorArticleKey);
+
+                // Get po_item_ids from PoItems based on article_number and color
+                $poItemIds = PoItems::where('po_id', $packingList->po_id)
+                    ->where('article_number', $articleNumber)
+                    ->where('color', $color)
+                    ->pluck('id')
+                    ->toArray();
+
+                if (!empty($poItemIds)) {
+                    // Get order quantities from PackingListConfigItem
+                    $configItems = PackingListConfigItem::where('po_id', $packingList->po_id)
+                        ->whereIn('po_item_id', $poItemIds)
+                        ->where('status', 0)
+                        ->get();
+
+                    // Aggregate by size across all color-article combinations
+                    foreach ($configItems as $configItem) {
+                        $currentQty = $orderQuantitiesFromAllPacks->get($configItem->size, 0);
+                        $orderQuantitiesFromAllPacks[$configItem->size] = $currentQty + $configItem->po_qty;
+                    }
+                }
+            }
 
             // Find the position of current packing list
             $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
@@ -1605,35 +1631,68 @@ class PackingListController extends BaseController
                     // Get items for this specific packing list
                     $packingListItems = PackingListItem::where('packing_list_id', $pList->id)->get();
 
-                    // Calculate quantities by size for this dispatch
-                    $dispatchQtyBySize = $packingListItems
-                        ->groupBy('size')
-                        ->map(function ($items) {
-                            return $items->sum('quantity');
-                        });
+                    // 🔹 Filter items by current article_number + color combinations
+                    $filteredItems = $packingListItems->filter(function ($item) use ($currentColorArticleCombinations) {
+                        $key = $item->color . '|' . $item->article_number;
+                        return $currentColorArticleCombinations->contains($key);
+                    });
 
-                    $dispatchQuantities[$dispatchNumber] = $dispatchQtyBySize;
+                    // Calculate quantities by size only for the filtered items
+                    $sizeQuantities = collect();
+                    foreach ($filteredItems as $item) {
+                        $currentQty = $sizeQuantities->get($item->size, 0);
+                        $sizeQuantities[$item->size] = $currentQty + $item->quantity;
+                    }
+
+                    $dispatchQuantities[$dispatchNumber] = $sizeQuantities;
                 }
             }
 
-            // 1. Compute ordered quantities for items in this packing list (keep this for backward compatibility)
+
+            // Get unique po_item_ids for this packing list based on article_number and color from PoItems
+            $uniquePoItemIds = collect();
+
+            foreach ($currentPackingListItems as $item) {
+                $poItem = PoItems::where('po_id', $packingList->po_id)
+                    ->where('article_number', $item->article_number)
+                    ->where('color', $item->color)
+                    ->where('size', $item->size)
+                    ->first();
+
+                if ($poItem) {
+                    $uniquePoItemIds->push($poItem->id);
+                }
+            }
+
+            $uniquePoItemIds = $uniquePoItemIds->unique()->values()->toArray();
+
+            // Compute ordered quantities for items in this packing list from PackingListConfigItem
             if (!empty($uniquePoItemIds)) {
-                $poItemsFiltered = PoItems::whereIn('id', $uniquePoItemIds)->get();
-                $orderedQuantities = $poItemsFiltered
+                $configItems = PackingListConfigItem::whereIn('po_item_id', $uniquePoItemIds)
+                    ->where('status', 0)
+                    ->get();
+
+                $orderedQuantities = $configItems
                     ->groupBy('size')
-                    ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
+                    ->map(fn($itemsForSize) => $itemsForSize->sum('pack_qty'));
             } else {
                 $orderedQuantities = collect();
             }
 
-            // 2. Compute balances & percentages per size (using orderQuantitiesFromAllPacks as the reference)
+            // Compute balances & percentages per size
             foreach ($allSizes as $size) {
-                $ordered = $orderQuantitiesFromAllPacks->get($size, 0); // Use total from all packs
-                $packed  = $packedQuantities->get($size, 0);
-                $balance = $ordered - $packed;
-                $percentage = $ordered > 0 ? ($packed / $ordered) * 100 : 0;
+                $ordered = $orderQuantitiesFromAllPacks->get($size, 0);
 
-                $balances[$size]    = $balance;
+                // Calculate total dispatched for this size across all dispatches
+                $totalDispatchedForSize = 0;
+                foreach ($dispatchQuantities as $dispatchQty) {
+                    $totalDispatchedForSize += $dispatchQty->get($size, 0);
+                }
+
+                $balance = $ordered - $totalDispatchedForSize;
+                $percentage = $ordered > 0 ? ($totalDispatchedForSize / $ordered) * 100 : 0;
+
+                $balances[$size] = $balance;
                 $percentages[$size] = $percentage;
             }
 
@@ -1761,7 +1820,15 @@ class PackingListController extends BaseController
                 }
 
                 $perCartonQty = $cartonCount > 0 ? round($totalQty / $cartonCount) : 0;
-                $mrp = $firstItem->po_item->mrp ?? '';
+
+                // Get po_item_id from PoItems based on article_number and color
+                $poItem = PoItems::where('po_id', $packingList->po_id)
+                    ->where('article_number', $firstItem->article_number)
+                    ->where('color', $firstItem->color)
+                    ->first();
+
+                $mrp = $poItem->mrp ?? '';
+                $poItemId = $poItem->id ?? $firstItem->po_item_id;
 
                 $row = [
                     'article_number'  => $firstItem->article_number,
@@ -1780,7 +1847,7 @@ class PackingListController extends BaseController
                     'grs_wt_total'    => $totalGrossWeightForRange,
                     'ctn_dim'         => $dimension,
                     'mrp'             => $mrp,
-                    'po_item_id'      => $firstItem->po_item_id,
+                    'po_item_id'      => $poItemId,
                 ];
 
                 // Initialize all size columns to 0
@@ -1805,7 +1872,6 @@ class PackingListController extends BaseController
                 $totals['total_pieces'] += $totalQty;
                 $totals['total_net_weight'] += $totalNetWeightForRange;
                 $totals['total_gross_weight'] += $totalGrossWeightForRange;
-
 
                 $tableRows[] = $row;
             }
