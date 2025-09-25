@@ -110,6 +110,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/auto', [AutoPackingListController::class, 'auto'])->name('packing_list_auto');
         Route::get('/auto_items', [AutoPackingListController::class, 'get_auto_packing_list_items'])->name('auto_packing_list_items');
         Route::get('auto-packing-list/print/{po_id}/{color}', [AutoPackingListController::class, 'print'])->name('auto_packing_list_print');
+        Route::post('/update_packing_list_po_num', [PackingListController::class, 'updatePackingListPoNumber'])->name('update_packing_list_po_num');
     });
 
     Route::group(['prefix' => 'invoice'], function () {

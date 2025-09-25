@@ -133,8 +133,8 @@ class AutoPackingListController extends BaseController
             for ($i = 0; $i < $fullCartons; $i++) {
                 $cartonName = $this->formatCartonName($po->vendor_id, $cartonCounter);
 
-                // Calculate net weight based on size
-                $weightPerPiece = $this->getWeightBySize($size);
+                // Get weight per piece from config item (database)
+                $weightPerPiece = $configItem->weight_per_piece;
                 $net_weight = $perCartonQty * $weightPerPiece;
 
                 $packingListItems[] = [
@@ -186,22 +186,22 @@ class AutoPackingListController extends BaseController
                     'size' => $configItem->size,
                     'quantity' => $remaining,
                     'config_item_id' => $configItem->id,
+                    'weight_per_piece' => $configItem->weight_per_piece,
                 ];
             }
         }
 
-        // Create final carton with ALL remaining items (they should share the same carton)
+        // Create final carton with ALL remaining items
         if (!empty($remainingItems)) {
             $finalCartonName = $this->formatCartonName($po->vendor_id, $cartonCounter);
 
             foreach ($remainingItems as $item) {
-                // Calculate net weight based on size
-                $weightPerPiece = $this->getWeightBySize($item['size']);
-                $net_weight = $item['quantity'] * $weightPerPiece;
+                // Use weight from config item
+                $net_weight = $item['quantity'] * $item['weight_per_piece'];
 
                 $packingListItems[] = [
                     'id' => 'temp_' . $item['config_item_id'] . '_final',
-                    'carton_name' => $finalCartonName, // Same carton name for all remaining items
+                    'carton_name' => $finalCartonName,
                     'article_number' => $item['article_number'],
                     'article_description' => $item['article_description'],
                     'ean_code' => $item['ean_code'],
@@ -285,8 +285,8 @@ class AutoPackingListController extends BaseController
                 $configItem = $configItems->firstWhere('id', $item['config_item_id']);
                 $carton = $configItem ? $configItem->config->carton : null;
 
-                // Calculate weight based on size
-                $weightPerPiece = $this->getWeightBySize($item['size']);
+                // Use weight from config item instead of calculating
+                $weightPerPiece = $configItem->weight_per_piece;
                 $netWeight = $item['quantity'] * $weightPerPiece;
 
                 return (object) [
@@ -357,31 +357,5 @@ class AutoPackingListController extends BaseController
             'dispTotal',
             'dispatchQuantities'
         ));
-    }
-
-    /**
-     * Get weight per piece based on size
-     */
-    private function getWeightBySize($size)
-    {
-        $weights = [
-            'XS' => 0.195,   // 195g
-            'S' => 0.20,    // 200g  
-            'M' => 0.205,   // 205g
-            'L' => 0.21,    // 210g
-            'XL' => 0.215,  // 215g
-            'XXL' => 0.22,  // 220g
-            '2/3Y' => 0.16,     // 160g
-            '3/4Y' => 0.165,    // 165g
-            '4/5Y' => 0.17,     // 170g
-            '5/6Y' => 0.175,    // 175g
-            '6/7Y' => 0.18,     // 180g
-            '7/8Y' => 0.185,    // 185g
-            '9/10Y' => 0.19,    // 190g
-            '11/12Y' => 0.195,  // 195g
-            '13/14Y' => 0.20,   // 200g
-        ];
-
-        return $weights[$size] ?? 0.20;
     }
 }

@@ -19,6 +19,7 @@ class PackingListMaster extends Model
         'po_id',
         'pack_ref_no',
         'vendor_id',
+        'packing_po_num',
         'po_no',
         'po_date',
         'created_at',

@@ -290,28 +290,6 @@
             };
             if (color) requestData.color = color;
 
-            // Helper function to get weight by size
-            function getWeightBySize(size) {
-                var weights = {
-                    'XS': 0.195, // 195g
-                    'S': 0.20, // 200g
-                    'M': 0.205, // 205g
-                    'L': 0.21, // 210g
-                    'XL': 0.215, // 215g
-                    'XXL': 0.22, // 220g
-                    '2/3Y': 0.16, // 160g
-                    '3/4Y': 0.165, // 165g
-                    '4/5Y': 0.17, // 170g
-                    '5/6Y': 0.175, // 175g
-                    '6/7Y': 0.18, // 180g
-                    '7/8Y': 0.185, // 185g
-                    '9/10Y': 0.19, // 190g
-                    '11/12Y': 0.195, // 195g
-                    '13/14Y': 0.20, // 200g
-                };
-                return weights[size] || 0.20;
-            }
-
             $.ajax({
                 url: '{{ route("auto_packing_list_items") }}',
                 type: 'GET',
@@ -339,31 +317,31 @@
                             });
 
                             var tableHtml = `
-                            <div class="mb-3">
-                                <div class="table-responsive">
-                                    <table class="table table-bordered table-sm">
-                                        <thead>
-                                            <tr>
-                                                <th rowspan="2">Ctn. #</th>
-                                                <th rowspan="2">PO No.</th>
-                                                <th rowspan="2">SAP Article No.</th>
-                                                <th rowspan="2">Short Desc.</th>
-                                                <th rowspan="2">EAN / SKU</th>
-                                                <th rowspan="2">Size</th>
-                                                <th rowspan="2">Qty</th>
-                                                <th colspan="3">Ctn. Mea (cm)</th>
-                                                <th rowspan="2">Net Wt</th>
-                                                <th rowspan="2">Gross Wt</th>
-                                                <th rowspan="2">CBM</th>
-                                            </tr>
-                                            <tr>
-                                                <th>L</th>
-                                                <th>B</th>
-                                                <th>H</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                `;
+                    <div class="mb-3">
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm">
+                                <thead>
+                                    <tr>
+                                        <th rowspan="2">Ctn. #</th>
+                                        <th rowspan="2">PO No.</th>
+                                        <th rowspan="2">SAP Article No.</th>
+                                        <th rowspan="2">Short Desc.</th>
+                                        <th rowspan="2">EAN / SKU</th>
+                                        <th rowspan="2">Size</th>
+                                        <th rowspan="2">Qty</th>
+                                        <th colspan="3">Ctn. Mea (cm)</th>
+                                        <th rowspan="2">Net Wt</th>
+                                        <th rowspan="2">Gross Wt</th>
+                                        <th rowspan="2">CBM</th>
+                                    </tr>
+                                    <tr>
+                                        <th>L</th>
+                                        <th>B</th>
+                                        <th>H</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
 
                             if (cartonOrder.length > 0) {
                                 var grandQty = 0;
@@ -375,11 +353,11 @@
                                     var items = itemsByCarton[cartonName];
                                     var itemCount = items.length;
 
-                                    // Calculate net weight for entire carton based on all items and their sizes
+                                    // Calculate net weight for entire carton using server-provided net_weight
                                     var cartonNetWeight = 0;
                                     items.forEach(function(item) {
-                                        var weightPerPiece = getWeightBySize(item.size);
-                                        cartonNetWeight += item.quantity * weightPerPiece;
+                                        // Use the net_weight from server (already calculated with database weight_per_piece)
+                                        cartonNetWeight += parseFloat(item.net_weight) || 0;
                                     });
 
                                     var grossWeight = cartonNetWeight > 0 ? cartonNetWeight + 1.2 : 0;
@@ -406,79 +384,79 @@
                                         }
 
                                         tableHtml += `
-                                        <td>${packingList.po_no || ''}</td>
-                                        <td>${item.article_number}</td>
-                                        <td>${item.article_description || ''}</td>
-                                        <td>${item.ean_code || ''}</td>
-                                        <td>${item.size}</td>
-                                        <td>${item.quantity}</td>
-                                        <td>${length > 0 ? length : ''}</td>
-                                        <td>${breadth > 0 ? breadth : ''}</td>
-                                        <td>${height > 0 ? height : ''}</td>
-                                    `;
+                                <td>${packingList.po_no || ''}</td>
+                                <td>${item.article_number}</td>
+                                <td>${item.article_description || ''}</td>
+                                <td>${item.ean_code || ''}</td>
+                                <td>${item.size}</td>
+                                <td>${item.quantity}</td>
+                                <td>${length > 0 ? length : ''}</td>
+                                <td>${breadth > 0 ? breadth : ''}</td>
+                                <td>${height > 0 ? height : ''}</td>
+                            `;
 
                                         // Net Weight and Gross Weight (rowspan for first item only)
                                         if (itemIndex === 0) {
                                             tableHtml += `
-                                            <td rowspan="${itemCount}" style="vertical-align: middle;">${cartonNetWeight > 0 ? cartonNetWeight.toFixed(2) : ''}</td>
-                                            <td rowspan="${itemCount}" style="vertical-align: middle;">${grossWeight > 0 ? grossWeight.toFixed(2) : ''}</td>
-                                        `;
+                                    <td rowspan="${itemCount}" style="vertical-align: middle;">${cartonNetWeight > 0 ? cartonNetWeight.toFixed(2) : ''}</td>
+                                    <td rowspan="${itemCount}" style="vertical-align: middle;">${grossWeight > 0 ? grossWeight.toFixed(2) : ''}</td>
+                                `;
                                         }
 
                                         tableHtml += `
-                                        <td>${cbm > 0 ? cbm.toFixed(2) : ''}</td>
-                                    </tr>`;
+                                <td>${cbm > 0 ? cbm.toFixed(2) : ''}</td>
+                            </tr>`;
                                     });
                                 });
 
                                 // Add totals row
                                 tableHtml += `
-                                    <tr style="background-color: #f8f9fa; font-weight: bold; border-top: 2px solid #007bff;">
-                                        <td style="text-align: center;"><strong>TOTAL</strong></td>
-                                        <td colspan="5"></td>
-                                        <td style="text-align: center;"><strong>${grandQty}</strong></td>
-                                        <td colspan="3"></td>
-                                        <td style="text-align: center;"><strong>${grandNet > 0 ? grandNet.toFixed(2) : ''}</strong></td>
-                                        <td style="text-align: center;"><strong>${grandGross > 0 ? grandGross.toFixed(2) : ''}</strong></td>
-                                        <td></td>
-                                    </tr>
-                                `;
+                            <tr style="background-color: #f8f9fa; font-weight: bold; border-top: 2px solid #007bff;">
+                                <td style="text-align: center;"><strong>TOTAL</strong></td>
+                                <td colspan="5"></td>
+                                <td style="text-align: center;"><strong>${grandQty}</strong></td>
+                                <td colspan="3"></td>
+                                <td style="text-align: center;"><strong>${grandNet > 0 ? grandNet.toFixed(2) : ''}</strong></td>
+                                <td style="text-align: center;"><strong>${grandGross > 0 ? grandGross.toFixed(2) : ''}</strong></td>
+                                <td></td>
+                            </tr>
+                        `;
                             } else {
                                 tableHtml += `<tr><td colspan="13" class="text-center">No items found</td></tr>`;
                             }
 
                             tableHtml += `
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            `;
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    `;
                             $container.append(tableHtml);
                         });
                     } else {
                         $container.append(`
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle"></i> No packing lists found for this color.
-                        </div>
-                    `);
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> No packing lists found for this color.
+                </div>
+            `);
                     }
 
                     // Show status message
                     if (!canAddItems) {
                         $container.prepend(`
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-triangle"></i> 
-                            All items for this color have been fully packed. No more items can be added.
-                        </div>
-                    `);
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    All items for this color have been fully packed. No more items can be added.
+                </div>
+            `);
                     }
                 },
                 error: function() {
                     $('#packing_lists_container').html(`
-                    <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-triangle"></i> Error loading packing lists
-                    </div>
-                `);
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i> Error loading packing lists
+            </div>
+        `);
                 }
             });
         }

@@ -143,7 +143,7 @@ class PackingListController extends BaseController
         $totalPackQty = 0;
         foreach ($colorSizeMatrix as $color => $sizes) {
             foreach ($sizes as $size => $qty) {
-                $packQty = ceil($qty * (1 + $excessPercentage / 100));
+                $packQty = floor($qty * (1 + $excessPercentage / 100));
                 $packQtyMatrix[$color][$size] = $packQty;
                 $totalPackQty += $packQty;
             }
@@ -159,19 +159,25 @@ class PackingListController extends BaseController
             $packQtyBySizeTotal[$size] = $packQty;
         }
 
-        // For ALL vendors - get existing position and per_carton_qty data
+        // For ALL vendors - get existing position, per_carton_qty, and weight_per_piece data
         $positionData = [];
         $perCartonQtyData = [];
+        $weightPerPieceData = [];
 
         if ($existingConfig) {
             $configItems = PackingListConfigItem::where('config_id', $existingConfig->id)
-                ->select('size', 'position', 'per_carton_qty')
-                ->groupBy('size', 'position', 'per_carton_qty')
+                ->select('size', 'position', 'per_carton_qty', 'weight_per_piece')
+                ->groupBy('size', 'position', 'per_carton_qty', 'weight_per_piece')
                 ->get();
 
             foreach ($configItems as $item) {
                 $positionData[$item->size] = $item->position ?? 1;
                 $perCartonQtyData[$item->size] = $item->per_carton_qty ?? 0;
+                $weightPerPieceData[$item->size] = $item->weight_per_piece ?? 0;
+            }
+        } else {
+            foreach ($allSizes as $size) {
+                $weightPerPieceData[$size] = 0;
             }
         }
 
@@ -193,7 +199,8 @@ class PackingListController extends BaseController
             'selectedCartonId',
             'hasPackingListItems',
             'positionData',
-            'perCartonQtyData'
+            'perCartonQtyData',
+            'weightPerPieceData'
         ));
     }
 
@@ -233,9 +240,10 @@ class PackingListController extends BaseController
             }
             $configMaster->save();
 
-            // Get position and per_carton_qty data for ALL vendors
+            // Get position, per_carton_qty, and weight_per_piece data for ALL vendors
             $positions = $request->input('positions', []);
             $perCartonQtys = $request->input('per_carton_qtys', []);
+            $weightPerPieces = $request->input('weight_per_pieces', []);
 
             // Prepare list of identifiers to keep
             $keepIds = [];
@@ -248,26 +256,28 @@ class PackingListController extends BaseController
 
                 foreach ($items as $item) {
                     $poQty   = $item->qty;
-                    $packQty = ceil($poQty * (1 + $excess / 100));
+                    $packQty = floor($poQty * (1 + $excess / 100));
 
-                    // Get position and per_carton_qty for Benetton as well
+                    // Get position, per_carton_qty, and weight_per_piece for Benetton as well
                     $position = $positions[$item->size] ?? 1;
                     $perCartonQty = $perCartonQtys[$item->size] ?? 0;
+                    $weightPerPiece = $weightPerPieces[$item->size] ?? 0;
 
                     $configItem = PackingListConfigItem::updateOrCreate([
                         'config_id' => $configMaster->id,
                         'color'     => $item->color,
                         'size'      => $item->size,
                     ], [
-                        'po_id'         => $po_id,
-                        'vendor_id'     => $vendor_id,
-                        'po_qty'        => $poQty,
-                        'pack_qty'      => $packQty,
-                        'position'      => $position,
-                        'per_carton_qty' => $perCartonQty,
-                        'status'        => 0,
-                        'created_by'    => auth()->user()->id,
-                        'created_at'    => now(),
+                        'po_id'           => $po_id,
+                        'vendor_id'       => $vendor_id,
+                        'po_qty'          => $poQty,
+                        'pack_qty'        => $packQty,
+                        'position'        => $position,
+                        'per_carton_qty'  => $perCartonQty,
+                        'weight_per_piece' => $weightPerPiece,
+                        'status'          => 0,
+                        'created_by'      => auth()->user()->id,
+                        'created_at'      => now(),
                     ]);
 
                     $keepIds[] = $configItem->id;
@@ -282,25 +292,27 @@ class PackingListController extends BaseController
                     $poQty   = $item->qty ?? 0;
                     $packQty = ceil($poQty * (1 + $excess / 100));
 
-                    // Get position and per_carton_qty for ALL vendors
+                    // Get position, per_carton_qty, and weight_per_piece for ALL vendors
                     $position = $positions[$size] ?? 1;
                     $perCartonQty = $perCartonQtys[$size] ?? 0;
+                    $weightPerPiece = $weightPerPieces[$size] ?? 0;
 
                     $configItem = PackingListConfigItem::updateOrCreate([
                         'config_id'  => $configMaster->id,
                         'po_item_id' => $item->id,
                     ], [
-                        'po_id'         => $po_id,
-                        'vendor_id'     => $vendor_id,
-                        'color'         => $color,
-                        'size'          => $size,
-                        'po_qty'        => $poQty,
-                        'pack_qty'      => $packQty,
-                        'position'      => $position,
-                        'per_carton_qty' => $perCartonQty,
-                        'status'        => 0,
-                        'created_by'    => auth()->user()->id,
-                        'created_at'    => now(),
+                        'po_id'           => $po_id,
+                        'vendor_id'       => $vendor_id,
+                        'color'           => $color,
+                        'size'            => $size,
+                        'po_qty'          => $poQty,
+                        'pack_qty'        => $packQty,
+                        'position'        => $position,
+                        'per_carton_qty'  => $perCartonQty,
+                        'weight_per_piece' => $weightPerPiece,
+                        'status'          => 0,
+                        'created_by'      => auth()->user()->id,
+                        'created_at'      => now(),
                     ]);
 
                     $keepIds[] = $configItem->id;
@@ -340,6 +352,45 @@ class PackingListController extends BaseController
         ];
 
         return view('packing_list.master', $page_data);
+    }
+
+    public function updatePackingListPoNumber(Request $request)
+    {
+        try {
+            $packingListId = $request->input('packing_list_id');
+            $packingPoNumber = $request->input('packing_po_num');
+
+            $packingList = PackingListMaster::find($packingListId);
+
+            if (!$packingList) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Packing list not found.'
+                ]);
+            }
+
+            // Check if this is vendor ID 2
+            if ($packingList->vendor_id != 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Packing PO number can only be updated for vendor ID 2.'
+                ]);
+            }
+
+            $packingList->packing_po_num = $packingPoNumber;
+            $packingList->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Packing PO number updated successfully.',
+                'packing_po_number' => $packingPoNumber
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred: ' . $e->getMessage()
+            ]);
+        }
     }
 
     public function add()

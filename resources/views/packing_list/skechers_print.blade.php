@@ -104,7 +104,7 @@
         <!-- Row 2 -->
         <tr>
             <td style="border: none; text-align: left;">PO NO</td>
-            <td style="border: none; text-align: left;">{{ $poNum }}</td>
+            <td style="border: none; text-align: left;">{{ $packing_list->packing_po_num }}</td>
             <td style="border: none; text-align: right;">Ship From</td>
             <td style="border: none; text-align: left;">Ms.CARNATION CREATIONS PVT LTD.</td>
             <td style="border: none; text-align: right;">Ship To,</td>
@@ -309,7 +309,7 @@
         <table class="summary-table">
             <thead>
                 <tr>
-                    <th>{{ $poNum }}</th>
+                    <th>{{ $packing_list->packing_po_num }}</th>
                     <th>SIZE</th>
                     @foreach($all_sizes as $size)
                     <th>{{ $size }}</th>

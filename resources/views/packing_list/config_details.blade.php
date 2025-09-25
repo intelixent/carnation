@@ -28,15 +28,18 @@
 </div>
 @endif
 
-{{-- Position and Per Carton Qty controls --}}
+{{-- Position, Per Carton Qty, and Weight controls --}}
 <div class="row mt-2">
     <div class="col-md-12">
         <div class="d-flex justify-content-end">
             <button type="button" class="btn btn-sm btn-info me-2 reset-positions">
                 <i class="fas fa-sort-numeric-up"></i> Reset Positions
             </button>
-            <button type="button" class="btn btn-sm btn-warning clear-carton-qty">
+            <button type="button" class="btn btn-sm btn-warning me-2 clear-carton-qty">
                 <i class="fas fa-eraser"></i> Clear Per Carton Qty
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary clear-weights">
+                <i class="fas fa-weight-hanging"></i> Clear Weights
             </button>
         </div>
     </div>
@@ -44,7 +47,6 @@
 
 <form id="packingConfigForm" data-vendor-id="{{ $po->vendor_id }}">
     @csrf
-    <input type="hidden" name="po_id" value="{{ $po->id }}">
     <input type="hidden" name="po_id" value="{{ $po->id }}">
     <input type="hidden" name="has_packing_list_items" value="{{ $hasPackingListItems ? '1' : '0' }}">
 
@@ -125,6 +127,27 @@
                                     value="{{ $perCartonQtyData[$size] ?? 0 }}"
                                     min="0"
                                     style="width: 70px; margin: 0 auto;">
+                                @else
+                                -
+                                @endif
+                            </td>
+                            @endforeach
+                        </tr>
+
+                        {{-- PER PIECE WEIGHT Row (common for all colors) - Available for ALL vendors --}}
+                        <tr class="bg-light">
+                            <td class="text-center" colspan="2"><strong>PER PIECE WEIGHT (KG)</strong></td>
+                            @foreach($allSizes as $size)
+                            <td class="text-center">
+                                @if($packQtyBySizeTotal[$size] > 0)
+                                <input type="number"
+                                    name="weight_per_pieces[{{ $size }}]"
+                                    class="form-control form-control-sm text-center weight-per-piece-input"
+                                    value="{{ $weightPerPieceData[$size] ?? 0 }}"
+                                    min="0"
+                                    step="0.001"
+                                    placeholder="0.000"
+                                    style="width: 100px; margin: 0 auto;">
                                 @else
                                 -
                                 @endif
