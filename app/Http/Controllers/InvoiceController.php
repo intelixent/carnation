@@ -9,19 +9,15 @@ use App\Models\VendorMaster;
 use App\Models\PoMaster;
 use App\Models\PoItems;
 use App\Models\PoSizes;
-use App\Models\PrefixSetting;
-use Illuminate\Support\Facades\Http;
-use App\Utils\POutils;
-use Illuminate\Support\Str;
-use Yajra\DataTables\Facades\DataTables;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\Storage;
 use App\Models\PackingListMaster;
 use App\Models\PackingListItem;
+use App\Models\InvoiceStatusMaster;
 use App\Models\InvoiceMaster;
 use App\Models\StateMaster;
 use App\Models\TransportMaster;
 use App\Models\BusinessSettingMaster;
+use Yajra\DataTables\Facades\DataTables;
 
 class InvoiceController extends BaseController
 {
@@ -151,6 +147,7 @@ class InvoiceController extends BaseController
                 'po_id'            => $data['selected_po'],
                 'pack_ids'         => implode(',', $data['selectedpackids']),
                 'vendor_id'        => $data['selected_vendor_id'],
+                'invoice_status_id' => 1,
                 'created_by'       => auth()->id(),
                 'created_at'       => now(),
             ]);
@@ -557,9 +554,219 @@ class InvoiceController extends BaseController
             'page_main_title' => "Invoice Master",
             'page_child_title' => "Invoice Master",
             'isSuperAdmin' => $this->isSuperAdmin,
-            'InvoiceMaster' => InvoiceMaster::where('status', 0)->orderBy('id', 'desc')->get(),
+            'statuses' => InvoiceStatusMaster::where('status', 0)->get(),
+            'vendors' => VendorMaster::where('status', 0)->get(),
         ];
         return view('invoice.master', $page_data);
+    }
+
+    public function table(Request $request)
+    {
+        $query = InvoiceMaster::with(['po.vendor', 'invoiceStatus'])
+            ->where('status', 0)
+            ->orderBy('id', 'desc');
+
+        // Apply filters only if they are provided
+        if ($request->filled('vendor_id') && $request->vendor_id != '') {
+            $query->whereHas('po', function ($q) use ($request) {
+                $q->where('vendor_id', $request->vendor_id);
+            });
+        }
+
+        if ($request->filled('status_id') && $request->status_id != '') {
+            $query->where('invoice_status_id', $request->status_id);
+        }
+
+        if (
+            $request->filled('from_date') && $request->filled('to_date') &&
+            $request->from_date != '' && $request->to_date != ''
+        ) {
+            $query->whereBetween('inv_date', [$request->from_date, $request->to_date]);
+        }
+
+        return DataTables::of($query)
+            ->addIndexColumn()
+            ->addColumn('checkbox_sno', function ($invoice) use ($request) {
+                // Get current page and page length from request
+                $page = $request->get('start', 0);
+                $length = $request->get('length', 10);
+
+                // Calculate row number
+                static $counter = null;
+                if ($counter === null) {
+                    $counter = $page;
+                }
+                $counter++;
+
+                return '<input type="checkbox" class="form-check-input invoice-checkbox" value="' . $invoice->id . '"> ' . $counter;
+            })
+            ->addColumn('ref_no_actions', function ($invoice) {
+                $transportStatus = $this->checkTransportCompletion($invoice);
+                $tooltipText = $transportStatus === 'transport-complete' ? 'Transport Details Complete' : 'Transport Details Incomplete';
+
+                return '<div class="text-center">
+                <div class="dropdown">
+                    <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        ' . $invoice->ref_no . '
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item view_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">View</a></li>
+                        <li><a class="dropdown-item update_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">Update Invoice Details</a></li>
+                        <li><a class="dropdown-item update_grn" data-id="' . $invoice->id . '" href="javascript:void(0);">Update GRN Details</a></li>
+                        <li><a class="dropdown-item" target="_blank" href="' . route('generateInvoice', ['id' => $invoice->id]) . '">Print</a></li>
+                        <li><a class="dropdown-item delete_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">Delete</a></li>
+                    </ul>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-circle ' . $transportStatus . '" title="' . $tooltipText . '"></div>
+                </div>
+            </div>';
+            })
+            ->addColumn('vendor_name', function ($invoice) {
+                return $invoice->po->vendor->name ?? 'N/A';
+            })
+            ->addColumn('po_number', function ($invoice) {
+                return $invoice->po->po_num ?? 'N/A';
+            })
+            ->addColumn('formatted_date', function ($invoice) {
+                return \Carbon\Carbon::parse($invoice->created_at)->format('d-m-Y h:i A');
+            })
+            ->addColumn('status_badge', function ($invoice) {
+                $statusName = $invoice->invoiceStatus->name ?? 'N/A';
+                $badgeClass = $this->getStatusBadgeClass($statusName);
+
+                return '<span class="badge ' . $badgeClass . ' status-badge">' . $statusName . '</span>';
+            })
+            ->rawColumns(['checkbox_sno', 'ref_no_actions', 'status_badge'])
+            ->make(true);
+    }
+
+    private function checkTransportCompletion($invoice)
+    {
+        $transporterDetails = json_decode($invoice->transporter_details, true);
+
+        if (empty($transporterDetails)) {
+            return 'transport-incomplete';
+        }
+
+        // Check if all required transport fields are filled
+        $requiredTransportFields = [
+            'transport_name',
+            'mode_of_transport',
+            'transport_vehicle_no',
+            'transport_distance',
+            'transport_date_time'
+        ];
+
+        $allFieldsFilled = true;
+        foreach ($requiredTransportFields as $field) {
+            if (empty($transporterDetails[$field]) || $transporterDetails[$field] === null || $transporterDetails[$field] === '') {
+                $allFieldsFilled = false;
+                break;
+            }
+        }
+
+        return $allFieldsFilled ? 'transport-complete' : 'transport-incomplete';
+    }
+
+    private function getStatusBadgeClass($status)
+    {
+        switch (strtolower(trim($status))) {
+            case 'invoiced':
+                return 'bg-info text-white';
+            case 'in transit':
+                return 'bg-warning text-dark';
+            case 'grn pending':
+                return 'bg-warning text-dark';
+            case 'grn done':
+                return 'bg-primary text-white';
+            case 'payment pending':
+                return 'bg-orange text-white';
+            case 'payment received':
+                return 'bg-success text-white';
+            case 'invoice not disposed':
+                return 'bg-secondary text-white';
+            case 'cancelled':
+                return 'bg-danger text-white';
+            default:
+                return 'bg-light text-dark';
+        }
+    }
+
+    public function bulkStatusUpdate(Request $request)
+    {
+        try {
+            $request->validate([
+                'ids' => 'required|array',
+                'ids.*' => 'exists:invoice_masters,id',
+                'status_id' => 'required|exists:invoice_status_master,id',
+                'selected_date' => 'nullable|date'
+            ]);
+
+            $ids = $request->ids;
+            $statusId = $request->status_id;
+            $selectedDate = $request->selected_date;
+
+            // Update invoice status first
+            InvoiceMaster::whereIn('id', $ids)->update(['invoice_status_id' => $statusId]);
+
+            // If status = 3, also update reached_date in grn_details
+            if ($statusId == 3 && $selectedDate) {
+                foreach ($ids as $invoiceId) {
+                    $invoice = InvoiceMaster::find($invoiceId);
+
+                    if ($invoice) {
+                        // Decode existing GRN details or start fresh
+                        $existingGrnDetails = json_decode($invoice->grn_details, true) ?? [];
+
+                        // Define defaults for all GRN fields
+                        $grnDetails = array_merge([
+                            'asn_no' => null,
+                            'asn_date' => null,
+                            'lr_no' => null,
+                            'transport_name' => null,
+                            'transporter_per_cost' => null,
+                            'dispatched_date' => null,
+                            'reached_date' => null,
+                            'pod_date' => null,
+                            'grn_date' => null,
+                            'grn_qty' => null,
+                            'short_inv_vs_grn' => null,
+                            'discrepancy' => null,
+                            'remarks' => null,
+                            'transport_cost_total' => null,
+                            'debit_note_value' => null,
+                            'debit_note_tax_rate' => null,
+                            'debit_note_tax_amount' => null,
+                            'total_debit_note_value' => null,
+                            'business_head' => null,
+                            'grn_status' => null,
+                            'status' => null,
+                            'week' => null,
+                            'fl_clear_date' => null,
+                        ], $existingGrnDetails);
+
+                        // Update reached_date only
+                        $grnDetails['reached_date'] = $selectedDate;
+
+                        // Save back
+                        $invoice->update([
+                            'grn_details' => json_encode($grnDetails)
+                        ]);
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Successfully updated ' . count($ids) . ' invoice(s)'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating invoices: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function invoice_details_edit(Request $request)
@@ -967,6 +1174,104 @@ class InvoiceController extends BaseController
                 'success' => false,
                 'message' => 'Error: ' . $e->getMessage()
             ]);
+        }
+    }
+
+    public function grn_entry()
+    {
+        // Get invoices with their related data
+        $invoices = InvoiceMaster::with(['po.vendor'])
+            ->where('status', 0)
+            ->where('invoice_status_id', 3)
+            ->orderBy('id', 'desc')
+            ->get();
+
+        // Calculate invoice quantities for each invoice
+        foreach ($invoices as $invoice) {
+            $invoice->invoiceData = $this->getInvoiceCalculationData($invoice);
+        }
+
+        $page_data = [
+            'page_title' => "GRN Entry",
+            'page_main_title' => "Invoice",
+            'page_child_title' => "GRN Entry",
+            'isSuperAdmin' => $this->isSuperAdmin,
+            'InvoiceMaster' => $invoices,
+        ];
+
+        return view('invoice.grn_entry', $page_data);
+    }
+
+    public function grn_entry_details_update(Request $request)
+    {
+        try {
+            // Validate required fields
+            $request->validate([
+                'id' => 'required|exists:invoice_masters,id',
+                'grn_date' => 'required|date',
+                'grn_qty' => 'required|numeric|min:0'
+            ]);
+
+            $invoice = InvoiceMaster::find($request->id);
+
+            if (!$invoice) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invoice not found'
+                ]);
+            }
+
+            // Get existing GRN details
+            $existingGrnDetails = json_decode($invoice->grn_details, true) ?? [];
+
+            // Prepare updated GRN details JSON with all fields
+            $GrnDetails = array_merge($existingGrnDetails, [
+                'asn_no' => $request->asn_no ?? $existingGrnDetails['asn_no'] ?? null,
+                'asn_date' => $request->asn_date ?? $existingGrnDetails['asn_date'] ?? null,
+                'lr_no' => $request->lr_no ?? $existingGrnDetails['lr_no'] ?? null,
+                'transport_name' => $request->transport_name ?? $existingGrnDetails['transport_name'] ?? null,
+                'transporter_per_cost' => $request->transporter_per_cost ?? $existingGrnDetails['transporter_per_cost'] ?? null,
+                'dispatched_date' => $request->dispatched_date ?? $existingGrnDetails['dispatched_date'] ?? null,
+                'reached_date' => $request->reached_date ?? $request->grn_date ?? $existingGrnDetails['reached_date'] ?? null,
+                'pod_date' => $request->pod_date ?? $request->grn_date ?? $existingGrnDetails['pod_date'] ?? null,
+                'grn_date' => $request->grn_date,
+                'grn_qty' => $request->grn_qty,
+                'short_inv_vs_grn' => $request->short_inv_vs_grn ?? '0.00',
+                'discrepancy' => $request->discrepancy ?? 'nil',
+                'remarks' => $request->remarks ?? $existingGrnDetails['remarks'] ?? null,
+                'transport_cost_total' => $request->transport_cost_total ?? $existingGrnDetails['transport_cost_total'] ?? null,
+                'debit_note_value' => $request->debit_note_value ?? $existingGrnDetails['debit_note_value'] ?? null,
+                'debit_note_tax_rate' => $request->debit_note_tax_rate ?? $existingGrnDetails['debit_note_tax_rate'] ?? null,
+                'debit_note_tax_amount' => $request->debit_note_tax_amount ?? $existingGrnDetails['debit_note_tax_amount'] ?? null,
+                'total_debit_note_value' => $request->total_debit_note_value ?? $existingGrnDetails['total_debit_note_value'] ?? null,
+                'business_head' => $request->business_head ?? $existingGrnDetails['business_head'] ?? null,
+                'grn_status' => $request->grn_status ?? null,
+                'status' => $request->status ?? null,
+                'week' => $request->week ?? 'Week ' . date('W') ?? $existingGrnDetails['week'] ?? null,
+                'fl_clear_date' => $request->fl_clear_date ?? $existingGrnDetails['fl_clear_date'] ?? null,
+            ]);
+
+            $invoice->update([
+                'grn_details' => json_encode($GrnDetails),
+                'invoice_status_id' => 4,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'GRN Details updated successfully!',
+                'invoice_id' => $request->id,
+                'discrepancy' => $request->discrepancy
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation Error: ' . implode(', ', $e->errors())
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
         }
     }
 }
