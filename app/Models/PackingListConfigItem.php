@@ -25,6 +25,7 @@ class PackingListConfigItem extends Model
         'po_qty',
         'pack_qty',
         'position',
+        'weight_per_piece',
         'per_carton_qty',
         'created_by',
         'created_at',

@@ -53,6 +53,31 @@
 
     <div class="modal fade" id="detail_modal"></div>
 
+    <!-- Packing PO Number Modal -->
+    <div class="modal fade" id="packingPoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header text-dark">
+                    <h5 class="modal-title">Packing PO Number</h5>
+                    <button type="button" class="btn-close text-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="packingPoForm">
+                    <div class="modal-body">
+                        <input type="hidden" id="packing_list_id" name="packing_list_id">
+                        <div class="mb-3">
+                            <label for="packing_po_num" class="form-label">Packing PO Number</label>
+                            <input type="text" class="form-control" id="packing_po_num" name="packing_po_num" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-success">Save</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- row -->
     <div class="row">
         <div class="col-xl-12">
@@ -90,9 +115,22 @@
                                                 <!-- <li><a class="dropdown-item edit-pl" href="{{ route('packing_list_edit', ['id' => $packingList->id]) }}">Edit</a></li> -->
 
                                                 <li><a class="dropdown-item complete-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">Mark as Complete</a></li>
-
                                                 <li><a class="dropdown-item print-pl" target="_blank" href="{{ route('packing_list_print', ['id' => $packingList->id]) }}">Packing List Print</a></li>
                                                 <li><a class="dropdown-item delete-pl" data-id="{{ $packingList->id }}" href="javascript:void(0);">Delete</a></li>
+
+                                                @if($packingList->vendor_id == 2)
+                                                <li>
+                                                    <hr class="dropdown-divider">
+                                                </li>
+                                                <li>
+                                                    <a class="dropdown-item add-packing-po-number-modal"
+                                                        data-id="{{ $packingList->id }}"
+                                                        data-current="{{ $packingList->packing_po_num ?? '' }}"
+                                                        href="javascript:void(0);">
+                                                        {{ $packingList->packing_po_num ? 'Update Packing PO Number' : 'Add Packing PO Number' }}
+                                                    </a>
+                                                </li>
+                                                @endif
                                             </ul>
                                         </div>
                                     </td>
@@ -156,6 +194,44 @@
                 success: function(response) {
                     $("#detail_modal").html(response);
                     $("#detail_modal").modal('show');
+                }
+            });
+        });
+
+        $(document).on('click', '.add-packing-po-number-modal', function() {
+            const id = $(this).data('id');
+            const current = $(this).data('current');
+
+            $('#packing_list_id').val(id);
+            $('#packing_po_num').val(current);
+
+            $('#packingPoModal').modal('show');
+        });
+
+        $('#packingPoForm').submit(function(e) {
+            e.preventDefault();
+
+            const packingListId = $('#packing_list_id').val();
+            const packingPoNumber = $('#packing_po_num').val();
+
+            $.ajax({
+                url: "{{ route('update_packing_list_po_num') }}",
+                method: 'POST',
+                data: {
+                    packing_list_id: packingListId,
+                    packing_po_num: packingPoNumber,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        Swal.fire('Success!', response.message, 'success')
+                            .then(() => location.reload());
+                    } else {
+                        Swal.fire('Error!', response.message, 'error');
+                    }
+                },
+                error: function() {
+                    Swal.fire('Error!', 'Could not update Packing PO number. Please try again.', 'error');
                 }
             });
         });

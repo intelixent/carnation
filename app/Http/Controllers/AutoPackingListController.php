@@ -103,7 +103,6 @@ class AutoPackingListController extends BaseController
         // Get carton details from config
         $packingConfig = $configItems->first()->config;
         $carton_id = $packingConfig->carton_id;
-        $net_weight = 0; // Default or get from config if available
 
         $cartonCounter = 1;
         $packingListItems = [];
@@ -119,8 +118,13 @@ class AutoPackingListController extends BaseController
             $carton = $configItem->config->carton ?? null;
             $articleNumber = $poItem->article_number;
             $size = $configItem->size;
-            $packQty = $configItem->pack_qty;
-            $perCartonQty = $configItem->per_carton_qty;
+            $packQty = $configItem->pack_qty ?? 0;
+            $perCartonQty = $configItem->per_carton_qty ?? 0;
+
+            // Skip if pack quantity is 0 or per carton quantity is 0
+            if ($packQty <= 0 || $perCartonQty <= 0) {
+                continue;
+            }
 
             // Calculate how many full cartons we can create
             $fullCartons = intval($packQty / $perCartonQty);
@@ -128,6 +132,10 @@ class AutoPackingListController extends BaseController
             // Create full cartons
             for ($i = 0; $i < $fullCartons; $i++) {
                 $cartonName = $this->formatCartonName($po->vendor_id, $cartonCounter);
+
+                // Get weight per piece from config item (database)
+                $weightPerPiece = $configItem->weight_per_piece;
+                $net_weight = $perCartonQty * $weightPerPiece;
 
                 $packingListItems[] = [
                     'id' => 'temp_' . $configItem->id . '_' . $cartonCounter,
@@ -159,8 +167,14 @@ class AutoPackingListController extends BaseController
             $poItem = $configItem->poItem;
             if (!$poItem) continue;
 
-            $packQty = $configItem->pack_qty;
-            $perCartonQty = $configItem->per_carton_qty;
+            $packQty = $configItem->pack_qty ?? 0;
+            $perCartonQty = $configItem->per_carton_qty ?? 0;
+
+            // Skip if quantities are invalid
+            if ($packQty <= 0 || $perCartonQty <= 0) {
+                continue;
+            }
+
             $remaining = $packQty % $perCartonQty;
 
             if ($remaining > 0) {
@@ -172,18 +186,22 @@ class AutoPackingListController extends BaseController
                     'size' => $configItem->size,
                     'quantity' => $remaining,
                     'config_item_id' => $configItem->id,
+                    'weight_per_piece' => $configItem->weight_per_piece,
                 ];
             }
         }
 
-        // Create final carton with ALL remaining items (they should share the same carton)
+        // Create final carton with ALL remaining items
         if (!empty($remainingItems)) {
             $finalCartonName = $this->formatCartonName($po->vendor_id, $cartonCounter);
 
             foreach ($remainingItems as $item) {
+                // Use weight from config item
+                $net_weight = $item['quantity'] * $item['weight_per_piece'];
+
                 $packingListItems[] = [
                     'id' => 'temp_' . $item['config_item_id'] . '_final',
-                    'carton_name' => $finalCartonName, // Same carton name for all remaining items
+                    'carton_name' => $finalCartonName,
                     'article_number' => $item['article_number'],
                     'article_description' => $item['article_description'],
                     'ean_code' => $item['ean_code'],
@@ -267,6 +285,10 @@ class AutoPackingListController extends BaseController
                 $configItem = $configItems->firstWhere('id', $item['config_item_id']);
                 $carton = $configItem ? $configItem->config->carton : null;
 
+                // Use weight from config item instead of calculating
+                $weightPerPiece = $configItem->weight_per_piece;
+                $netWeight = $item['quantity'] * $weightPerPiece;
+
                 return (object) [
                     'id' => $item['id'],
                     'carton_name' => $item['carton_name'],
@@ -274,7 +296,7 @@ class AutoPackingListController extends BaseController
                     'color' => $item['color'],
                     'size' => $item['size'],
                     'quantity' => $item['quantity'],
-                    'net_weight' => $item['net_weight'] ?? 0,
+                    'net_weight' => $netWeight,
                     'carton' => $carton ? (object) [
                         'length' => $carton->length ?? 0,
                         'breadth' => $carton->breadth ?? 0,

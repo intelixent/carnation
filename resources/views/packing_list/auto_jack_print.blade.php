@@ -175,12 +175,6 @@
         @endphp
 
         <tbody class="{{ $cls }}" @if($force) style="page-break-before: always;" @endif>
-            @php
-            $net = $items->first()->net_weight ?? 0;
-            $gross = $net > 0 ? $net + 1.2 : 0;
-            $grandNet += $net;
-            $grandGross += $gross;
-            @endphp
             @foreach($items as $i => $item)
             @php
             $length = $item->carton->length ?? 0;
@@ -192,6 +186,14 @@
             $cbm = $item->quantity * ($length * $breadth * $height) / 1e6;
             }
             $grandQty += $item->quantity;
+
+            // Use the pre-calculated net weight from the item
+            if ($i === 0) {
+            $net = $items->sum('net_weight');
+            $gross = $net + 1.2; // Add 1.2 kg for carton weight
+            $grandNet += $net;
+            $grandGross += $gross;
+            }
             @endphp
             <tr @if($i===0 && $force) style="page-break-before: always;" @endif>
                 @if($i === 0)
@@ -207,8 +209,8 @@
                 <td>{{ $breadth > 0 ? $breadth : '' }}</td>
                 <td>{{ $height > 0 ? $height : '' }}</td>
                 @if($i === 0)
-                <td rowspan="{{ $count }}">{{ $net > 0 ? $net : '' }}</td>
-                <td rowspan="{{ $count }}">{{ $gross > 0 ? round($gross, 2) : '' }}</td>
+                <td rowspan="{{ $count }}">{{ round($net, 2) }}</td>
+                <td rowspan="{{ $count }}">{{ round($gross, 2) }}</td>
                 @endif
                 <td>{{ $cbm > 0 ? round($cbm, 2) : '' }}</td>
             </tr>
@@ -241,14 +243,61 @@
                 </tr>
             </thead>
             <tbody>
-                @php $orderTotal = 0; $balTotal = 0; @endphp
+                @php
+                $orderTotal = 0;
+                $packTotal = 0;
+                $balTotal = 0;
+                @endphp
                 <tr>
                     <td>ORDER QTY</td>
                     @foreach($all_sizes as $size)
-                    @php $q = $orderQuantitiesFromAllPacks->get($size, 0); $orderTotal += $q; @endphp
-                    <td>{{ $q }}</td>
+                    @php
+                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                    $orderTotal += $orderQty;
+                    @endphp
+                    <td>{{ $orderQty }}</td>
                     @endforeach
                     <td><strong>{{ $orderTotal }}</strong></td>
+                </tr>
+                <tr>
+                    <td>PACK QTY</td>
+                    @foreach($all_sizes as $size)
+                    @php
+                    $packQty = $dispatch->get($size, 0);
+                    $packTotal += $packQty;
+                    @endphp
+                    <td>{{ $packQty }}</td>
+                    @endforeach
+                    <td><strong>{{ $packTotal }}</strong></td>
+                </tr>
+                <tr>
+                    <td>BALANCE</td>
+                    @foreach($all_sizes as $size)
+                    @php
+                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                    $packQty = $dispatch->get($size, 0);
+                    $balance = $orderQty - $packQty;
+                    $balTotal += $balance;
+                    @endphp
+                    <td>{{ $balance }}</td>
+                    @endforeach
+                    <td><strong>{{ $balTotal }}</strong></td>
+                </tr>
+                <tr>
+                    <td>PACK QTY %</td>
+                    @foreach($all_sizes as $size)
+                    @php
+                    $orderQty = $orderQuantitiesFromAllPacks->get($size, 0);
+                    $packQty = $dispatch->get($size, 0);
+                    $percentage = $orderQty > 0 ? round(($packQty / $orderQty) * 100, 2) : 0;
+                    @endphp
+                    <td>{{ $percentage }}%</td>
+                    @endforeach
+                    <td>
+                        <strong>
+                            {{ $orderTotal > 0 ? round(($packTotal / $orderTotal) * 100, 2) . '%' : '0%' }}
+                        </strong>
+                    </td>
                 </tr>
             </tbody>
         </table>

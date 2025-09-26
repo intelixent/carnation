@@ -2,6 +2,19 @@
 
 @section('pagetitle', $page_title)
 @section('content')
+<style>
+    /* Remove arrows in Chrome, Safari, Edge, Opera */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    /* Remove arrows in Firefox */
+    input[type=number] {
+        -moz-appearance: textfield;
+    }
+</style>
 <div class="container-fluid">
     <!-- row -->
 
@@ -69,8 +82,8 @@
             width: '100%'
         });
 
-        // Function to initialize position and per carton qty functionality for ALL vendors
-        function initializePositionAndCartonQty() {
+        // Function to initialize position, per carton qty, and weight functionality for ALL vendors
+        function initializePositionCartonQtyAndWeight() {
             // Auto-increment positions when page loads (now common for all colors and ALL vendors)
             var positionCounter = 1;
             $('.position-input').each(function() {
@@ -81,6 +94,9 @@
 
             // Initialize total per carton qty calculation
             updateTotalPerCartonQty();
+
+            // Initialize weight formatting
+            formatWeightInputs();
         }
 
         // Function to update total per carton qty for each size (for ALL vendors)
@@ -93,6 +109,14 @@
                 var total = parseInt(inputValue);
 
                 $(this).text(total > 0 ? total : '-');
+            });
+        }
+
+        // Function to format weight inputs to 3 decimal places
+        function formatWeightInputs() {
+            $('.weight-per-piece-input').each(function() {
+                var value = parseFloat($(this).val()) || 0;
+                $(this).val(value.toFixed(3));
             });
         }
 
@@ -150,9 +174,9 @@
                             width: '100%'
                         });
 
-                        // Initialize position and per carton qty functionality for ALL vendors
+                        // Initialize position, per carton qty, and weight functionality for ALL vendors
                         setTimeout(function() {
-                            initializePositionAndCartonQty();
+                            initializePositionCartonQtyAndWeight();
                         }, 100);
                     },
                     error: function(xhr) {
@@ -190,8 +214,38 @@
             }
         });
 
-        // Handle form submission - Updated validation for ALL vendors
-        // Handle form submission - Updated validation to allow position and per carton qty updates
+        // Handle weight per piece input changes (delegated event) - for ALL vendors
+        $(document).on('input', '.weight-per-piece-input', function() {
+            // Validate input value
+            var value = parseFloat($(this).val()) || 0;
+            if (value < 0) {
+                $(this).val(0);
+                value = 0;
+            }
+        });
+
+        // Handle weight input focus for better UX
+        $(document).on('focus', '.weight-per-piece-input', function() {
+            $(this).addClass('border-primary');
+            // Remove formatting on focus for easier editing
+            var value = parseFloat($(this).val()) || 0;
+            if (value === 0) {
+                $(this).val('');
+            } else {
+                $(this).val(value);
+            }
+        });
+
+        // Handle weight input blur for formatting
+        $(document).on('blur', '.weight-per-piece-input', function() {
+            $(this).removeClass('border-primary');
+
+            // Format the value when losing focus
+            var value = parseFloat($(this).val()) || 0;
+            $(this).val(value.toFixed(3));
+        });
+
+        // Handle form submission - Updated validation to include weights
         $(document).on('submit', '#packingConfigForm', function(e) {
             e.preventDefault();
 
@@ -269,9 +323,37 @@
                 return;
             }
 
-            // Show configuration summary for both positions and per carton quantities
+            // Always validate weight per piece inputs (for both new and existing configurations)
+            var hasInvalidWeight = false;
+            var invalidWeightField = null;
+            $('.weight-per-piece-input').each(function() {
+                var value = parseFloat($(this).val()) || 0;
+                if (value < 0) {
+                    hasInvalidWeight = true;
+                    invalidWeightField = $(this);
+                    return false;
+                }
+            });
+
+            if (hasInvalidWeight) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Validation Error',
+                    text: 'Per piece weight values cannot be negative.',
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#ffc107'
+                }).then(() => {
+                    if (invalidWeightField) {
+                        invalidWeightField.focus();
+                    }
+                });
+                return;
+            }
+
+            // Show configuration summary for positions, per carton quantities, and weights
             var positionSummary = [];
             var cartonQtySummary = [];
+            var weightSummary = [];
 
             $('.position-input').each(function() {
                 var size = $(this).attr('name').match(/\[([^\]]+)\]$/)[1];
@@ -287,6 +369,14 @@
                 }
             });
 
+            $('.weight-per-piece-input').each(function() {
+                var size = $(this).attr('name').match(/\[([^\]]+)\]$/)[1];
+                var value = $(this).val();
+                if (value > 0) {
+                    weightSummary.push(size + ': ' + value + 'kg');
+                }
+            });
+
             var actionText = hasPackingListItems ? 'Update' : 'Save';
             var confirmText = hasPackingListItems ? 'Yes, Update!' : 'Yes, Save it!';
 
@@ -295,7 +385,10 @@
                 summaryText += 'Positions - ' + positionSummary.join(', ') + '\n';
             }
             if (cartonQtySummary.length > 0) {
-                summaryText += 'Per Carton Qty - ' + cartonQtySummary.join(', ');
+                summaryText += 'Per Carton Qty - ' + cartonQtySummary.join(', ') + '\n';
+            }
+            if (weightSummary.length > 0) {
+                summaryText += 'Per Piece Weights - ' + weightSummary.join(', ');
             }
 
             Swal.fire({
@@ -449,9 +542,38 @@
             });
         });
 
-        // Auto-save draft functionality (optional) - for ALL vendors
+        // Clear all weights - now works for both new and existing configurations
+        $(document).on('click', '.clear-weights', function() {
+            var vendorId = $('#packingConfigForm').data('vendor-id');
+
+            Swal.fire({
+                title: 'Clear All Per Piece Weights?',
+                text: 'This will set all per piece weight values for Vendor ' + vendorId + ' to 0.000 kg.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, Clear!',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $('.weight-per-piece-input').val('0.000');
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Weights Cleared!',
+                        text: 'All per piece weights have been set to 0.000 kg for Vendor ' + vendorId + '.',
+                        timer: 2000,
+                        timerProgressBar: true,
+                        showConfirmButton: false
+                    });
+                }
+            });
+        });
+
+        // Auto-save draft functionality (optional) - for ALL vendors including weights
         var autoSaveTimer;
-        $(document).on('input', '.position-input, .per-carton-qty-input', function() {
+        $(document).on('input', '.position-input, .per-carton-qty-input, .weight-per-piece-input', function() {
             clearTimeout(autoSaveTimer);
             var vendorId = $('#packingConfigForm').data('vendor-id');
             autoSaveTimer = setTimeout(function() {
@@ -460,7 +582,7 @@
             }, 5000);
         });
 
-        // Keyboard shortcuts - for ALL vendors
+        // Keyboard shortcuts - for ALL vendors including weights
         $(document).on('keydown', function(e) {
             // Ctrl+S to save
             if (e.ctrlKey && e.which == 83) {
@@ -472,11 +594,11 @@
 
             // Esc to clear focus
             if (e.which == 27) {
-                $('.position-input, .per-carton-qty-input').blur();
+                $('.position-input, .per-carton-qty-input, .weight-per-piece-input').blur();
             }
         });
 
-        // Add loading states for better UX - for ALL vendors
+        // Add loading states for better UX - for ALL vendors including weights
         $(document).on('focus', '.position-input, .per-carton-qty-input', function() {
             $(this).addClass('border-primary');
         });
@@ -497,6 +619,7 @@
                     // Optional: Add vendor-specific tooltips
                     $('.position-input').attr('title', 'Position for Vendor ' + vendorId);
                     $('.per-carton-qty-input').attr('title', 'Per Carton Quantity for Vendor ' + vendorId);
+                    $('.weight-per-piece-input').attr('title', 'Per Piece Weight (KG) for Vendor ' + vendorId);
                 }
             }, 200);
         });

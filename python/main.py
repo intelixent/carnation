@@ -588,136 +588,187 @@ def extract_jackjones_o(pdf_path):
                 except Exception as e:
                     print(f"Error checking page {page_idx+1} for article header: {e}")
             
-            # If found, extract article details (same logic as before)…
-            if article_header_page >= 0:
-                start_page = article_header_page
-                for page_idx in range(start_page, min(start_page + 2, len(pdf.pages))):
-                    if article_found:
-                        break
-                    try:
-                        page = pdf.pages[page_idx]
-                        print(f"Checking page {page_idx+1} for article content")
-                        page_text = page.extract_text()
-                        page_lines = page_text.split('\n')
-                        start_line = 0 if page_idx > article_header_page else article_header_line + 1
-                        for idx in range(start_line, len(page_lines)):
-                            line = page_lines[idx]
-                            article_match = re.match(r'^(\d{7})\s+(.+)', line)
-                            if article_match:
-                                print(f"Found article details at line {idx}")
-                                article_number = article_match.group(1)
-                                first_desc_line = article_match.group(2)
-                                price_match = re.search(r'\s+\d+\.\d+\s+\/\s+EA', first_desc_line)
-                                if price_match:
-                                    first_desc_line = first_desc_line[:price_match.start()]
-                                full_description = first_desc_line
-                                
-                                next_line_idx = idx + 1
-                                if next_line_idx < len(page_lines):
-                                    next_line = page_lines[next_line_idx].strip()
-                                    if not re.match(r'^\d{8,}', next_line) and not re.match(r'^\d+\.\d+\s+\/\s+EA', next_line):
-                                        second_desc_line = next_line
-                                        price_match = re.search(r'\s+\d+\.\d+\s+\/\s+EA', second_desc_line)
-                                        if price_match:
-                                            second_desc_line = second_desc_line[:price_match.start()]
-                                        full_description += " " + second_desc_line
+            # If found, extract article details
+                if article_header_page >= 0:
+                    start_page = article_header_page
+                    for page_idx in range(start_page, min(start_page + 2, len(pdf.pages))):
+                        if article_found:
+                            break
+                        try:
+                            page = pdf.pages[page_idx]
+                            print(f"Checking page {page_idx+1} for article content")
+                            page_text = page.extract_text()
+                            page_lines = page_text.split('\n')
+                            start_line = 0 if page_idx > article_header_page else article_header_line + 1
+                            for idx in range(start_line, len(page_lines)):
+                                line = page_lines[idx]
+                                article_match = re.match(r'^(\d{7})\s+(.+)', line)
+                                if article_match:
+                                    print(f"Found article details at line {idx}")
+                                    article_number = article_match.group(1)
+                                    first_desc_line = article_match.group(2)
+                                    
+                                    # Remove any pricing info from first line
+                                    first_desc_line = re.sub(r'\s+\d+[\d,]*\.\d+\s*/\s*EA.*$', '', first_desc_line)
+                                    first_desc_line = re.sub(r'\s+\d+[\d,]*\.\d+\s+(Nos|Pcs).*$', '', first_desc_line)
+                                    first_desc_line = re.sub(r'\s+\d+[\d,]*\.\d+\s*$', '', first_desc_line)
+                                    
+                                    full_description = first_desc_line.strip()
+                                    print(f"First description line (cleaned): '{full_description}'")
+                                    
+                                    # Check the next line for additional description content
+                                    next_line_idx = idx + 1
+                                    if next_line_idx < len(page_lines):
+                                        next_line = page_lines[next_line_idx].strip()
+                                        print(f"Next line content: '{next_line}'")
+                                        
+                                        # Check if next line is part of description (not customs code, not pricing)
+                                        if (next_line and 
+                                            not re.match(r'^\d{8,}$', next_line) and  # Not customs code
+                                            not re.match(r'^\d+\.\d+\s*/\s*EA', next_line) and  # Not pricing
+                                            not re.match(r'^\d+[\d,]*\.\d+\s+(Nos|Pcs)', next_line) and  # Not quantity
+                                            not re.match(r'^\d+[\d,]*\.\d+\s+(INR|USD|EUR)', next_line) and  # Not currency
+                                            not next_line.startswith('Polyester') and  # Not fabric composition
+                                            not '%' in next_line):  # Not fabric percentage
+                                            
+                                            # Clean the second line of any pricing info
+                                            second_desc_line = re.sub(r'\s+\d+[\d,]*\.\d+\s*/\s*EA.*$', '', next_line)
+                                            second_desc_line = re.sub(r'\s+\d+[\d,]*\.\d+\s+(Nos|Pcs).*$', '', second_desc_line)
+                                            second_desc_line = re.sub(r'\s+\d+[\d,]*\.\d+\s+(INR|USD|EUR).*$', '', second_desc_line)
+                                            second_desc_line = re.sub(r'\s+(INR|USD|EUR).*$', '', second_desc_line)
+                                            
+                                            second_desc_line = second_desc_line.strip()
+                                            
+                                            if second_desc_line:
+                                                full_description += " " + second_desc_line
+                                                print(f"Added second description line: '{second_desc_line}'")
+                                                next_line_idx += 1
+                                    
+                                    # Continue checking for more description lines if needed
+                                    while next_line_idx < len(page_lines):
+                                        check_line = page_lines[next_line_idx].strip()
+                                        
+                                        # Stop if we hit clear non-description content
+                                        if (not check_line or 
+                                            re.match(r'^\d{8,}$', check_line) or  # Customs code
+                                            re.match(r'^\d+\.\d+\s*/\s*EA', check_line) or  # Pricing
+                                            re.match(r'^\d+[\d,]*\.\d+', check_line) or  # Any number pattern
+                                            check_line.startswith('Polyester') or  # Fabric
+                                            '%' in check_line or  # Percentage
+                                            check_line.lower() in ['male', 'female', 'unisex', 'men', 'women']):  # Gender
+                                            break
+                                        
+                                        # If it looks like description continuation, add it
+                                        if len(check_line) > 2 and not check_line.isdigit():
+                                            # Clean any trailing pricing info
+                                            clean_line = re.sub(r'\s+\d+[\d,]*\.\d+.*$', '', check_line)
+                                            clean_line = re.sub(r'\s+(INR|USD|EUR).*$', '', clean_line)
+                                            clean_line = clean_line.strip()
+                                            
+                                            if clean_line:
+                                                full_description += " " + clean_line
+                                                print(f"Added additional description line: '{clean_line}'")
+                                        
                                         next_line_idx += 1
-                                
-                                article_info["ARTICLE"] = article_number
-                                article_info["Article description"] = full_description.strip()
-                                print(f"Extracted Article: {article_number} - {full_description}")
-                                
-                                # Customs code
-                                customs_code_idx = next_line_idx
-                                if customs_code_idx < len(page_lines):
-                                    customs_line = page_lines[customs_code_idx].strip()
-                                    if re.match(r'^\d{8,}$', customs_line):
-                                        article_info["Customs code"] = customs_line
-                                        print(f"Extracted Customs code: {article_info['Customs code']}")
-                                        customs_code_idx += 1
-                                    else:
-                                        for i2 in range(1, 3):
-                                            if customs_code_idx + i2 >= len(page_lines):
-                                                break
-                                            customs_line = page_lines[customs_code_idx + i2].strip()
-                                            if re.match(r'^\d{8,}$', customs_line):
-                                                article_info["Customs code"] = customs_line
-                                                print(f"Extracted Customs code: {article_info['Customs code']}")
-                                                customs_code_idx = customs_code_idx + i2 + 1
-                                                break
-                                
-                                # Fabric composition
-                                start_idx = customs_code_idx
-                                if start_idx < len(page_lines):
-                                    fabric_line = page_lines[start_idx].strip()
-                                    if "%" in fabric_line:
-                                        article_info["Fabric composition"] = fabric_line
-                                        print(f"Extracted Fabric composition: {article_info['Fabric composition']}")
-                                        start_idx += 1
-                                
-                                # Construction type
-                                construction_found = False
-                                while start_idx < len(page_lines):
-                                    const_line = page_lines[start_idx].strip()
-                                    if const_line:  # Only process non-empty lines
-                                        # Check if it's not a gender value (common gender values)
-                                        gender_keywords = ['male', 'female', 'unisex', 'men', 'women', 'man', 'woman', 'boy', 'girl', 'boys', 'girls', 'kids']
-                                        if const_line.lower() not in gender_keywords:
-                                            article_info["Construction type"] = const_line
-                                            print(f"Extracted Construction type: {article_info['Construction type']}")
-                                            start_idx += 1
-                                            construction_found = True
-                                            break
+                                    
+                                    article_info["ARTICLE"] = article_number
+                                    article_info["Article description"] = full_description.strip()
+                                    print(f"Final extracted Article: {article_number} - {full_description.strip()}")
+                                    
+                                    # Find the starting point for customs code extraction
+                                    customs_start_idx = next_line_idx
+                                    
+                                    # Extract customs code
+                                    if customs_start_idx < len(page_lines):
+                                        customs_line = page_lines[customs_start_idx].strip()
+                                        if re.match(r'^\d{8,}$', customs_line):
+                                            article_info["Customs code"] = customs_line
+                                            print(f"Extracted Customs code: {article_info['Customs code']}")
+                                            customs_start_idx += 1
                                         else:
-                                            # If it's a gender keyword, set construction type as "-"
-                                            article_info["Construction type"] = "-"
-                                            print(f"Extracted Construction type: {article_info['Construction type']} (gender keyword found)")
-                                            construction_found = True
-                                            break
-                                    start_idx += 1
-
-                                # If no construction type found at all, set as "-"
-                                if not construction_found:
-                                    article_info["Construction type"] = "-"
-                                    print(f"Extracted Construction type: {article_info['Construction type']} (not found)")
-                                
-                                # Gender
-                                if start_idx < len(page_lines):
-                                    gender_line = page_lines[start_idx].strip()
-                                    article_info["Gender"] = gender_line
-                                    print(f"Extracted Gender: {article_info['Gender']}")
-                                    start_idx += 1
-                                
-                                # Article group
-                                if start_idx < len(page_lines):
-                                    group_line = page_lines[start_idx].strip()
-                                    if group_line and (group_line.isupper() or '-' in group_line) and not re.match(r'^\d', group_line):
-                                        article_info["Article group"] = group_line
-                                        print(f"Extracted Article group: {article_info['Article group']}")
+                                            # Look in next few lines for customs code
+                                            for i2 in range(1, 4):
+                                                if customs_start_idx + i2 >= len(page_lines):
+                                                    break
+                                                customs_line = page_lines[customs_start_idx + i2].strip()
+                                                if re.match(r'^\d{8,}$', customs_line):
+                                                    article_info["Customs code"] = customs_line
+                                                    print(f"Extracted Customs code: {article_info['Customs code']}")
+                                                    customs_start_idx = customs_start_idx + i2 + 1
+                                                    break
+                                    
+                                    # Fabric composition
+                                    start_idx = customs_start_idx
+                                    if start_idx < len(page_lines):
+                                        fabric_line = page_lines[start_idx].strip()
+                                        if "%" in fabric_line:
+                                            article_info["Fabric composition"] = fabric_line
+                                            print(f"Extracted Fabric composition: {article_info['Fabric composition']}")
+                                            start_idx += 1
+                                    
+                                    # Construction type
+                                    construction_found = False
+                                    while start_idx < len(page_lines):
+                                        const_line = page_lines[start_idx].strip()
+                                        if const_line:  # Only process non-empty lines
+                                            # Check if it's not a gender value (common gender values)
+                                            gender_keywords = ['male', 'female', 'unisex', 'men', 'women', 'man', 'woman', 'boy', 'girl', 'boys', 'girls', 'kids']
+                                            if const_line.lower() not in gender_keywords:
+                                                article_info["Construction type"] = const_line
+                                                print(f"Extracted Construction type: {article_info['Construction type']}")
+                                                start_idx += 1
+                                                construction_found = True
+                                                break
+                                            else:
+                                                # If it's a gender keyword, set construction type as "-"
+                                                article_info["Construction type"] = "-"
+                                                print(f"Extracted Construction type: {article_info['Construction type']} (gender keyword found)")
+                                                construction_found = True
+                                                break
                                         start_idx += 1
-                                
-                                # Country of origin (default)
-                                article_info["Country of origin"] = "India"
-                                
-                                # Pricing info (attempt)
-                                try:
-                                    price_pattern = re.search(
-                                        r"(\d+\.\d+)\s*/\s*(\w+)\s+(\d+\.\d+)\s+(\w+/\w+)\s+([\d,]+\.\d+)\s+([A-Z]+)",
-                                        page_text
-                                    )
-                                    if price_pattern:
-                                        article_info["Price per unit"] = price_pattern.group(1) + " / " + price_pattern.group(2)
-                                        article_info["Total unit"] = price_pattern.group(3) + " " + price_pattern.group(4)
-                                        article_info["Net Value"] = price_pattern.group(5)
-                                        article_info["Currency"] = price_pattern.group(6)
-                                        print(f"Extracted price information: {price_pattern.group(0)}")
-                                except Exception as e:
-                                    print(f"Error extracting price information: {e}")
-                                
-                                article_found = True
-                                break
-                    except Exception as e:
-                        print(f"Error processing page {page_idx+1} for article info: {e}")
+
+                                    # If no construction type found at all, set as "-"
+                                    if not construction_found:
+                                        article_info["Construction type"] = "-"
+                                        print(f"Extracted Construction type: {article_info['Construction type']} (not found)")
+                                    
+                                    # Gender
+                                    if start_idx < len(page_lines):
+                                        gender_line = page_lines[start_idx].strip()
+                                        article_info["Gender"] = gender_line
+                                        print(f"Extracted Gender: {article_info['Gender']}")
+                                        start_idx += 1
+                                    
+                                    # Article group
+                                    if start_idx < len(page_lines):
+                                        group_line = page_lines[start_idx].strip()
+                                        if group_line and (group_line.isupper() or '-' in group_line) and not re.match(r'^\d', group_line):
+                                            article_info["Article group"] = group_line
+                                            print(f"Extracted Article group: {article_info['Article group']}")
+                                            start_idx += 1
+                                    
+                                    # Country of origin (default)
+                                    article_info["Country of origin"] = "India"
+                                    
+                                    # Pricing info (attempt)
+                                    try:
+                                        price_pattern = re.search(
+                                            r"(\d+\.\d+)\s*/\s*(\w+)\s+(\d+\.\d+)\s+(\w+/\w+)\s+([\d,]+\.\d+)\s+([A-Z]+)",
+                                            page_text
+                                        )
+                                        if price_pattern:
+                                            article_info["Price per unit"] = price_pattern.group(1) + " / " + price_pattern.group(2)
+                                            article_info["Total unit"] = price_pattern.group(3) + " " + price_pattern.group(4)
+                                            article_info["Net Value"] = price_pattern.group(5)
+                                            article_info["Currency"] = price_pattern.group(6)
+                                            print(f"Extracted price information: {price_pattern.group(0)}")
+                                    except Exception as e:
+                                        print(f"Error extracting price information: {e}")
+                                    
+                                    article_found = True
+                                    break
+                        except Exception as e:
+                            print(f"Error processing page {page_idx+1} for article info: {e}")
             
             if not article_found:
                 print("Warning: No article information found")
