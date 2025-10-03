@@ -25,6 +25,7 @@ class InvoiceMaster extends Model
         'transporter_details',
         'grn_details',
         'vendor_id',
+        'invoice_status_id',
         'created_at',
         'created_by',
         'status',
@@ -38,5 +39,10 @@ class InvoiceMaster extends Model
     public function po()
     {
         return $this->belongsTo(PoMaster::class, 'po_id');
+    }
+
+    public function invoiceStatus()
+    {
+        return $this->belongsTo(InvoiceStatusMaster::class, 'invoice_status_id');
     }
 }

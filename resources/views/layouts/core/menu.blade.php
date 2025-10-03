@@ -116,6 +116,9 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                             <a href="{{ route('invoice_master') }}" class="side-menu__item {{ request()->routeIs('invoice_master') ? 'active' : '' }}">Master</a>
                         </li>
                         <li class="slide">
+                            <a href="{{ route('grn_entry') }}" class="side-menu__item {{ request()->routeIs('grn_entry') ? 'active' : '' }}">GRN Entry</a>
+                        </li>
+                        <li class="slide">
                             <a href="{{ route('e_invoice_master') }}" class="side-menu__item {{ request()->routeIs('e_invoice_master') ? 'active' : '' }}">E-invoice Download</a>
                         </li>
                     </ul>
@@ -131,6 +134,9 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                     <ul class="slide-menu child1">
                         <li class="slide">
                             <a href="{{ route('dispatch_status_report_master') }}" class="side-menu__item {{ request()->routeIs('dispatch_status_report_master') ? 'active' : '' }}">Dispatch Status</a>
+                        </li>
+                        <li class="slide">
+                            <a href="{{ route('daily_packing_report_master') }}" class="side-menu__item {{ request()->routeIs('daily_packing_report_master') ? 'active' : '' }}">Daily Packing</a>
                         </li>
                     </ul>
                 </li>

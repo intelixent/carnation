@@ -117,6 +117,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/genrate', [InvoiceController::class, 'genrate'])->name('invoice_genrate');
         Route::post('/check_duplicate_invoice', [InvoiceController::class, 'check_duplicate_invoice'])->name('check_duplicate_invoice');
         Route::get('/master', [InvoiceController::class, 'master'])->name('invoice_master');
+        Route::post('/table', [InvoiceController::class, 'table'])->name('invoice_table');
         Route::post('/get_complete_vendor_packing_list', [InvoiceController::class, 'get_complete_vendor_packing_list'])->name('get_complete_vendor_packing_list');
         Route::post('/get_packging_list', [InvoiceController::class, 'get_packging_list'])->name('get_packging_list');
         Route::post('/invoice_details_edit', [InvoiceController::class, 'invoice_details_edit'])->name('invoice_details_edit');
@@ -126,6 +127,9 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/e_invoicemaster', [EInvoiceController::class, 'e_invoice_master'])->name('e_invoice_master');
         Route::post('/grn_details_edit', [InvoiceController::class, 'grn_details_edit'])->name('grn_details_edit');
         Route::post('/grn_details_update', [InvoiceController::class, 'grn_details_update'])->name('grn_details_update');
+        Route::post('/bulk-status-update', [InvoiceController::class, 'bulkStatusUpdate'])->name('invoice_bulk_status_update');
+        Route::get('/grn_entry', [InvoiceController::class, 'grn_entry'])->name('grn_entry');
+        Route::post('/grn_entry_details_update', [InvoiceController::class, 'grn_entry_details_update'])->name('grn_entry_details_update');
     });
 
     Route::group(['prefix' => 'e_invoice'], function () {
@@ -140,6 +144,10 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/dispatch_status_report_edit', [ReportController::class, 'dispatch_status_report_edit'])->name('dispatch_status_report_edit');
         Route::post('/dispatch_status_report_update', [ReportController::class, 'dispatch_status_report_update'])->name('dispatch_status_report_update');
         Route::get('/dispatch_status_excel_download', [ReportController::class, 'dispatch_status_report_excel_download'])->name('dispatch_status_report_excel_download');
+        Route::get('/daily_packing', [ReportController::class, 'daily_packing_report_master'])->name('daily_packing_report_master');
+        Route::post('/daily_packing_table', [ReportController::class, 'daily_packing_report_table'])->name('daily_packing_report_table');
+        Route::post('daily-packing-report-summary-export', [ReportController::class, 'daily_packing_summary_export'])->name('daily_packing_summary_export');
+        Route::post('daily-packing-report-sizewise-export', [ReportController::class, 'daily_packing_sizewise_export'])->name('daily_packing_sizewise_export');
     });
 
     Route::group(['prefix' => 'settings'], function () {

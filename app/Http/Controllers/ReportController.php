@@ -11,6 +11,12 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Models\PackingListItem;
 use App\Models\InvoiceMaster;
 use App\Exports\DispatchExport;
+use App\Models\VendorMaster;
+use App\Models\PackingListConfigItem;
+use App\Models\PackingListMaster;
+use App\Models\PoMaster;
+use App\Exports\SummaryExport;
+use App\Exports\SizeWiseExport;
 
 class ReportController extends BaseController
 {
@@ -454,5 +460,293 @@ class ReportController extends BaseController
                 'message' => 'Error: ' . $e->getMessage()
             ]);
         }
+    }
+
+    public function daily_packing_report_master()
+    {
+        $page_data = [
+            'page_title' => "Report",
+            'page_main_title' => "Dispatch Status",
+            'isSuperAdmin' => $this->isSuperAdmin,
+            'vendors' => VendorMaster::where('status', 0)->get(),
+        ];
+
+        return view('report.daily_packing_master', $page_data);
+    }
+
+    public function daily_packing_report_table(Request $request)
+    {
+        $vendor_id = $request->vendor_id;
+        $date = $request->date;
+
+        // Get vendor name
+        $vendor = VendorMaster::find($vendor_id);
+        $vendor_name = $vendor ? $vendor->name : 'All Vendors';
+
+        // Get all PO IDs that have packing items created on the selected date for the vendor
+        $poIds = PackingListItem::whereDate('created_at', $date)
+            ->where('vendor_id', $vendor_id)
+            ->distinct()
+            ->pluck('packing_list_id')
+            ->toArray();
+
+        // Get packing list masters for these IDs
+        $packingListIds = PackingListMaster::whereIn('id', $poIds)
+            ->where('vendor_id', $vendor_id)
+            ->pluck('po_id')
+            ->unique()
+            ->toArray();
+
+        // Get summary data
+        $summaryData = [];
+        foreach ($packingListIds as $po_id) {
+            $po = PoMaster::find($po_id);
+            if (!$po) continue;
+
+            // Get total PO qty from config items
+            $poQty = PackingListConfigItem::where('po_id', $po_id)
+                ->where('vendor_id', $vendor_id)
+                ->sum('po_qty');
+
+            // Get total ORS qty (pack_qty) from config items
+            $orsQty = PackingListConfigItem::where('po_id', $po_id)
+                ->where('vendor_id', $vendor_id)
+                ->sum('pack_qty');
+
+            // Get packed qty from packing list items created on the date
+            $packedQty = PackingListItem::whereDate('created_at', $date)
+                ->where('vendor_id', $vendor_id)
+                ->whereHas('packingList', function ($q) use ($po_id) {
+                    $q->where('po_id', $po_id);
+                })
+                ->sum('quantity');
+
+            // Calculate yet to pack
+            $yetToPack = $orsQty - $packedQty;
+
+            $summaryData[] = [
+                'vendor' => $po->vendor->name,
+                'packing_table_no' => 1,
+                'job_no' => $po->po_job_num,
+                'po_qty' => $poQty,
+                'ors_qty' => $orsQty,
+                'packed' => $packedQty,
+                'yet_to_pack' => $yetToPack,
+                'po_id' => $po_id
+            ];
+        }
+
+        // Get size-wise data
+        $sizeWiseData = [];
+        foreach ($packingListIds as $po_id) {
+            $po = PoMaster::find($po_id);
+            if (!$po) continue;
+
+            // Get all unique colors for this PO
+            $colors = PackingListConfigItem::where('po_id', $po_id)
+                ->where('vendor_id', $vendor_id)
+                ->distinct()
+                ->pluck('color')
+                ->toArray();
+
+            foreach ($colors as $color) {
+                // Get total PO qty for this color
+                $poQty = PackingListConfigItem::where('po_id', $po_id)
+                    ->where('vendor_id', $vendor_id)
+                    ->where('color', $color)
+                    ->sum('po_qty');
+
+                // Get total ORS qty for this color
+                $orsQty = PackingListConfigItem::where('po_id', $po_id)
+                    ->where('vendor_id', $vendor_id)
+                    ->where('color', $color)
+                    ->sum('pack_qty');
+
+                // Get size-wise packed quantities for this color
+                $sizeWisePacked = PackingListItem::whereDate('created_at', $date)
+                    ->where('vendor_id', $vendor_id)
+                    ->where('color', $color)
+                    ->whereHas('packingList', function ($q) use ($po_id) {
+                        $q->where('po_id', $po_id);
+                    })
+                    ->selectRaw('size, SUM(quantity) as qty')
+                    ->groupBy('size')
+                    ->pluck('qty', 'size')
+                    ->toArray();
+
+                // Calculate total packed for this color
+                $totalPacked = array_sum($sizeWisePacked);
+
+                // Calculate yet to pack
+                $yetToPack = $orsQty - $totalPacked;
+
+                $sizeWiseData[] = [
+                    'vendor' => $po->vendor->name,
+                    'packing_table_no' => 1,
+                    'job_no' => $po->po_job_num,
+                    'color' => $color,
+                    'po_qty' => $poQty,
+                    'ors_qty' => $orsQty,
+                    'size_wise_packed' => $sizeWisePacked,
+                    'packed' => $totalPacked,
+                    'yet_to_pack' => $yetToPack,
+                    'po_id' => $po_id
+                ];
+            }
+        }
+
+        // Get all unique sizes for table headers
+        $allSizes = PackingListConfigItem::whereIn('po_id', $packingListIds)
+            ->where('vendor_id', $vendor_id)
+            ->distinct()
+            ->pluck('size')
+            ->toArray();
+
+        return view('report.daily_packing_table', compact('summaryData', 'sizeWiseData', 'allSizes', 'date', 'vendor_name', 'vendor_id'));
+    }
+
+    public function daily_packing_summary_export(Request $request)
+    {
+        $vendor_id = $request->vendor_id;
+        $date = $request->date;
+
+        // Get vendor name
+        $vendor = VendorMaster::find($vendor_id);
+        $vendor_name = $vendor ? $vendor->name : 'All Vendors';
+
+        // Get the same data as in the table method
+        $poIds = PackingListItem::whereDate('created_at', $date)
+            ->where('vendor_id', $vendor_id)
+            ->distinct()
+            ->pluck('packing_list_id')
+            ->toArray();
+
+        $packingListIds = PackingListMaster::whereIn('id', $poIds)
+            ->where('vendor_id', $vendor_id)
+            ->pluck('po_id')
+            ->unique()
+            ->toArray();
+
+        $summaryData = [];
+        foreach ($packingListIds as $po_id) {
+            $po = PoMaster::find($po_id);
+            if (!$po) continue;
+
+            $poQty = PackingListConfigItem::where('po_id', $po_id)
+                ->where('vendor_id', $vendor_id)
+                ->sum('po_qty');
+
+            $orsQty = PackingListConfigItem::where('po_id', $po_id)
+                ->where('vendor_id', $vendor_id)
+                ->sum('pack_qty');
+
+            $packedQty = PackingListItem::whereDate('created_at', $date)
+                ->where('vendor_id', $vendor_id)
+                ->whereHas('packingList', function ($q) use ($po_id) {
+                    $q->where('po_id', $po_id);
+                })
+                ->sum('quantity');
+
+            $yetToPack = $orsQty - $packedQty;
+
+            $summaryData[] = [
+                'vendor' => $po->vendor->name,
+                'packing_table_no' => 1,
+                'job_no' => $po->po_job_num,
+                'po_qty' => $poQty,
+                'ors_qty' => $orsQty,
+                'packed' => $packedQty,
+                'yet_to_pack' => $yetToPack,
+                'po_id' => $po_id
+            ];
+        }
+
+        $filename = "Daily-Packing-Summary-{$vendor_name}-{$date}.xlsx";
+
+        return Excel::download(new SummaryExport($summaryData, $date, $vendor_name), $filename);
+    }
+
+    public function daily_packing_sizewise_export(Request $request)
+    {
+        $vendor_id = $request->vendor_id;
+        $date = $request->date;
+
+        // Get vendor name
+        $vendor = VendorMaster::find($vendor_id);
+        $vendor_name = $vendor ? $vendor->name : 'All Vendors';
+
+        // Get the same data as in the table method
+        $poIds = PackingListItem::whereDate('created_at', $date)
+            ->where('vendor_id', $vendor_id)
+            ->distinct()
+            ->pluck('packing_list_id')
+            ->toArray();
+
+        $packingListIds = PackingListMaster::whereIn('id', $poIds)
+            ->where('vendor_id', $vendor_id)
+            ->pluck('po_id')
+            ->unique()
+            ->toArray();
+
+        $sizeWiseData = [];
+        foreach ($packingListIds as $po_id) {
+            $po = PoMaster::find($po_id);
+            if (!$po) continue;
+
+            $colors = PackingListConfigItem::where('po_id', $po_id)
+                ->where('vendor_id', $vendor_id)
+                ->distinct()
+                ->pluck('color')
+                ->toArray();
+
+            foreach ($colors as $color) {
+                $poQty = PackingListConfigItem::where('po_id', $po_id)
+                    ->where('vendor_id', $vendor_id)
+                    ->where('color', $color)
+                    ->sum('po_qty');
+
+                $orsQty = PackingListConfigItem::where('po_id', $po_id)
+                    ->where('vendor_id', $vendor_id)
+                    ->where('color', $color)
+                    ->sum('pack_qty');
+
+                $sizeWisePacked = PackingListItem::whereDate('created_at', $date)
+                    ->where('vendor_id', $vendor_id)
+                    ->where('color', $color)
+                    ->whereHas('packingList', function ($q) use ($po_id) {
+                        $q->where('po_id', $po_id);
+                    })
+                    ->selectRaw('size, SUM(quantity) as qty')
+                    ->groupBy('size')
+                    ->pluck('qty', 'size')
+                    ->toArray();
+
+                $totalPacked = array_sum($sizeWisePacked);
+                $yetToPack = $orsQty - $totalPacked;
+
+                $sizeWiseData[] = [
+                    'vendor' => $po->vendor->name,
+                    'packing_table_no' => 1,
+                    'job_no' => $po->po_job_num,
+                    'color' => $color,
+                    'po_qty' => $poQty,
+                    'ors_qty' => $orsQty,
+                    'size_wise_packed' => $sizeWisePacked,
+                    'packed' => $totalPacked,
+                    'yet_to_pack' => $yetToPack,
+                    'po_id' => $po_id
+                ];
+            }
+        }
+
+        $allSizes = PackingListConfigItem::whereIn('po_id', $packingListIds)
+            ->where('vendor_id', $vendor_id)
+            ->distinct()
+            ->pluck('size')
+            ->toArray();
+
+        $filename = "Daily-Packing-SizeWise-{$vendor_name}-{$date}.xlsx";
+
+        return Excel::download(new SizeWiseExport($sizeWiseData, $allSizes, $date, $vendor_name), $filename);
     }
 }
