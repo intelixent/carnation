@@ -144,6 +144,10 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/dispatch_status_report_edit', [ReportController::class, 'dispatch_status_report_edit'])->name('dispatch_status_report_edit');
         Route::post('/dispatch_status_report_update', [ReportController::class, 'dispatch_status_report_update'])->name('dispatch_status_report_update');
         Route::get('/dispatch_status_excel_download', [ReportController::class, 'dispatch_status_report_excel_download'])->name('dispatch_status_report_excel_download');
+        Route::get('/daily_packing', [ReportController::class, 'daily_packing_report_master'])->name('daily_packing_report_master');
+        Route::post('/daily_packing_table', [ReportController::class, 'daily_packing_report_table'])->name('daily_packing_report_table');
+        Route::post('daily-packing-report-summary-export', [ReportController::class, 'daily_packing_summary_export'])->name('daily_packing_summary_export');
+        Route::post('daily-packing-report-sizewise-export', [ReportController::class, 'daily_packing_sizewise_export'])->name('daily_packing_sizewise_export');
     });
 
     Route::group(['prefix' => 'settings'], function () {
