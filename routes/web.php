@@ -111,6 +111,9 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/auto_items', [AutoPackingListController::class, 'get_auto_packing_list_items'])->name('auto_packing_list_items');
         Route::get('auto-packing-list/print/{po_id}/{color}', [AutoPackingListController::class, 'print'])->name('auto_packing_list_print');
         Route::post('/update_packing_list_po_num', [PackingListController::class, 'updatePackingListPoNumber'])->name('update_packing_list_po_num');
+        Route::get('/get-po-styles', [PackingListController::class, 'get_po_styles'])->name('get_po_styles');
+        Route::get('/get-style-colors', [PackingListController::class, 'get_style_colors'])->name('get_style_colors');
+        Route::post('/save-lp-number', [PackingListController::class, 'saveLpNumber'])->name('packing_list_store_lp_number');
     });
 
     Route::group(['prefix' => 'invoice'], function () {
@@ -130,6 +133,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/bulk-status-update', [InvoiceController::class, 'bulkStatusUpdate'])->name('invoice_bulk_status_update');
         Route::get('/grn_entry', [InvoiceController::class, 'grn_entry'])->name('grn_entry');
         Route::post('/grn_entry_details_update', [InvoiceController::class, 'grn_entry_details_update'])->name('grn_entry_details_update');
+        Route::post('/update-da-number', [InvoiceController::class, 'updateDaNumber'])->name('invoice_update_da_number');
     });
 
     Route::group(['prefix' => 'e_invoice'], function () {

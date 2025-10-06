@@ -248,6 +248,8 @@
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 @if($vendor->id == 3 && !empty($invoice['customer_po_no']))
                 <strong>Customer PO No:</strong> {{ $invoice['customer_po_no'] }}
+                @elseif($vendor->id == 7 && !empty($invoice['da_no']))
+                <strong>DA No:</strong> {{ $invoice['da_no'] }}
                 @else
                 <strong></strong>
                 @endif

@@ -506,6 +506,7 @@ class InvoiceController extends BaseController
         $invoiceData = [
             'ref_no' => $invoice->ref_no,
             'inv_date' => $invoice->inv_date,
+            'da_no' => $invoice->da_no,
             'po_num' => $po_details->po_num,
             'customer_po_no' => ($vendor->id === 3 && isset($articleInfo['customer_po_no']))
                 ? $articleInfo['customer_po_no']
@@ -604,23 +605,31 @@ class InvoiceController extends BaseController
                 $transportStatus = $this->checkTransportCompletion($invoice);
                 $tooltipText = $transportStatus === 'transport-complete' ? 'Transport Details Complete' : 'Transport Details Incomplete';
 
+                // Check if vendor ID is 7 to show Update DA Number option
+                $vendorId = $invoice->po->vendor->id ?? 0;
+                $updateDaOption = '';
+                if ($vendorId == 7) {
+                    $updateDaOption = '<li><a class="dropdown-item update_da_number" data-id="' . $invoice->id . '" data-current-da="' . ($invoice->da_no ?? '') . '" href="javascript:void(0);">Update DA Number</a></li>';
+                }
+
                 return '<div class="text-center">
-                <div class="dropdown">
-                    <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        ' . $invoice->ref_no . '
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item view_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">View</a></li>
-                        <li><a class="dropdown-item update_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">Update Invoice Details</a></li>
-                        <li><a class="dropdown-item update_grn" data-id="' . $invoice->id . '" href="javascript:void(0);">Update GRN Details</a></li>
-                        <li><a class="dropdown-item" target="_blank" href="' . route('generateInvoice', ['id' => $invoice->id]) . '">Print</a></li>
-                        <li><a class="dropdown-item delete_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">Delete</a></li>
-                    </ul>
-                </div>
-                <div class="progress-container">
-                    <div class="progress-circle ' . $transportStatus . '" title="' . $tooltipText . '"></div>
-                </div>
-            </div>';
+            <div class="dropdown">
+                <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    ' . $invoice->ref_no . '
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item view_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">View</a></li>
+                    <li><a class="dropdown-item update_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">Update Invoice Details</a></li>
+                    <li><a class="dropdown-item update_grn" data-id="' . $invoice->id . '" href="javascript:void(0);">Update GRN Details</a></li>
+                    ' . $updateDaOption . '
+                    <li><a class="dropdown-item" target="_blank" href="' . route('generateInvoice', ['id' => $invoice->id]) . '">Print</a></li>
+                    <li><a class="dropdown-item delete_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">Delete</a></li>
+                </ul>
+            </div>
+            <div class="progress-container">
+                <div class="progress-circle ' . $transportStatus . '" title="' . $tooltipText . '"></div>
+            </div>
+        </div>';
             })
             ->addColumn('vendor_name', function ($invoice) {
                 return $invoice->po->vendor->name ?? 'N/A';
@@ -1272,6 +1281,39 @@ class InvoiceController extends BaseController
                 'success' => false,
                 'message' => 'Error: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    public function updateDaNumber(Request $request)
+    {
+        try {
+            $request->validate([
+                'invoice_id' => 'required|exists:invoice_masters,id',
+                'da_number' => 'required|string|max:255'
+            ]);
+
+            $invoice = InvoiceMaster::find($request->invoice_id);
+
+            // Verify that this invoice belongs to vendor ID 7
+            if ($invoice->po->vendor_id != 7) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'DA Number can only be updated for the specified vendor.'
+                ]);
+            }
+
+            $invoice->da_no = $request->da_number;
+            $invoice->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'DA Number updated successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating DA Number: ' . $e->getMessage()
+            ]);
         }
     }
 }

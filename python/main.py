@@ -2167,8 +2167,9 @@ def extract_aditiya(pdf_path):
                             return parts
                     
                     elif material_prefix.startswith('LRSFCNSP') or re.match(r'^[A-Z]{8}', material_prefix):
-                        # Match: C14910 59 F Q1 (with or without digit)
-                        if re.match(r'^[A-Z]?\d+(\s+\d+)?\s+[A-Z]', line):
+                        # Match patterns like: C14910 59 F Q1 or C14910 F Q1 or C14910Q F Q1
+                        # Material suffix (letter+digits with optional Q), optional digit, size (letter), store code (letter+digits)
+                        if re.match(r'^[A-Z]\d{5}[A-Z]?(\s+\d+)?\s+[A-Z]\s+[A-Z]\d+', line):
                             parts = line.split()
                             print(f"Found LRSFCNSP continuation line 1: {line}")
                             print(f"Parts from line 1: {parts}")
@@ -2178,8 +2179,8 @@ def extract_aditiya(pdf_path):
                                 next_line = next_page_lines[line_idx + 1].strip()
                                 print(f"Checking next line: '{next_line}'")
                                 
-                                # Second line should have: 1 3009
-                                if next_line and re.match(r'^\d+', next_line):
+                                # Second line should have: 1 3009 (per and 4-digit store location suffix)
+                                if next_line and re.match(r'^\d+\s+\d{4}$', next_line):
                                     next_parts = next_line.split()
                                     print(f"Found continuation line 2: {next_line}")
                                     print(f"Parts from line 2: {next_parts}")
@@ -2187,7 +2188,7 @@ def extract_aditiya(pdf_path):
                                     print(f"Combined parts: {parts}")
                                     return parts
                             
-                            # If no second line found, return first line parts
+                            # If no valid second line found, return first line parts
                             return parts
                 
                 return []
