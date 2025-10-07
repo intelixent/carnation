@@ -2,24 +2,28 @@
 @section('pagetitle', $page_title)
 @section('content')
 @push('styles')
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <style>
     .table thead th {
         vertical-align: middle;
         font-size: 0.875rem;
         white-space: nowrap;
     }
+
     .table tbody td {
         vertical-align: middle;
         white-space: nowrap;
     }
+
     .table tfoot th {
         font-size: 0.875rem;
     }
+
     .text-end {
         text-align: right !important;
     }
 </style>
+@endpush
+
 @section('content')
 <div class="container-fluid">
     <div class="row mt-2">
@@ -27,25 +31,14 @@
             <div class="card">
                 <div class="card-header justify-content-between bg-primary">
                     <div class="card-title text-white">
-                        Daily Packing Report
+                        Daily Packing Report - All Vendors
                     </div>
                 </div>
                 <div class="card-body">
                     <form id="reportForm">
                         @csrf
                         <div class="row">
-                            <div class="col-md-5">
-                                <div class="form-group">
-                                    <label for="vendor_id" class="form-label">Vendor <span class="text-danger">*</span></label>
-                                    <select name="vendor_id" id="vendor_id" class="form-control select2" required>
-                                        <option value="">Select Vendor</option>
-                                        @foreach($vendors as $vendor)
-                                        <option value="{{ $vendor->id }}">{{ $vendor->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-5">
+                            <div class="col-md-4">
                                 <div class="form-group mt-2">
                                     <label for="date">Date <span class="text-danger">*</span></label>
                                     <input type="date" class="form-control" id="date" name="date" required>
@@ -72,7 +65,6 @@
 @endsection
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     $(document).ready(function() {
@@ -82,10 +74,6 @@
             }
         });
 
-        $('.select2').select2({
-            width: '100%'
-        });
-
         // Set max date to today
         $('#date').attr('max', new Date().toISOString().split('T')[0]);
 
@@ -93,16 +81,6 @@
             e.preventDefault();
 
             // Validate form
-            if (!$('#vendor_id').val()) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Validation Error',
-                    text: 'Please select a vendor',
-                    confirmButtonColor: '#3085d6'
-                });
-                return;
-            }
-
             if (!$('#date').val()) {
                 Swal.fire({
                     icon: 'warning',
@@ -116,7 +94,7 @@
             // Show loading alert
             Swal.fire({
                 title: 'Loading...',
-                text: 'Fetching data, please wait...',
+                text: 'Fetching data for all vendors, please wait...',
                 icon: 'info',
                 allowOutsideClick: false,
                 allowEscapeKey: false,
@@ -140,7 +118,7 @@
                     Swal.fire({
                         icon: 'success',
                         title: 'Success!',
-                        text: 'Report generated successfully',
+                        text: 'Report generated successfully for all vendors',
                         timer: 2000,
                         showConfirmButton: false,
                         toast: true,

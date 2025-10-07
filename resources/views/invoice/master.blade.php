@@ -84,42 +84,43 @@
         padding: 3px;
     }
 
-    /* DataTable styling - smaller padding and font size */
+    /* DataTable styling - increased size and better readability */
     #invoiceDataTable {
-        font-size: 12px;
+        font-size: 14px;
     }
 
     #invoiceDataTable th,
     #invoiceDataTable td {
-        padding: 8px 6px !important;
+        padding: 12px 10px !important;
         vertical-align: middle;
     }
 
     #invoiceDataTable thead th {
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 600;
         text-align: center;
     }
 
     #invoiceDataTable tbody td {
-        font-size: 11px;
+        font-size: 12px;
     }
 
-    /* Dropdown button styling for smaller table */
+    /* Dropdown button styling for larger table */
     .dropdown .btn {
-        font-size: 10px;
-        padding: 4px 8px;
+        font-size: 11px;
+        padding: 6px 10px;
     }
 
-    /* Status badge styling for smaller table */
+    /* Status badge styling for larger table */
     .status-badge {
-        font-size: 0.7em !important;
-        padding: 0.3em 0.5em !important;
+        font-size: 0.8em !important;
+        padding: 0.4em 0.6em !important;
     }
 
-    /* Checkbox styling */
+    /* Checkbox styling - larger size */
     .form-check-input {
-        transform: scale(0.8);
+        transform: scale(1.0);
+        margin-right: 8px;
     }
 
     /* Progress circle hover effect */
@@ -144,9 +145,10 @@
     </div> -->
     <!-- BreadCrumbs -->
 
-    <div class="modal fade" id="detail_modal"></div>
+    <div class="modal fade" id="details_modal"></div>
     <div class="modal fade" id="invoice_modal"></div>
     <div class="modal fade" id="grn_modal"></div>
+    <div class="modal fade" id="history_modal"></div>
 
     <div class="modal fade" id="bulkStatusModal" tabindex="-1">
         <div class="modal-dialog">
@@ -183,6 +185,31 @@
                         <i class="fa fa-check"></i> Update Status
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="daNumberModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header text-dark">
+                    <h5 class="modal-title">Update DA Number</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="daNumberForm">
+                    <div class="modal-body">
+                        <input type="hidden" id="da_invoice_id" name="invoice_id">
+                        <div class="mb-3">
+                            <label for="da_number" class="form-label">DA Number</label>
+                            <input type="text" class="form-control" id="da_number" name="da_number" required>
+                            <small class="form-text text-muted">Enter the DA number for this invoice</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-success">Update</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -291,7 +318,7 @@
         $('.select2').select2({
             width: '100%'
         });
-        
+
         var dataTable = null;
 
         // Initialize DataTable
@@ -1014,6 +1041,125 @@
             $('input[name="debit_note_tax_amount"]').val(taxAmount.toFixed(2));
             $('input[name="total_debit_note_value"]').val(totalValue.toFixed(2));
         }
+
+        // Handle Update DA Number click
+        $(document).on('click', '.update_da_number', function() {
+            var invoiceId = $(this).data('id');
+            var currentDa = $(this).data('current-da');
+
+            // Set values in modal
+            $('#da_invoice_id').val(invoiceId);
+            $('#da_number').val(currentDa || '');
+
+            // Show modal
+            $('#daNumberModal').modal('show');
+        });
+
+        // Handle DA Number form submission
+        $(document).on('submit', '#daNumberForm', function(e) {
+            e.preventDefault();
+
+            var formData = {
+                invoice_id: $('#da_invoice_id').val(),
+                da_number: $('#da_number').val().trim(),
+                _token: '{{ csrf_token() }}'
+            };
+
+            if (!formData.da_number) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Required Field',
+                    text: 'Please enter a DA number'
+                });
+                return;
+            }
+
+            Swal.fire({
+                title: 'Updating DA Number...',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            $.ajax({
+                url: "{{ route('invoice_update_da_number') }}", // You'll need to add this route
+                method: 'POST',
+                data: formData,
+                success: function(response) {
+                    Swal.close();
+                    if (response.success) {
+                        $('#daNumberModal').modal('hide');
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Success!',
+                            text: response.message,
+                            timer: 2000
+                        }).then(() => {
+                            // Reload the DataTable
+                            if (dataTable) {
+                                dataTable.ajax.reload();
+                            }
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error!',
+                            text: response.message || 'Failed to update DA number'
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    Swal.close();
+                    let errorMessage = 'An error occurred while updating DA number';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMessage = xhr.responseJSON.message;
+                    }
+
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error!',
+                        text: errorMessage
+                    });
+                }
+            });
+        });
+
+        // Reset form when modal is hidden
+        $('#daNumberModal').on('hidden.bs.modal', function() {
+            $('#daNumberForm')[0].reset();
+        });
+
+        $(document).on('click', '.view_invoice', function() {
+            var id = $(this).data('id');
+            $.ajax({
+                url: "{{route('invoice_details')}}",
+                method: 'POST',
+                data: {
+                    id: id,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    $("#details_modal").html(response);
+                    $("#details_modal").modal('show');
+                }
+            });
+        });
+
+        $(document).on('click', '.view_history', function() {
+            var id = $(this).data('id');
+            $.ajax({
+                url: "{{route('invoice_history_details')}}",
+                method: 'POST',
+                data: {
+                    id: id,
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    $("#history_modal").html(response);
+                    $("#history_modal").modal('show');
+                }
+            });
+        });
     });
 </script>
 @endpush

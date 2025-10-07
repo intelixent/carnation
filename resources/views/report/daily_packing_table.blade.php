@@ -10,7 +10,8 @@
         <!-- Summary Tab -->
         <div class="tab-pane show active text-muted" id="nav-summary" role="tabpanel">
             <!-- Export Button -->
-            <div class="mb-3 text-end">
+            <div class="mb-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Report for Date: {{ date('d-m-Y', strtotime($date)) }}</h5>
                 <button type="button" class="btn btn-success" id="exportSummaryBtn">
                     <i class="fa fa-file-excel me-1"></i> Export to Excel
                 </button>
@@ -44,7 +45,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center text-danger">No data found for the selected date and vendor</td>
+                            <td colspan="8" class="text-center text-danger">No packing data found for the selected date</td>
                         </tr>
                         @endforelse
                     </tbody>
@@ -66,7 +67,8 @@
         <!-- Size Wise Tab -->
         <div class="tab-pane text-muted" id="nav-size" role="tabpanel">
             <!-- Export Button -->
-            <div class="mb-3 text-end">
+            <div class="mb-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Size Wise Report for Date: {{ date('d-m-Y', strtotime($date)) }}</h5>
                 <button type="button" class="btn btn-success" id="exportSizeWiseBtn">
                     <i class="fa fa-file-excel me-1"></i> Export to Excel
                 </button>
@@ -108,7 +110,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="{{ 10 + count($allSizes) }}" class="text-center text-danger">No data found for the selected date and vendor</td>
+                            <td colspan="{{ 10 + count($allSizes) }}" class="text-center text-danger">No packing data found for the selected date</td>
                         </tr>
                         @endforelse
                     </tbody>
@@ -120,7 +122,8 @@
                             <th class="text-end">{{ number_format(array_sum(array_column($sizeWiseData, 'ors_qty'))) }}</th>
                             @foreach($allSizes as $size)
                             <th class="text-end">
-                                {{ number_format(array_sum(array_map(function($row) use ($size) {return $row['size_wise_packed'][$size] ?? 0;
+                                {{ number_format(array_sum(array_map(function($row) use ($size) {
+                                    return $row['size_wise_packed'][$size] ?? 0;
                                 }, $sizeWiseData))) }}
                             </th>
                             @endforeach
@@ -138,6 +141,5 @@
 <!-- Hidden form for exports -->
 <form id="exportForm" method="POST" style="display: none;">
     @csrf
-    <input type="hidden" name="vendor_id" id="export_vendor_id" value="{{ $vendor_id }}">
     <input type="hidden" name="date" id="export_date" value="{{ $date }}">
 </form>

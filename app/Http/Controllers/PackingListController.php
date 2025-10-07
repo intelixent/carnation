@@ -14,6 +14,7 @@ use App\Models\PackingListMaster;
 use App\Models\PackingListItem;
 use App\Models\PackingListConfigMaster;
 use App\Models\PackingListConfigItem;
+use App\Models\PackingListLpNumber;
 use Illuminate\Support\Facades\Http;
 use Barryvdh\DomPDF\Facade\Pdf;
 
@@ -282,6 +283,43 @@ class PackingListController extends BaseController
 
                     $keepIds[] = $configItem->id;
                 }
+            } elseif ($vendor_id == 2) {
+                // For Vendor ID 2: use PoItems and include country field
+                $items = PoItems::where('po_id', $po_id)->get();
+
+                foreach ($items as $item) {
+                    $color   = $item->color ?? $item->id_color ?? 'N/A';
+                    $size    = $item->size ?? 'N/A';
+                    $poQty   = $item->qty ?? 0;
+                    $packQty = ceil($poQty * (1 + $excess / 100));
+                    $country = $item->country ?? null; // Get country from PoItems
+
+                    // Get position, per_carton_qty, and weight_per_piece
+                    $position = $positions[$size] ?? 1;
+                    $perCartonQty = $perCartonQtys[$size] ?? 0;
+                    $weightPerPiece = $weightPerPieces[$size] ?? 0;
+
+                    $configItem = PackingListConfigItem::updateOrCreate([
+                        'config_id'  => $configMaster->id,
+                        'po_item_id' => $item->id,
+                    ], [
+                        'po_id'           => $po_id,
+                        'vendor_id'       => $vendor_id,
+                        'color'           => $color,
+                        'size'            => $size,
+                        'country'         => $country, // Save country for vendor ID 2
+                        'po_qty'          => $poQty,
+                        'pack_qty'        => $packQty,
+                        'position'        => $position,
+                        'per_carton_qty'  => $perCartonQty,
+                        'weight_per_piece' => $weightPerPiece,
+                        'status'          => 0,
+                        'created_by'      => auth()->user()->id,
+                        'created_at'      => now(),
+                    ]);
+
+                    $keepIds[] = $configItem->id;
+                }
             } else {
                 // For all other vendors (1, 3, 5, 6): use PoItems
                 $items = PoItems::where('po_id', $po_id)->get();
@@ -496,12 +534,73 @@ class PackingListController extends BaseController
         return response()->json($colors);
     }
 
+    public function get_po_styles(Request $request)
+    {
+        $poId = $request->input('po_id');
+
+        $styles = PoItems::where('po_id', $poId)
+            ->distinct()
+            ->pluck('article_number')
+            ->filter()
+            ->values();
+
+        return response()->json($styles);
+    }
+
+    public function get_style_colors(Request $request)
+    {
+        $poId = $request->input('po_id');
+        $articleNumber = $request->input('article_number');
+
+        $colors = PoItems::where('po_id', $poId)
+            ->where('article_number', $articleNumber)
+            ->distinct()
+            ->pluck('color')
+            ->filter()
+            ->values();
+
+        return response()->json($colors);
+    }
+
+    public function get_po_countries(Request $request)
+    {
+        $poId = $request->input('po_id');
+        $articleNumber = $request->input('article_number');
+
+        $countries = PoItems::where('po_id', $poId)
+            ->where('article_number', $articleNumber)
+            ->distinct()
+            ->pluck('country')
+            ->filter()
+            ->values();
+
+        return response()->json($countries);
+    }
+
+    public function get_country_colors(Request $request)
+    {
+        $poId = $request->input('po_id');
+        $articleNumber = $request->input('article_number');
+        $country = $request->input('country');
+
+        $colors = PoItems::where('po_id', $poId)
+            ->where('article_number', $articleNumber)
+            ->where('country', $country)
+            ->distinct()
+            ->pluck('color')
+            ->filter()
+            ->values();
+
+        return response()->json($colors);
+    }
+
     public function get_sizes_with_qty(Request $request)
     {
         $poId     = $request->input('po_id');
         $article  = $request->input('article_number');
         $color    = $request->input('color');
-        $location = $request->input('location'); // Add this
+        $location = $request->input('location');
+        $country  = $request->input('country'); // Add country parameter
 
         // Fetch the PO (to get vendor_id)
         $po = PoMaster::with('vendor')->find($poId);
@@ -512,7 +611,51 @@ class PackingListController extends BaseController
         $vendorId = $po->vendor_id;
         $sizes = [];
 
-        if ($vendorId == 4) {
+        if ($vendorId == 2) {
+            // Vendor 2 logic - get from PackingListConfigItem, group by size
+            $configItems = PackingListConfigItem::whereHas('config', function ($q) use ($poId) {
+                $q->where('po_id', $poId);
+            })
+                ->whereHas('poItem', function ($q) use ($article, $color, $country) {
+                    $q->where('article_number', $article)
+                        ->where('color', $color)
+                        ->where('country', $country);
+                })
+                ->with(['poItem', 'config'])
+                ->get();
+
+            // Group by size and sum pack_qty
+            $groupedSizes = $configItems->groupBy('size');
+
+            foreach ($groupedSizes as $size => $items) {
+                // Sum all pack_qty for this size
+                $maxQty = $items->sum('pack_qty');
+
+                // Calculate packed quantity for this size
+                $packedQty = PackingListItem::whereHas('packingList', function ($q) use ($poId) {
+                    $q->where('po_id', $poId);
+                })
+                    ->where('article_number', $article)
+                    ->where('color', $color)
+                    ->where('country', $country)
+                    ->where('size', $size)
+                    ->sum('quantity');
+
+                $remainingQty = $maxQty - $packedQty;
+                if ($remainingQty <= 0) {
+                    continue;
+                }
+
+                $sizes[] = [
+                    'size'           => $size,
+                    'max_qty'        => $maxQty,
+                    'packed_qty'     => $packedQty,
+                    'remaining_qty'  => $remainingQty,
+                    'config_item_id' => $items->first()->id,
+                    'po_item_id'     => $items->first()->po_item_id,
+                ];
+            }
+        } elseif ($vendorId == 4) {
             // Existing vendor 4 logic...
             $configItems = PackingListConfigItem::where('po_id', $poId)
                 ->where('vendor_id', 4)
@@ -544,7 +687,7 @@ class PackingListController extends BaseController
                 ];
             }
         } elseif ($vendorId == 7) {
-            // New vendor 7 logic - directly from po_items
+            // Vendor 7 logic - directly from po_items
             $poItems = PoItems::where('po_id', $poId)
                 ->where('color', $color)
                 ->where('location', $location)
@@ -619,12 +762,42 @@ class PackingListController extends BaseController
     {
         $poId = $request->input('po_id');
         $color = $request->input('color');
+        $location = $request->input('location'); // For vendor 7
+        $articleNumber = $request->input('article_number'); // For vendor 2
+        $country = $request->input('country'); // For vendor 2
 
-        // Get all packing lists for this PO and color
-        $packingLists = PackingListMaster::where('po_id', $poId)
-            ->where('color', $color)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        // Get the PO to check vendor
+        $po = PoMaster::find($poId);
+        if (!$po) {
+            return response()->json([
+                'packing_lists' => [],
+                'can_add_items' => false,
+                'error' => 'PO not found'
+            ], 404);
+        }
+
+        $vendorId = $po->vendor_id;
+
+        // Build query based on vendor type
+        $query = PackingListMaster::where('po_id', $poId)
+            ->where('color', $color);
+
+        // Filter by location for vendor 7
+        if ($vendorId == 7 && $location) {
+            $query->where('location', $location);
+        }
+
+        // Filter by article_number and country for vendor 2
+        if ($vendorId == 2 && $articleNumber) {
+            $query->whereHas('items', function ($q) use ($articleNumber, $country) {
+                $q->where('article_number', $articleNumber);
+                if ($country) {
+                    $q->where('country', $country);
+                }
+            });
+        }
+
+        $packingLists = $query->orderBy('created_at', 'desc')->get();
 
         if ($packingLists->isEmpty()) {
             return response()->json([
@@ -635,19 +808,28 @@ class PackingListController extends BaseController
 
         $allPackingListsData = [];
         foreach ($packingLists as $packingList) {
-            $items = PackingListItem::where('packing_list_id', $packingList->id)
-                ->get()
-                ->map(function ($item) {
-                    return [
-                        'id' => $item->id,
-                        'carton_name' => $item->carton_name ?? 'N/A',
-                        'article_number' => $item->article_number,
-                        'color' => $item->color,
-                        'size' => $item->size,
-                        'quantity' => $item->quantity,
-                        'carton_id' => $item->carton_id,
-                    ];
-                });
+            $itemsQuery = PackingListItem::where('packing_list_id', $packingList->id);
+
+            // Filter items by article_number and country for vendor 2
+            if ($vendorId == 2 && $articleNumber) {
+                $itemsQuery->where('article_number', $articleNumber);
+                if ($country) {
+                    $itemsQuery->where('country', $country);
+                }
+            }
+
+            $items = $itemsQuery->get()->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'carton_name' => $item->carton_name ?? 'N/A',
+                    'article_number' => $item->article_number,
+                    'color' => $item->color,
+                    'size' => $item->size,
+                    'quantity' => $item->quantity,
+                    'carton_id' => $item->carton_id,
+                    'country' => $item->country ?? 'N/A', // Include country in response
+                ];
+            });
 
             $allPackingListsData[] = [
                 'packing_list_id' => $packingList->id,
@@ -657,8 +839,8 @@ class PackingListController extends BaseController
             ];
         }
 
-        // Check if we can add more items for this specific color
-        $canAddItems = $this->checkIfCanAddItems($poId, $color);
+        // Check if we can add more items for this specific color/location/article/country
+        $canAddItems = $this->checkIfCanAddItems($poId, $color, $location, $articleNumber, $vendorId, $country);
 
         return response()->json([
             'packing_lists' => $allPackingListsData,
@@ -666,17 +848,56 @@ class PackingListController extends BaseController
         ]);
     }
 
-    private function checkIfCanAddItems($poId, $color)
+    private function checkIfCanAddItems($poId, $color, $location = null, $articleNumber = null, $vendorId = null, $country = null)
     {
-        // Get the PO to check vendor
-        $po = PoMaster::find($poId);
-        if (!$po) {
-            return false;
+        // Get the PO if vendor ID not provided
+        if (!$vendorId) {
+            $po = PoMaster::find($poId);
+            if (!$po) {
+                return false;
+            }
+            $vendorId = $po->vendor_id;
         }
 
-        $vendorId = $po->vendor_id;
+        if ($vendorId == 2) {
+            // For vendor 2, check po_items directly for the specific article, color, and country
+            if (!$articleNumber) {
+                return false;
+            }
 
-        if ($vendorId == 4) {
+            $query = PoItems::where('po_id', $poId)
+                ->where('color', $color)
+                ->where('article_number', $articleNumber);
+
+            if ($country) {
+                $query->where('country', $country);
+            }
+
+            $poItems = $query->get();
+
+            foreach ($poItems as $poItem) {
+                $maxQty = $poItem->qty;
+
+                $packedQtyQuery = PackingListItem::whereHas('packingList', function ($q) use ($poId) {
+                    $q->where('po_id', $poId);
+                })
+                    ->where('article_number', $articleNumber)
+                    ->where('color', $color)
+                    ->where('size', $poItem->size);
+
+                if ($country) {
+                    $packedQtyQuery->where('country', $country);
+                }
+
+                $packedQty = $packedQtyQuery->sum('quantity');
+
+                if ($packedQty < $maxQty) {
+                    return true; // Still have items to pack
+                }
+            }
+
+            return false;
+        } elseif ($vendorId == 4) {
             // For vendor 4, check config items directly for the specific color
             $configItems = PackingListConfigItem::where('po_id', $poId)
                 ->where('vendor_id', 4)
@@ -696,12 +917,40 @@ class PackingListController extends BaseController
                     return true; // Still have items to pack for this color
                 }
             }
+        } elseif ($vendorId == 7) {
+            // For vendor 7, check po_items directly for the specific location and color
+            if (!$location) {
+                return false;
+            }
+
+            $poItems = PoItems::where('po_id', $poId)
+                ->where('color', $color)
+                ->where('location', $location)
+                ->get();
+
+            foreach ($poItems as $poItem) {
+                $maxQty = $poItem->qty;
+
+                $packedQty = PackingListItem::whereHas('packingList', function ($q) use ($poId, $location) {
+                    $q->where('po_id', $poId)->where('location', $location);
+                })
+                    ->where('article_number', $poItem->article_number)
+                    ->where('color', $color)
+                    ->where('size', $poItem->size)
+                    ->sum('quantity');
+
+                if ($packedQty < $maxQty) {
+                    return true; // Still have items to pack
+                }
+            }
+
+            return false;
         } else {
             // For other vendors, check through config items for the specific color
             $configItems = PackingListConfigItem::whereHas('config', function ($q) use ($poId) {
                 $q->where('po_id', $poId);
             })
-                ->where('color', $color) // Filter by the specific color
+                ->where('color', $color)
                 ->with(['poItem'])
                 ->get();
 
@@ -721,7 +970,7 @@ class PackingListController extends BaseController
             }
         }
 
-        return false; // All items are fully packed for this color
+        return false; // All items are fully packed
     }
 
     public function edit($id)
@@ -781,10 +1030,12 @@ class PackingListController extends BaseController
 
     public function item_add(Request $request)
     {
-        $poId     = $request->input('id');
-        $vendorId = $request->input('vendor_id');
-        $color    = $request->input('color');
-        $location = $request->input('location');
+        $poId          = $request->input('id');
+        $vendorId      = $request->input('vendor_id');
+        $color         = $request->input('color');
+        $location      = $request->input('location');
+        $articleNumber = $request->input('article_number'); // For vendor 2
+        $country       = $request->input('country'); // For vendor 2
 
         $po = PoMaster::find($poId);
         if (! $po) {
@@ -805,7 +1056,23 @@ class PackingListController extends BaseController
 
         $carton_id = $carton->id;
 
-        if ($vendorId == 4) {
+        // Check if packing list master already exists for this combination
+        $existingPackingListQuery = PackingListMaster::where('po_id', $poId)
+            ->where('color', $color)
+            ->where('pack_status', 0);
+
+        if ($vendorId == 7) {
+            $existingPackingListQuery->where('location', $location);
+        }
+
+        $existingPackingList = $existingPackingListQuery->first();
+        $existingPackingTableNo = $existingPackingList ? $existingPackingList->packing_table_no : null;
+        $isFirstTime = is_null($existingPackingTableNo);
+
+        if ($vendorId == 2) {
+            // Vendor 2: Don't show article select, load sizes directly
+            $articles = collect([]); // Empty for vendor 2
+        } elseif ($vendorId == 4) {
             // Existing Benetton logic...
             $articles = PoItems::where('po_id', $poId)
                 ->where('color', $color)
@@ -813,7 +1080,7 @@ class PackingListController extends BaseController
                 ->unique()
                 ->values();
         } elseif ($vendorId == 7) {
-            // New vendor 7 logic
+            // Vendor 7 logic
             $articles = PoItems::where('po_id', $poId)
                 ->where('color', $color)
                 ->where('location', $location)
@@ -864,7 +1131,12 @@ class PackingListController extends BaseController
             'color',
             'location',
             'articles',
-            'job_num'
+            'job_num',
+            'vendorId',
+            'articleNumber',
+            'country',
+            'isFirstTime',
+            'existingPackingTableNo'
         ));
     }
 
@@ -878,6 +1150,8 @@ class PackingListController extends BaseController
         $location = $po_details['location'] ?? null;
         $net_weight = $po_details['net_weight'];
         $carton_id = $po_details['carton_id'];
+        $country = $po_details['country'] ?? null;
+        $packing_table_no = $po_details['packing_table_no'] ?? null; // Get packing table number
 
         // Fetch PO early so we know vendor_id
         $po = PoMaster::with('vendor')->find($po_id);
@@ -894,10 +1168,15 @@ class PackingListController extends BaseController
             'po_details.carton_id'      => 'required|exists:carton_master,id',
             'cartondata.*.article_number' => 'required|string',
             'po_details.color'          => 'required|string',
+            'po_details.packing_table_no' => 'required|in:1,2', // Validate packing table number
         ];
 
         if ($vendorId == 7) {
             $rules['po_details.location'] = 'required|string';
+        }
+
+        if ($vendorId == 2) {
+            $rules['po_details.country'] = 'required|string';
         }
 
         $rules['cartondata.*.sizes']     = 'required|array|min:1';
@@ -926,6 +1205,7 @@ class PackingListController extends BaseController
                 'po_no'      => $po->po_num,
                 'po_date'    => $po->po_date,
                 'color' => $selected_color,
+                'packing_table_no' => $packing_table_no, // Add packing table number
                 'created_by' => auth()->user()->id,
                 'created_at' => now(),
             ];
@@ -955,7 +1235,55 @@ class PackingListController extends BaseController
                     $poItemId = $size['po_item_id'] ?? null;
 
                     // Check remaining qty for this size/color based on vendor
-                    if ($vendorId == 4) {
+                    if ($vendorId == 2) {
+                        // Vendor 2 logic - get from PackingListConfigItem and sum by size
+                        $configItemsQuery = PackingListConfigItem::whereHas('config', function ($q) use ($po_id) {
+                            $q->where('po_id', $po_id);
+                        })
+                            ->whereHas('poItem', function ($q) use ($carton, $color, $country) {
+                                $q->where('article_number', $carton['article_number'])
+                                    ->where('color', $color);
+                                if ($country) {
+                                    $q->where('country', $country);
+                                }
+                            })
+                            ->where('size', $size['size']);
+
+                        $configItems = $configItemsQuery->get();
+
+                        if ($configItems->isEmpty()) {
+                            return response()->json(['error' => "Size {$size['size']} not found in configuration"], 400);
+                        }
+
+                        // Sum all pack_qty for this size
+                        $maxQty = $configItems->sum('pack_qty');
+
+                        // Calculate already packed quantity
+                        $alreadyPackedQuery = PackingListItem::whereHas('packingList', function ($q) use ($po_id) {
+                            $q->where('po_id', $po_id);
+                        })
+                            ->where('article_number', $carton['article_number'])
+                            ->where('color', $color)
+                            ->where('size', $size['size']);
+
+                        if ($country) {
+                            $alreadyPackedQuery->where('country', $country);
+                        }
+
+                        $alreadyPacked = $alreadyPackedQuery->sum('quantity');
+
+                        // Get po_item for creation
+                        $poItemQuery = PoItems::where('po_id', $po_id)
+                            ->where('article_number', $carton['article_number'])
+                            ->where('color', $color)
+                            ->where('size', $size['size']);
+
+                        if ($country) {
+                            $poItemQuery->where('country', $country);
+                        }
+
+                        $poItemForCreate = $poItemQuery->first();
+                    } elseif ($vendorId == 4) {
                         // Vendor 4 (Benetton) logic
                         $poSize = PackingListConfigItem::where('po_id', $po_id)
                             ->where('vendor_id', 4)
@@ -1032,12 +1360,12 @@ class PackingListController extends BaseController
 
                     if ($qty > $remaining) {
                         return response()->json([
-                            'error' => "Quantity for size {$size['size']} exceeds available limit. Available: {$remaining}"
+                            'error' => "Quantity for size {$size['size']} exceeds available limit. Available: {$remaining}, Requested: {$qty}"
                         ], 400);
                     }
 
                     // Create the PackingListItem
-                    PackingListItem::create([
+                    $itemData = [
                         'packing_list_id' => $packingList->id,
                         'vendor_id'       => $po->vendor_id,
                         'po_item_id'      => ($vendorId == 4) ? null : ($poItemForCreate->id ?? null),
@@ -1050,7 +1378,14 @@ class PackingListController extends BaseController
                         'net_weight'      => $net_weight,
                         'created_by'      => auth()->user()->id,
                         'created_at'      => $createdAt,
-                    ]);
+                    ];
+
+                    // Add country for vendor 2
+                    if ($vendorId == 2 && $country) {
+                        $itemData['country'] = $country;
+                    }
+
+                    PackingListItem::create($itemData);
                 }
             }
 
@@ -1934,7 +2269,17 @@ class PackingListController extends BaseController
                 return $aFirst - $bFirst;
             });
 
+            $lpNumbers = [];
+            if ($packingList->vendor_id == 2) {
+                $lpNumberRecords = PackingListLpNumber::where('packing_list_id', $packingList->id)->get();
+                foreach ($lpNumberRecords as $record) {
+                    $key = $record->article_number . '|' . $record->color . '|' . $record->carton_range;
+                    $lpNumbers[$key] = $record->lp_no;
+                }
+            }
+
             $tableData = [
+                'lpNumbers' => $lpNumbers,
                 'sizeOrder' => $sizeOrder,
                 'rows'      => $tableRows,
                 'totals'    => $totals
@@ -2938,6 +3283,46 @@ class PackingListController extends BaseController
         // return $pdf->stream('Packing_list_print.pdf');
 
         return view($viewTemplate, $viewData);
+    }
+
+    public function saveLpNumber(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'packing_list_id' => 'required|integer',
+                'po_id' => 'required|integer',
+                'article_number' => 'required|string',
+                'color' => 'required|string',
+                'carton_range' => 'required|string',
+                'lp_no' => 'nullable|string',
+            ]);
+
+            $lpNumber = PackingListLpNumber::updateOrCreate(
+                [
+                    'packing_list_id' => $validated['packing_list_id'],
+                    'po_id' => $validated['po_id'],
+                    'article_number' => $validated['article_number'],
+                    'color' => $validated['color'],
+                    'carton_range' => $validated['carton_range'],
+                ],
+                [
+                    'lp_no' => $validated['lp_no'],
+                    'created_by' => auth()->id() ?? null,
+                    'created_at' => now(),
+                ]
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'LP Number saved successfully',
+                'data' => $lpNumber
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function packing_list_complete(Request $request)

@@ -19,6 +19,7 @@ class PackingListItem extends Model
         'packing_list_id',
         'vendor_id',
         'po_item_id',
+        'country',
         'carton_id',
         'carton_name',
         'article_number',

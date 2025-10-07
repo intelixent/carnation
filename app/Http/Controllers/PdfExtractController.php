@@ -599,16 +599,43 @@ class PdfExtractController extends BaseController
     {
         $sizeColumns = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
+        // Group items by style and color, calculate totals
+        $styleColorGroups = [];
         foreach ($po_items as $index => $po_item) {
-            // Skip invalid or summary rows
             if (empty($po_item['Style No.']) || stripos($po_item['Style No.'], 'total') !== false) {
                 continue;
             }
 
-            // Process each size column
+            $key = $po_item['Style No.'] . '_' . ($po_item['Color'] ?? '');
+            $totalQty = array_sum(array_map(function ($size) use ($po_item) {
+                return (int) str_replace(',', '', $po_item[$size] ?? '0');
+            }, $sizeColumns));
+
+            $styleColorGroups[$key][] = ['index' => $index, 'total_qty' => $totalQty, 'data' => $po_item];
+        }
+
+        // Determine country for each item
+        $countryMap = [];
+        foreach ($styleColorGroups as $group) {
+            if (count($group) === 1) {
+                $countryMap[$group[0]['index']] = 'India';
+            } else {
+                // Sort by total quantity (highest first)
+                usort($group, fn($a, $b) => $b['total_qty'] <=> $a['total_qty']);
+                foreach ($group as $i => $item) {
+                    $countryMap[$item['index']] = $i === 0 ? 'India' : 'Other';
+                }
+            }
+        }
+
+        // Create PO items with country assignment
+        foreach ($po_items as $index => $po_item) {
+            if (empty($po_item['Style No.']) || stripos($po_item['Style No.'], 'total') !== false) {
+                continue;
+            }
+
             foreach ($sizeColumns as $size) {
                 $qty = (int) str_replace(',', '', $po_item[$size] ?? '0');
-
                 if ($qty <= 0) continue;
 
                 PoItems::create([
@@ -628,6 +655,7 @@ class PdfExtractController extends BaseController
                     'total_amount' => $this->cleanNumber($po_item['Amount (INR) - (c = a x b)'] ?? 0),
                     'fi_dates' => $po_item['FI dates'] ?? null,
                     'hsn_code' => $hsn_code,
+                    'country' => $countryMap[$index] ?? 'India',
                     'created_at' => now(),
                     'created_by' => auth()->user()->id,
                 ]);

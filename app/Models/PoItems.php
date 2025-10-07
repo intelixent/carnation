@@ -51,5 +51,6 @@ class PoItems extends Model
         'total_value',
         'due_date',
         'location',
+        'country',
     ];
 }
