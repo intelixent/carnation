@@ -20,6 +20,7 @@ class PackingListConfigItem extends Model
         'config_id',
         'vendor_id',
         'po_item_id',
+        'country',
         'color',
         'size',
         'po_qty',

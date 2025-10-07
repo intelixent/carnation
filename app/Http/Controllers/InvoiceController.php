@@ -17,6 +17,7 @@ use App\Models\InvoiceMaster;
 use App\Models\StateMaster;
 use App\Models\TransportMaster;
 use App\Models\BusinessSettingMaster;
+use App\Models\InvoiceHistoryMaster;
 use Yajra\DataTables\Facades\DataTables;
 
 class InvoiceController extends BaseController
@@ -124,7 +125,6 @@ class InvoiceController extends BaseController
         ]);
     }
 
-
     public function store_invoice(Request $request)
     {
         $data = $request->validate([
@@ -139,17 +139,24 @@ class InvoiceController extends BaseController
 
         try {
             $invoice = InvoiceMaster::create([
-                'ref_no'           => $data['invoice_no'],
-                'inv_date'         => $data['invoice_date'],
-                'gst'              => $data['gst'],
-                'bill_to_details'  => '',
-                'ship_to_details'  => '',
-                'po_id'            => $data['selected_po'],
-                'pack_ids'         => implode(',', $data['selectedpackids']),
-                'vendor_id'        => $data['selected_vendor_id'],
+                'ref_no'            => $data['invoice_no'],
+                'inv_date'          => $data['invoice_date'],
+                'gst'               => $data['gst'],
+                'bill_to_details'   => '',
+                'ship_to_details'   => '',
+                'po_id'             => $data['selected_po'],
+                'pack_ids'          => implode(',', $data['selectedpackids']),
+                'vendor_id'         => $data['selected_vendor_id'],
                 'invoice_status_id' => 1,
-                'created_by'       => auth()->id(),
-                'created_at'       => now(),
+                'created_by'        => auth()->id(),
+                'created_at'        => now(),
+            ]);
+
+            InvoiceHistoryMaster::create([
+                'invoice_id'        => $invoice->id,
+                'invoice_status_id' => 1,
+                'created_at'        => now(),
+                'created_by'        => auth()->id(),
             ]);
 
             PackingListMaster::whereIn('id', $data['selectedpackids'])
@@ -182,7 +189,6 @@ class InvoiceController extends BaseController
             ], 500);
         }
     }
-
 
     private function getInvoicePreviewData($invoiceId)
     {
@@ -619,6 +625,7 @@ class InvoiceController extends BaseController
                 </button>
                 <ul class="dropdown-menu">
                     <li><a class="dropdown-item view_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">View</a></li>
+                    <li><a class="dropdown-item view_history" data-id="' . $invoice->id . '" data-ref-no="' . $invoice->ref_no . '" href="javascript:void(0);">View History</a></li>
                     <li><a class="dropdown-item update_invoice" data-id="' . $invoice->id . '" href="javascript:void(0);">Update Invoice Details</a></li>
                     <li><a class="dropdown-item update_grn" data-id="' . $invoice->id . '" href="javascript:void(0);">Update GRN Details</a></li>
                     ' . $updateDaOption . '
@@ -716,10 +723,20 @@ class InvoiceController extends BaseController
             $statusId = $request->status_id;
             $selectedDate = $request->selected_date;
 
-            // Update invoice status first
+            // Update invoice status
             InvoiceMaster::whereIn('id', $ids)->update(['invoice_status_id' => $statusId]);
 
-            // If status = 3, also update reached_date in grn_details
+            // Log history for all invoices
+            foreach ($ids as $invoiceId) {
+                InvoiceHistoryMaster::create([
+                    'invoice_id'        => $invoiceId,
+                    'invoice_status_id' => $statusId,
+                    'created_at'        => now(),
+                    'created_by'        => auth()->id(),
+                ]);
+            }
+
+            // If status = 3, also update reached_date
             if ($statusId == 3 && $selectedDate) {
                 foreach ($ids as $invoiceId) {
                     $invoice = InvoiceMaster::find($invoiceId);
@@ -1265,6 +1282,13 @@ class InvoiceController extends BaseController
                 'invoice_status_id' => 4,
             ]);
 
+            InvoiceHistoryMaster::create([
+                'invoice_id'        => $invoice->id,
+                'invoice_status_id' => 4,
+                'created_at'        => now(),
+                'created_by'        => auth()->id(),
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'GRN Details updated successfully!',
@@ -1315,5 +1339,227 @@ class InvoiceController extends BaseController
                 'message' => 'Error updating DA Number: ' . $e->getMessage()
             ]);
         }
+    }
+
+    public function invoice_details(Request $request)
+    {
+        $invoice = InvoiceMaster::with([
+            'po.vendor.state',
+            'invoiceStatus'
+        ])->findOrFail($request->id);
+
+        $invoiceSummary = $this->getInvoiceSummaryData($invoice);
+
+        return view('invoice.details', compact('invoice', 'invoiceSummary'));
+    }
+
+    public function invoice_history_details(Request $request)
+    {
+        $invoice = InvoiceMaster::with([
+            'po.vendor.state',
+            'invoiceStatus'
+        ])->findOrFail($request->id);
+
+        // Get history
+        $history = InvoiceHistoryMaster::with(['invoiceStatus'])
+            ->where('invoice_id', $request->id)
+            ->where('status', 0)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return view('invoice.history', compact('invoice', 'history'));
+    }
+
+    private function getInvoiceSummaryData($invoice)
+    {
+        $po_details = $invoice->po;
+        $vendor = $po_details->vendor;
+
+        // Get business settings
+        $businessSettings = BusinessSettingMaster::whereIn('name', [
+            'nsme_register_no',
+            'nsme_register_date',
+            'nsme_type',
+            'nsme_sector',
+            'business_pan_no',
+            'business_gst_no'
+        ])->pluck('value', 'name')->toArray();
+
+        // Get packing details
+        $packIds = explode(',', $invoice->pack_ids);
+        $totalCartonsInInvoice = PackingListItem::whereIn('packing_list_id', $packIds)
+            ->distinct('carton_name')
+            ->count();
+
+        // Get invoice GST rate
+        $invoiceGstRate = floatval($invoice->gst);
+
+        // Group items by size (for simple summary)
+        $packedItems = PackingListItem::whereIn('packing_list_id', $packIds)
+            ->select([
+                'size',
+                DB::raw('GROUP_CONCAT(DISTINCT color ORDER BY color SEPARATOR ", ") AS colors'),
+                DB::raw('SUM(quantity) AS total_quantity'),
+                DB::raw('COUNT(DISTINCT carton_name) AS carton_counts'),
+            ])
+            ->groupBy('size')
+            ->get();
+
+        // Get detailed items (like in PDF)
+        $detailedItems = [];
+        $poUnitPrice = floatval($po_details->vcp);
+        $articleInfo = json_decode($po_details->article_info, true) ?: [];
+
+        foreach ($packedItems as $pi) {
+            $description = $style = $hsn_code = '';
+            $uom = 'PCS';
+            $unit_price = $poUnitPrice;
+
+            // Choose a representative color for lookups
+            $colors = explode(',', $pi->colors);
+            $firstColor = trim($colors[0]);
+
+            // Fetch PoItems by representative color & size
+            $itm = PoItems::where('po_id', $po_details->id)
+                ->where('size', $pi->size)
+                ->where('color', $firstColor)
+                ->first();
+
+            switch ($vendor->id) {
+                case 1:
+                case 5:
+                case 6:
+                    $description = $articleInfo['Article description'] ?? '';
+                    $style = $articleInfo['ARTICLE'] ?? '';
+                    if ($itm) {
+                        $hsn_code = $itm->hsn_code;
+                        $uom = $itm->uom;
+                    }
+                    break;
+
+                case 4:
+                    $poSize = PoSizes::where('po_id', $po_details->id)
+                        ->where('size', $pi->size)
+                        ->where('color', $firstColor)
+                        ->first();
+                    if ($poSize) {
+                        $unit_price = $poSize->unit_price ?: $unit_price;
+                        $hsn_code = $poSize->hsn_code ?? '';
+                        $uom = $poSize->uom ?? 'PCS';
+                    }
+                    if ($itm) {
+                        $unit_price = $unit_price ?: floatval($itm->unit_price);
+                        $hsn_code = $hsn_code ?: $itm->hsn_code;
+                        $uom = $uom ?: $itm->uom;
+                        $description = $itm->part_description ?? '';
+                        $style = $itm->article_number ?? '';
+                    }
+                    break;
+
+                case 2:
+                case 3:
+                    if ($itm) {
+                        $unit_price = floatval($itm->unit_price ?? 0);
+                        $hsn_code = $itm->hsn_code ?? '';
+                        $uom = $itm->uom ?? 'PCS';
+                        if ($vendor->id === 2) {
+                            $description = $itm->type;
+                            $style = $itm->article_number;
+                        } else {
+                            $description = $itm->style_description;
+                            $style = $itm->article_number;
+                        }
+                    }
+                    break;
+
+                default:
+                    $description = $articleInfo['Article description'] ?? '';
+                    $style = $articleInfo['ARTICLE'] ?? '';
+                    break;
+            }
+
+            // Fallback hsn_code
+            if (empty($hsn_code) && $itm) {
+                $hsn_code = $itm->hsn_code;
+                $uom = $itm->uom;
+            }
+
+            // Compute amounts
+            $amount = $pi->total_quantity * $unit_price;
+            $discountPct = $vendor->discount ?? 0;
+            $discountAmount = ($amount * $discountPct) / 100;
+            $taxableValue = $amount - $discountAmount;
+            $igstAmount = ($taxableValue * $invoiceGstRate) / 100;
+
+            $detailedItems[] = [
+                'description' => $description . ', ' . $pi->size,
+                'hsn_code' => $hsn_code,
+                'style' => $style,
+                'colors' => $pi->colors,
+                'size' => $pi->size,
+                'carton_counts' => $pi->carton_counts,
+                'unit' => $uom,
+                'qty' => $pi->total_quantity,
+                'rate' => $unit_price,
+                'amount' => $amount,
+                'discount' => $discountAmount,
+                'taxable_value' => $taxableValue,
+                'igst_rate' => $invoiceGstRate,
+                'igst_amount' => $igstAmount,
+            ];
+        }
+
+        // Calculate totals
+        $totalQty = $packedItems->sum('total_quantity');
+        $totalAmount = $totalQty * $poUnitPrice;
+        $discountPct = $vendor->discount ?? 0;
+        $totalDiscount = ($totalAmount * $discountPct) / 100;
+        $totalTaxable = $totalAmount - $totalDiscount;
+        $totalTaxAmount = ($totalTaxable * $invoiceGstRate) / 100;
+        $finalAmount = $totalTaxable + $totalTaxAmount;
+
+        // Get additional details
+        $billTo = json_decode($invoice->bill_to_details, true) ?: [];
+        $shipTo = json_decode($invoice->ship_to_details, true) ?: [];
+        $transpDet = json_decode($invoice->transporter_details, true) ?: [];
+
+        // Get state names
+        if (!empty($billTo['billed_state'])) {
+            $bs = StateMaster::find($billTo['billed_state']);
+            $billTo['billed_state_name'] = $bs->name ?? null;
+            $billTo['billed_state_code'] = $bs->code ?? null;
+        }
+        if (!empty($shipTo['shipped_state'])) {
+            $ss = StateMaster::find($shipTo['shipped_state']);
+            $shipTo['shipped_state_name'] = $ss->name ?? null;
+            $shipTo['shipped_state_code'] = $ss->code ?? null;
+        }
+        if (!empty($transpDet['transport_name'])) {
+            $tp = TransportMaster::find($transpDet['transport_name']);
+            $transpDet['transport_name_display'] = $tp->name ?? null;
+        }
+
+        return [
+            'ref_no' => $invoice->ref_no,
+            'inv_date' => $invoice->inv_date,
+            'da_no' => $invoice->da_no,
+            'po_num' => $po_details->po_num,
+            'vendor' => $vendor,
+            'total_qty' => $totalQty,
+            'total_cartons' => $totalCartonsInInvoice,
+            'total_amount' => $totalAmount,
+            'total_discount' => $totalDiscount,
+            'total_taxable' => $totalTaxable,
+            'total_tax_amount' => $totalTaxAmount,
+            'final_amount' => $finalAmount,
+            'gst_rate' => $invoiceGstRate,
+            'bill_to_details' => $billTo,
+            'ship_to_details' => $shipTo,
+            'transporter_details' => $transpDet,
+            'business_settings' => $businessSettings,
+            'packed_items' => $packedItems,
+            'detailed_items' => $detailedItems,
+            'article_info' => $articleInfo
+        ];
     }
 }

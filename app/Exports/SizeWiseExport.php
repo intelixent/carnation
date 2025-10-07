@@ -18,15 +18,13 @@ class SizeWiseExport implements FromCollection, WithHeadings, WithStyles, WithTi
     protected $sizeWiseData;
     protected $allSizes;
     protected $date;
-    protected $vendor;
     protected $rowIndex = 0;
 
-    public function __construct($sizeWiseData, $allSizes, $date, $vendor)
+    public function __construct($sizeWiseData, $allSizes, $date)
     {
         $this->sizeWiseData = $sizeWiseData;
         $this->allSizes = $allSizes;
         $this->date = $date;
-        $this->vendor = $vendor;
     }
 
     public function collection()
@@ -48,7 +46,7 @@ class SizeWiseExport implements FromCollection, WithHeadings, WithStyles, WithTi
 
             // Add size totals
             foreach ($this->allSizes as $size) {
-                $totalRow['size_wise_packed'][$size] = array_sum(array_map(function($row) use ($size) {
+                $totalRow['size_wise_packed'][$size] = array_sum(array_map(function ($row) use ($size) {
                     return $row['size_wise_packed'][$size] ?? 0;
                 }, $this->sizeWiseData));
             }
@@ -68,6 +66,14 @@ class SizeWiseExport implements FromCollection, WithHeadings, WithStyles, WithTi
         $v = $value ?? 0;
         $int = (int)$v;
         return $int === 0 ? '0' : $int;
+    }
+
+    // Helper to format size data - show "-" for empty sizes instead of 0
+    protected function formatSizeForExport($value)
+    {
+        $v = $value ?? 0;
+        $int = (int)$v;
+        return $int === 0 ? '-' : $int;
     }
 
     public function map($row): array
@@ -106,9 +112,9 @@ class SizeWiseExport implements FromCollection, WithHeadings, WithStyles, WithTi
             $this->formatNumberForExport($row['ors_qty'] ?? 0),
         ];
 
-        // Add size columns
+        // Add size columns - show "-" for vendors that don't have certain sizes
         foreach ($this->allSizes as $size) {
-            $mapped[] = $this->formatNumberForExport($row['size_wise_packed'][$size] ?? 0);
+            $mapped[] = $this->formatSizeForExport($row['size_wise_packed'][$size] ?? 0);
         }
 
         $mapped[] = $this->formatNumberForExport($row['packed'] ?? 0);
@@ -130,8 +136,8 @@ class SizeWiseExport implements FromCollection, WithHeadings, WithStyles, WithTi
         $headers[] = 'Yet to Pack';
 
         return [
-            ['Daily Packing Report - Size Wise'],
-            ['Date: ' . $this->date . ' | Vendor: ' . $this->vendor],
+            ['Daily Packing Report - Size Wise (All Vendors)'],
+            ['Date: ' . $this->date],
             [],
             $headers
         ];
@@ -164,7 +170,7 @@ class SizeWiseExport implements FromCollection, WithHeadings, WithStyles, WithTi
             ]
         ]);
 
-        // Date and vendor info styling
+        // Date info styling
         $sheet->getStyle('A2')->applyFromArray([
             'font' => [
                 'bold' => true,
@@ -205,14 +211,27 @@ class SizeWiseExport implements FromCollection, WithHeadings, WithStyles, WithTi
             ]
         ]);
 
-        // Use a custom number format that explicitly specifies the zero-format.
-        // Custom format sections: positive;negative;zero
-        $sheet->getStyle("F5:{$lastColumn}{$lastRow}")->getNumberFormat()
+        // Custom number format for numeric columns (excluding size columns where we want "-" to show as text)
+        $sheet->getStyle("F5:G{$lastRow}")->getNumberFormat()
             ->setFormatCode('0; -0; 0');
 
-        // Right align number columns
+        // Format packed and yet to pack columns (last 2 columns)
+        $packedColumnStart = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnCount - 1);
+        $yetToPackColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnCount);
+        $sheet->getStyle("{$packedColumnStart}5:{$yetToPackColumn}{$lastRow}")->getNumberFormat()
+            ->setFormatCode('0; -0; 0');
+
+        // Right align number columns (PO Qty, ORS Qty, sizes, Packed, Yet to Pack)
         $sheet->getStyle("F5:{$lastColumn}{$lastRow}")->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+        // Center align size columns to better display "-" for missing sizes
+        if (count($this->allSizes) > 0) {
+            $firstSizeColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(8); // H
+            $lastSizeColumn = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(7 + count($this->allSizes));
+            $sheet->getStyle("{$firstSizeColumn}5:{$lastSizeColumn}{$lastRow}")->getAlignment()
+                ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        }
 
         // Total row styling
         if ($dataCount > 0) {
@@ -232,6 +251,6 @@ class SizeWiseExport implements FromCollection, WithHeadings, WithStyles, WithTi
 
     public function title(): string
     {
-        return 'Size Wise';
+        return 'Size Wise All Vendors';
     }
 }

@@ -17,14 +17,12 @@ class SummaryExport implements FromCollection, WithHeadings, WithStyles, WithTit
 {
     protected $summaryData;
     protected $date;
-    protected $vendor;
     protected $rowIndex = 0;
 
-    public function __construct($summaryData, $date, $vendor)
+    public function __construct($summaryData, $date)
     {
         $this->summaryData = $summaryData;
         $this->date = $date;
-        $this->vendor = $vendor;
     }
 
     public function collection()
@@ -88,8 +86,8 @@ class SummaryExport implements FromCollection, WithHeadings, WithStyles, WithTit
     public function headings(): array
     {
         return [
-            ['Daily Packing Report - Summary'],
-            ['Date: ' . $this->date . ' | Vendor: ' . $this->vendor],
+            ['Daily Packing Report - Summary (All Vendors)'],
+            ['Date: ' . $this->date],
             [],
             ['S.No', 'Vendor', 'Packing Table No', 'Job No', 'PO Qty', 'ORS Qty', 'Packed', 'Yet to Pack']
         ];
@@ -118,7 +116,7 @@ class SummaryExport implements FromCollection, WithHeadings, WithStyles, WithTit
             ]
         ]);
 
-        // Date and vendor info styling
+        // Date info styling
         $sheet->getStyle('A2')->applyFromArray([
             'font' => [
                 'bold' => true,
@@ -185,6 +183,6 @@ class SummaryExport implements FromCollection, WithHeadings, WithStyles, WithTit
 
     public function title(): string
     {
-        return 'Summary';
+        return 'Summary All Vendors';
     }
 }

@@ -32,7 +32,7 @@
                 <div class="card-body">
                     @csrf
                     <div class="row">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div class="form-group">
                                 <label for="po_search">Search JobNo/PO No/Vendor</label>
                                 <select class="form-control select2-po-search"
@@ -44,7 +44,29 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="col-md-4" id="locationSelectDiv" style="display: none;">
+
+                        <!-- Style Select for Vendor 2 -->
+                        <div class="col-md-3" id="styleSelectDiv" style="display: none;">
+                            <div class="form-group">
+                                <label for="styleSelect">Style No</label>
+                                <select class="form-control select2" id="styleSelect" required disabled>
+                                    <option value="">Select Style</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Country Select for Vendor 2 -->
+                        <div class="col-md-3" id="countrySelectDiv" style="display: none;">
+                            <div class="form-group">
+                                <label for="countrySelect">Country</label>
+                                <select class="form-control select2" id="countrySelect" required disabled>
+                                    <option value="">Select Country</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Location Select for Vendor 7 -->
+                        <div class="col-md-3" id="locationSelectDiv" style="display: none;">
                             <div class="form-group">
                                 <label for="locationSelect">Location</label>
                                 <select class="form-control select2" id="locationSelect" required disabled>
@@ -52,7 +74,8 @@
                                 </select>
                             </div>
                         </div>
-                        <div class="col-md-4">
+
+                        <div class="col-md-3">
                             <div class="form-group">
                                 <label for="colorSelect">Color</label>
                                 <select class="form-control select2" id="colorSelect" required disabled>
@@ -333,10 +356,14 @@
         $('#po_search').on('change', function() {
             var poId = $(this).val();
             if (poId) {
-                // Reset dependent fields
+                // Reset dependent fields - INCLUDING COUNTRY
+                $('#styleSelect').prop('disabled', true).html('<option value="">Select Style</option>');
+                $('#styleSelectDiv').hide();
+                $('#countrySelect').prop('disabled', true).html('<option value="">Select Country</option>');
+                $('#countrySelectDiv').hide(); // Hide country div
                 $('#locationSelect').prop('disabled', true).html('<option value="">Select Location</option>');
-                $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
                 $('#locationSelectDiv').hide();
+                $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
                 $('.add-item').prop('disabled', true);
                 $('#items_section').hide();
                 $('#itemsTable tbody').empty();
@@ -361,12 +388,24 @@
 
                         $('#po_details').show();
 
-                        // Show location select for vendor 7, otherwise load colors directly
-                        if (data.vendor_id == 7) {
+                        // Handle different vendor types
+                        if (data.vendor_id == 2) {
+                            // Vendor 2: Show style select, hide location and country initially
+                            $('#styleSelectDiv').show();
+                            $('#locationSelectDiv').hide();
+                            $('#countrySelectDiv').hide(); // Ensure country is hidden initially
+                            loadStyles(poId);
+                        } else if (data.vendor_id == 7) {
+                            // Vendor 7: Show location select, hide style and country
                             $('#locationSelectDiv').show();
+                            $('#styleSelectDiv').hide();
+                            $('#countrySelectDiv').hide();
                             loadLocations(poId);
                         } else {
+                            // Other vendors: Hide all additional fields
                             $('#locationSelectDiv').hide();
+                            $('#styleSelectDiv').hide();
+                            $('#countrySelectDiv').hide();
                             loadColors(poId);
                         }
                     },
@@ -376,14 +415,110 @@
                     }
                 });
             } else {
+                // Reset everything when PO is cleared
                 $('#po_details, #items_section').hide();
                 $('#itemsTable tbody').empty();
+                $('#styleSelect').prop('disabled', true).html('<option value="">Select Style</option>');
+                $('#styleSelectDiv').hide();
+                $('#countrySelect').prop('disabled', true).html('<option value="">Select Country</option>');
+                $('#countrySelectDiv').hide();
                 $('#locationSelect').prop('disabled', true).html('<option value="">Select Location</option>');
-                $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
                 $('#locationSelectDiv').hide();
+                $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
                 $('.add-item').prop('disabled', true);
             }
         });
+
+        // Load styles for vendor 2
+        function loadStyles(poId) {
+            $.ajax({
+                url: '{{ route("get_po_styles") }}',
+                type: 'GET',
+                data: {
+                    po_id: poId
+                },
+                success: function(styles) {
+                    var options = '<option value="">Select Style</option>';
+                    styles.forEach(function(style) {
+                        options += '<option value="' + style + '">' + style + '</option>';
+                    });
+                    $('#styleSelect').html(options).prop('disabled', false);
+                }
+            });
+        }
+
+        // Handle style selection for vendor 2
+        $('#styleSelect').on('change', function() {
+            var style = $(this).val();
+            var poId = $('#po_search').val();
+
+            // Reset country and color when style changes
+            $('#countrySelect').prop('disabled', true).html('<option value="">Select Country</option>');
+            $('#countrySelectDiv').hide();
+            $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
+            $('.add-item').prop('disabled', true);
+            $('#items_section').hide();
+
+            if (style && poId) {
+                loadCountries(poId, style);
+            }
+        });
+
+        // Load countries for selected style (vendor 2)
+        function loadCountries(poId, style) {
+            $.ajax({
+                url: '{{ route("get_po_countries") }}',
+                type: 'GET',
+                data: {
+                    po_id: poId,
+                    article_number: style
+                },
+                success: function(countries) {
+                    var options = '<option value="">Select Country</option>';
+                    countries.forEach(function(country) {
+                        options += '<option value="' + country + '">' + country + '</option>';
+                    });
+                    $('#countrySelect').html(options).prop('disabled', false);
+                    $('#countrySelectDiv').show();
+                }
+            });
+        }
+
+        // Handle country selection for vendor 2
+        $('#countrySelect').on('change', function() {
+            var country = $(this).val();
+            var style = $('#styleSelect').val();
+            var poId = $('#po_search').val();
+
+            // Reset color when country changes
+            $('#colorSelect').prop('disabled', true).html('<option value="">Select Color</option>');
+            $('.add-item').prop('disabled', true);
+            $('#items_section').hide();
+
+            if (country && style && poId) {
+                loadCountryColors(poId, style, country);
+            }
+        });
+
+        // Load colors for selected country (vendor 2)
+        function loadCountryColors(poId, style, country) {
+            $.ajax({
+                url: '{{ route("get_country_colors") }}',
+                type: 'GET',
+                data: {
+                    po_id: poId,
+                    article_number: style,
+                    country: country
+                },
+                success: function(colors) {
+                    var options = '<option value="">Select Color</option>';
+                    colors.forEach(function(color) {
+                        options += '<option value="' + color + '">' + color + '</option>';
+                    });
+                    $('#colorSelect').html(options).prop('disabled', false);
+                }
+            });
+        }
 
         // Load locations for vendor 7
         function loadLocations(poId) {
@@ -436,7 +571,7 @@
             });
         }
 
-        // Load colors for selected PO (non-vendor 7)
+        // Load colors for selected PO (non-vendor 7, non-vendor 2)
         function loadColors(poId) {
             $.ajax({
                 url: '{{ route("get_po_colors") }}',
@@ -454,16 +589,18 @@
             });
         }
 
-        // Handle color selection - Load table and reinitialize PO search
+        // Update the color select change handler to pass country
         $('#colorSelect').on('change', function() {
             var color = $(this).val();
             var poId = $('#po_search').val();
             var location = $('#locationSelect').val();
+            var style = $('#styleSelect').val();
+            var country = $('#countrySelect').val(); // Get country value
 
             if (color && poId) {
                 $('.add-item').prop('disabled', false);
                 $('#items_section').show();
-                loadPackingListItems(poId, color, location);
+                loadPackingListItems(poId, color, location, style, country); // Pass country
 
                 // Refresh PO-search so dropdown stays usable but empty
                 setTimeout(reinitializePOSearch, 100);
@@ -474,12 +611,14 @@
             }
         });
 
-        function loadPackingListItems(poId, color = null, location = null) {
+        function loadPackingListItems(poId, color = null, location = null, style = null, country = null) {
             var requestData = {
                 po_id: poId
             };
             if (color) requestData.color = color;
             if (location) requestData.location = location;
+            if (style) requestData.article_number = style;
+            if (country) requestData.country = country;
 
             $.ajax({
                 url: '{{ route("packing_list_items") }}',
@@ -598,17 +737,31 @@
         }
 
         // Add Item button
+        // Add Item button - Updated
         $(document).on('click', '.add-item', function() {
             var poId = $('#po_search').val(),
                 vendorId = $('#vendor_id').val(),
                 color = $('#colorSelect').val(),
-                location = $('#locationSelect').val();
+                location = $('#locationSelect').val(),
+                style = $('#styleSelect').val(),
+                country = $('#countrySelect').val();
 
             if (!poId || !color) {
                 Swal.fire({
                     icon: 'warning',
                     title: poId ? 'Color Required' : 'PO Required',
                     text: poId ? 'Please select a color first' : 'Please select a PO first',
+                    confirmButtonColor: '#3085d6'
+                });
+                return;
+            }
+
+            // Check requirements for vendor 2
+            if (vendorId == 2 && (!style || !country)) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Missing Selection',
+                    text: 'Please select style and country first',
                     confirmButtonColor: '#3085d6'
                 });
                 return;
@@ -632,7 +785,9 @@
                     id: poId,
                     vendor_id: vendorId,
                     color: color,
-                    location: location
+                    location: location,
+                    article_number: style,
+                    country: country
                 },
                 success: function(response) {
                     $("#add_modal").html(response);
@@ -641,9 +796,55 @@
                         dropdownParent: $('.modal-body')
                     });
                     $("#add_modal").modal('show');
+
+                    // For vendor 2, automatically load sizes after modal is fully shown
+                    if (vendorId == 2) {
+                        setTimeout(function() {
+                            loadSizesForVendor2();
+                        }, 500); // Increased timeout for better reliability
+                    }
                 }
             });
         });
+
+        // Load sizes automatically for vendor 2
+        function loadSizesForVendor2() {
+            const poId = $('#po_id').val();
+            const color = $('#color').val();
+            const country = $('#country').val();
+            const article = $('#article_number').val();
+            const $container = $('.sizesTableContainer');
+
+            if (!poId || !color || !country || !article) {
+                console.error('Missing required parameters for loading sizes');
+                $container.html('<div class="alert alert-warning">Missing required parameters. Please try again.</div>');
+                return;
+            }
+
+            // Show loading message
+            $container.html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading sizes...</div>');
+
+            $.ajax({
+                url: '{{ route("get_sizes_with_qty") }}',
+                data: {
+                    po_id: poId,
+                    color: color,
+                    country: country,
+                    article_number: article
+                },
+                success: function(data) {
+                    if (data && data.length > 0) {
+                        loadSizesTable(data, $container);
+                    } else {
+                        $container.html('<div class="alert alert-info">No sizes available for this selection</div>');
+                    }
+                },
+                error: function(xhr) {
+                    console.error('Error loading sizes:', xhr);
+                    $container.html('<div class="alert alert-danger">Error loading sizes. Please try again.</div>');
+                }
+            });
+        }
 
         // Edit Item button
         $(document).on('click', '.edit-item', function() {
@@ -696,7 +897,8 @@
                             showConfirmButton: false
                         });
                         var location = $('#locationSelect').val();
-                        loadPackingListItems($('#po_search').val(), $('#colorSelect').val(), location);
+                        var style = $('#styleSelect').val();
+                        loadPackingListItems($('#po_search').val(), $('#colorSelect').val(), location, style);
                     },
                     error: function(xhr) {
                         Swal.fire({
@@ -837,9 +1039,24 @@
             }
         });
 
-        // Handle save item button - Updated to handle both add and edit modes
+        // Handle save item button - Updated to validate packing table number
         $(document).on('click', '#saveItemBtn', function() {
             const isEdit = $('#itemId').length > 0;
+            const vendorId = $('#vendor_id').val();
+
+            // Validate packing table number selection (only in add mode)
+            if (!isEdit) {
+                const packingTableNo = $('input[name="packing_table_no"]:checked').val();
+                if (!packingTableNo) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Packing Table Required',
+                        text: 'Please select a packing table number',
+                        confirmButtonColor: '#3085d6'
+                    });
+                    return;
+                }
+            }
 
             if (isEdit) {
                 // Edit mode - validate inputs
@@ -871,22 +1088,24 @@
                     article_number: $('#articleSelect').val(),
                     color: $('#color').val(),
                     location: $('#location').val(),
+                    country: $('#country').val(),
                     quantity: quantity,
                     size: selectedSize,
                     config_item_id: $('#currentConfigId').val()
                 };
                 saveItem(data, true);
             } else {
-                // Add mode - collect data from multiple articles
-                const allArticlesData = [];
-                $('.article-block').each(function() {
-                    const $block = $(this);
-                    const article_number = $block.find('.articleSelect').val();
+                // Add mode - handle vendor 2 differently
+                if (vendorId == 2) {
+                    // Vendor 2: Collect data from single sizes table
+                    const article_number = $('#article_number').val();
+                    const color = $('#color').val();
+                    const country = $('#country').val();
                     const selectedSizes = [];
 
-                    $block.find('.size-checkbox:checked').each(function() {
+                    $('.sizesTableContainer .size-checkbox:checked').each(function() {
                         const size = $(this).val();
-                        const quantity = $block.find(`.quantity-input[data-size="${size}"]`).val();
+                        const quantity = $(this).closest('tr').find('.quantity-input').val();
                         const configId = $(this).data('config-id');
                         const poItemId = $(this).data('po-item-id');
 
@@ -900,28 +1119,69 @@
                         }
                     });
 
-                    if (selectedSizes.length > 0) {
-                        allArticlesData.push({
-                            article_number,
-                            color: $('#color').val(),
-                            net_weight: $("#net_weight").val(),
-                            sizes: selectedSizes
+                    if (selectedSizes.length === 0) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'No Items Selected',
+                            text: 'Please select at least one size with quantity',
+                            confirmButtonColor: '#3085d6'
                         });
+                        return;
                     }
-                });
 
-                if (allArticlesData.length === 0) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'No Items Selected',
-                        text: 'Please select at least one size with quantity',
-                        confirmButtonColor: '#3085d6'
+                    const allArticlesData = [{
+                        article_number: article_number,
+                        color: color,
+                        sizes: selectedSizes
+                    }];
+
+                    saveMultipleItems(allArticlesData, country);
+                } else {
+                    // Other vendors: Collect data from multiple article blocks
+                    const allArticlesData = [];
+                    $('.article-block').each(function() {
+                        const $block = $(this);
+                        const article_number = $block.find('.articleSelect').val();
+                        const selectedSizes = [];
+
+                        $block.find('.size-checkbox:checked').each(function() {
+                            const size = $(this).val();
+                            const quantity = $block.find(`.quantity-input[data-size="${size}"]`).val();
+                            const configId = $(this).data('config-id');
+                            const poItemId = $(this).data('po-item-id');
+
+                            if (quantity && parseInt(quantity) > 0) {
+                                selectedSizes.push({
+                                    size: size,
+                                    quantity: parseInt(quantity),
+                                    config_item_id: configId,
+                                    po_item_id: poItemId
+                                });
+                            }
+                        });
+
+                        if (selectedSizes.length > 0) {
+                            allArticlesData.push({
+                                article_number,
+                                color: $('#color').val(),
+                                sizes: selectedSizes
+                            });
+                        }
                     });
-                    return;
-                }
 
-                // Call batch save
-                saveMultipleItems(allArticlesData);
+                    if (allArticlesData.length === 0) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'No Items Selected',
+                            text: 'Please select at least one size with quantity',
+                            confirmButtonColor: '#3085d6'
+                        });
+                        return;
+                    }
+
+                    // Call batch save without country
+                    saveMultipleItems(allArticlesData);
+                }
             }
         });
 
@@ -954,7 +1214,9 @@
                     if (response.po_id) {
                         const color = $('#colorSelect').val() || $('#color').val();
                         const location = $('#locationSelect').val() || $('#location').val();
-                        loadPackingListItems(response.po_id, color, location);
+                        const style = $('#styleSelect').val();
+                        const country = $('#countrySelect').val();
+                        loadPackingListItems(response.po_id, color, location, style, country);
                     }
                 },
                 error: function(xhr) {
@@ -964,14 +1226,22 @@
         }
 
         // Batch save function (for add mode)
-        function saveMultipleItems(allArticlesData) {
+        function saveMultipleItems(allArticlesData, country = null) {
+            const packingTableNo = $('input[name="packing_table_no"]:checked').val();
+
             const po_details = {
                 po_id: $('#po_id').val(),
                 carton_id: $('#carton_id').val(),
                 color: $('#color').val(),
                 location: $('#location').val(),
-                net_weight: $("#net_weight").val()
+                net_weight: $("#net_weight").val(),
+                packing_table_no: packingTableNo
             };
+
+            // Add country for vendor 2
+            if (country) {
+                po_details.country = country;
+            }
 
             Swal.fire({
                 title: 'Saving Items...',
@@ -1002,7 +1272,9 @@
                     if (response.po_id) {
                         const color = $('#colorSelect').val();
                         const location = $('#locationSelect').val();
-                        loadPackingListItems(response.po_id, color, location);
+                        const style = $('#styleSelect').val();
+                        const country = $('#countrySelect').val();
+                        loadPackingListItems(response.po_id, color, location, style, country);
                     }
                 },
                 error: function(xhr) {

@@ -114,6 +114,8 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/get-po-styles', [PackingListController::class, 'get_po_styles'])->name('get_po_styles');
         Route::get('/get-style-colors', [PackingListController::class, 'get_style_colors'])->name('get_style_colors');
         Route::post('/save-lp-number', [PackingListController::class, 'saveLpNumber'])->name('packing_list_store_lp_number');
+        Route::get('/get-po-countries', [PackingListController::class, 'get_po_countries'])->name('get_po_countries');
+        Route::get('/get-country-colors', [PackingListController::class, 'get_country_colors'])->name('get_country_colors');
     });
 
     Route::group(['prefix' => 'invoice'], function () {
@@ -134,6 +136,8 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/grn_entry', [InvoiceController::class, 'grn_entry'])->name('grn_entry');
         Route::post('/grn_entry_details_update', [InvoiceController::class, 'grn_entry_details_update'])->name('grn_entry_details_update');
         Route::post('/update-da-number', [InvoiceController::class, 'updateDaNumber'])->name('invoice_update_da_number');
+        Route::post('/details', [InvoiceController::class, 'invoice_details'])->name('invoice_details');
+        Route::post('/history', [InvoiceController::class, 'invoice_history_details'])->name('invoice_history_details');
     });
 
     Route::group(['prefix' => 'e_invoice'], function () {
