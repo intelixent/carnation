@@ -67,18 +67,15 @@
 
         @media print {
 
-         @page {
-    size: A4 landscape;
-	margin: 10mm 5mm 10mm 5mm !important;  
-	}
+            @page {
+                size: A4 landscape;
+                margin: 10mm 5mm 10mm 5mm !important;  
+            }
 
             .carton-group {
                 page-break-inside: avoid;
                 break-inside: avoid-page;
             }
-
-           
-  
 
         }
 
@@ -139,10 +136,16 @@
     </div>
 
     @php
-    $byCarton = $packing_list->items->groupBy(fn($i) => $i->carton_name);
-    $grandQty = 0; $grandNet = 0; $grandGross = 0;
-    $firstPageMax = 19; $otherPageMax = 30;
-    $currentPageRowCount = 0; $pageNumber = 1; $debugInfo = [];
+    // Group by dynamic_carton_name instead of carton_name
+    $byCarton = $packing_list->items->groupBy(fn($i) => $i->dynamic_carton_name);
+    $grandQty = 0; 
+    $grandNet = 0; 
+    $grandGross = 0;
+    $firstPageMax = 19; 
+    $otherPageMax = 30;
+    $currentPageRowCount = 0; 
+    $pageNumber = 1; 
+    $debugInfo = [];
     @endphp
 
     <table class="items-table">
@@ -167,22 +170,38 @@
             </tr>
         </thead>
 
-        @foreach($byCarton as $cartonName => $items)
+        @foreach($byCarton as $dynamicCartonName => $items)
         @php
         $count = $items->count();
         $maxRows = $pageNumber === 1 ? $firstPageMax : $otherPageMax;
         $remaining = $maxRows - $currentPageRowCount;
         $force = false;
+        
         if ($currentPageRowCount > 0 && $count > $remaining) {
-        $force = true;
-        $debugInfo[] = "Carton {$cartonName} ({$count}) won't fit page {$pageNumber}, rem {$remaining} → BREAK";
+            $force = true;
+            $debugInfo[] = "Carton {$dynamicCartonName} ({$count}) won't fit page {$pageNumber}, rem {$remaining} → BREAK";
         } else {
-        $debugInfo[] = "Carton {$cartonName} ({$count}) fits page {$pageNumber}, rem {$remaining}";
+            $debugInfo[] = "Carton {$dynamicCartonName} ({$count}) fits page {$pageNumber}, rem {$remaining}";
         }
-        if ($force) { $pageNumber++; $currentPageRowCount = 0; }
+        
+        if ($force) { 
+            $pageNumber++; 
+            $currentPageRowCount = 0; 
+        }
+        
         $cls = 'carton-group';
+        
+        // Check if this is a mixed carton
+        $isMixed = $items->first()->is_mixed ?? false;
+        if ($isMixed) {
+            $cls .= ' mixed-carton';
+        }
+        
         $currentPageRowCount += $count;
-        if ($currentPageRowCount >= $maxRows) { $currentPageRowCount -= $maxRows; $pageNumber++; }
+        if ($currentPageRowCount >= $maxRows) { 
+            $currentPageRowCount -= $maxRows; 
+            $pageNumber++; 
+        }
         @endphp
 
         <tbody class="{{ $cls }}" @if($force) style="page-break-before: always;" @endif>
@@ -195,15 +214,17 @@
             @foreach($items as $i => $item)
             @php
             $cbm = $item->quantity * (
-            $item->carton->length *
-            $item->carton->breadth *
-            $item->carton->height
+                $item->carton->length *
+                $item->carton->breadth *
+                $item->carton->height
             ) / 1e6;
             $grandQty += $item->quantity;
             @endphp
             <tr @if($i===0 && $force) style="page-break-before: always;" @endif>
                 @if($i === 0)
-                <td rowspan="{{ $count }}">{{ $cartonName }}</td>
+                <td rowspan="{{ $count }}" @if($isMixed) @endif>
+                    {{ $dynamicCartonName }}
+                </td>
                 @endif
                 <td>{{ $packing_list->po_no }}</td>
                 <td>{{ $item->article_number }}</td>
@@ -224,16 +245,17 @@
         </tbody>
         @endforeach
 
-        <!-- <tfoot> -->
+        <!-- Footer row with totals -->
+        <tbody>
             <tr>
-                <td colspan="6"></td>
+                <td colspan="6"><strong>TOTAL</strong></td>
                 <td><strong>{{ $grandQty }}</strong></td>
                 <td colspan="3"></td>
                 <td><strong>{{ round($grandNet, 2) }}</strong></td>
                 <td><strong>{{ round($grandGross, 2) }}</strong></td>
                 <td></td>
             </tr>
-        <!-- </tfoot> -->
+        </tbody>
     </table>
 
     <div class="summary-section">
@@ -263,10 +285,10 @@
                 @foreach($dispatchQuantities as $num => $dispatch)
                 @php
                 $label = $num == $currentDispatchNumber
-                ? 'PACKING LIST QTY'
-                : ($num == 1 ? '1st DISPATCH QTY'
-                : ($num == 2 ? '2nd DISPATCH QTY'
-                : ($num == 3 ? '3rd DISPATCH QTY' : $num.'th DISPATCH QTY')));
+                    ? 'PACKING LIST QTY'
+                    : ($num == 1 ? '1st DISPATCH QTY'
+                        : ($num == 2 ? '2nd DISPATCH QTY'
+                            : ($num == 3 ? '3rd DISPATCH QTY' : $num.'th DISPATCH QTY')));
                 $dispTotal = 0;
                 @endphp
                 <tr>
@@ -282,8 +304,12 @@
                     <td>BALANCE</td>
                     @foreach($all_sizes as $size)
                     @php
-                    $sum = 0; foreach($dispatchQuantities as $dq) $sum += $dq->get($size, 0);
-                    $b = $orderQuantitiesFromAllPacks->get($size, 0) - $sum; $balTotal += $b;
+                    $sum = 0; 
+                    foreach($dispatchQuantities as $dq) {
+                        $sum += $dq->get($size, 0);
+                    }
+                    $b = $orderQuantitiesFromAllPacks->get($size, 0) - $sum; 
+                    $balTotal += $b;
                     @endphp
                     <td>{{ $b }}</td>
                     @endforeach
@@ -293,26 +319,42 @@
                     <td>PACK QTY %</td>
                     @foreach($all_sizes as $size)
                     @php
-                    $sum = 0; foreach($dispatchQuantities as $dq) $sum += $dq->get($size, 0);
+                    $sum = 0; 
+                    foreach($dispatchQuantities as $dq) {
+                        $sum += $dq->get($size, 0);
+                    }
                     $pct = $orderQuantitiesFromAllPacks->get($size, 0) > 0
-                    ? round($sum / $orderQuantitiesFromAllPacks->get($size, 0) * 100, 2) . '%'
-                    : '-';
+                        ? round($sum / $orderQuantitiesFromAllPacks->get($size, 0) * 100, 2) . '%'
+                        : '-';
                     @endphp
                     <td>{{ $pct }}</td>
                     @endforeach
                     <td><strong>
-                            @php
-                            $totalDisp = 0;
-                            foreach($dispatchQuantities as $dq)
-                            foreach($all_sizes as $s) $totalDisp += $dq->get($s, 0);
-                            @endphp
-                            {{ $orderTotal > 0 ? round($totalDisp / $orderTotal * 100, 2) . '%' : '-' }}
-                        </strong>
-                    </td>
+                        @php
+                        $totalDisp = 0;
+                        foreach($dispatchQuantities as $dq) {
+                            foreach($all_sizes as $s) {
+                                $totalDisp += $dq->get($s, 0);
+                            }
+                        }
+                        @endphp
+                        {{ $orderTotal > 0 ? round($totalDisp / $orderTotal * 100, 2) . '%' : '-' }}
+                    </strong></td>
                 </tr>
             </tbody>
         </table>
     </div>
+
+    <!-- Debug information (optional - can be removed in production) -->
+    <!--
+    <div class="debug-info">
+        <p><strong>Debug Information:</strong></p>
+        @foreach($debugInfo as $info)
+        <p>{{ $info }}</p>
+        @endforeach
+    </div>
+    -->
+
 </body>
 
 

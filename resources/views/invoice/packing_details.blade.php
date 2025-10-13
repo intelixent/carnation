@@ -10,6 +10,9 @@
                         <th></th>
                         <th>Packing Ref No</th>
                         <th>Packed At</th>
+                        <?php if ($vendor_id == 2): ?>
+                            <th>Country</th>
+                        <?php endif; ?>
                         <th>Colors</th>
                         <th>Carton Counts</th>
                     </tr>
@@ -19,9 +22,20 @@
                     foreach ($packed_lists as $packed_list):
                     ?>
                         <tr>
-                            <td><input type="checkbox" class="po_pack" name="po_pack" value="<?php echo $packed_list->id; ?>" /></td>
+                            <td>
+                                <input type="checkbox"
+                                    class="po_pack"
+                                    name="po_pack"
+                                    value="<?php echo $packed_list->id; ?>"
+                                    <?php if ($vendor_id == 2): ?>
+                                    data-country="<?php echo $packed_list->country; ?>"
+                                    <?php endif; ?> />
+                            </td>
                             <td><?php echo $packed_list->pack_ref_no; ?></td>
                             <td><?php echo \Carbon\Carbon::parse($packed_list->created_at)->format('d-m-Y h:i A'); ?></td>
+                            <?php if ($vendor_id == 2): ?>
+                                <td><?php echo $packed_list->country; ?></td>
+                            <?php endif; ?>
                             <td><?php echo $packed_list->color; ?></td>
                             <td><?php echo $packed_list->carton_count; ?></td>
                         </tr>

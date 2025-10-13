@@ -1848,9 +1848,7 @@ class PackingListController extends BaseController
 
         // PO Number
         $poNum = $packingList->po->po_num ?? '';
-
         $poDate = $packingList->po->po_date ?? '';
-
         $poJobNum = $packingList->po->po_job_num ?? '';
 
         // Unique PO item IDs in this packing list
@@ -1875,11 +1873,9 @@ class PackingListController extends BaseController
 
         $ctnDimDisplay = '';
         if ($ctnLength !== '' || $ctnBreadth !== '' || $ctnHeight !== '') {
-            // Use "X" or "*" as desired
             $ctnDimDisplay = "{$ctnLength}X{$ctnBreadth}X{$ctnHeight}";
         }
 
-        // Weight field from first carton
         $ctnWeight = $firstCarton->weight ?? '';
 
         // Gender display from PoItems
@@ -1898,7 +1894,6 @@ class PackingListController extends BaseController
         $styleDescriptionsDisplay = '';
         if (!empty($uniquePoItemIds)) {
             if ($packingList->vendor_id == 4) {
-                // For vendor ID 4 (Benetton), use part_description
                 $styleArr = PoItems::whereIn('color', $uniqueColor)
                     ->where('po_id', $packingList->po->id)
                     ->pluck('part_description')
@@ -1907,7 +1902,6 @@ class PackingListController extends BaseController
                     ->values()
                     ->toArray();
             } else {
-                // For other vendors, use type
                 $styleArr = PoItems::whereIn('id', $uniquePoItemIds)
                     ->pluck('type')
                     ->filter()
@@ -1918,25 +1912,197 @@ class PackingListController extends BaseController
             $styleDescriptionsDisplay = implode(', ', $styleArr);
         }
 
-        // All sizes present in packing list (for both detail table and summary)
-        $allSizes = $packingList->items->pluck('size')->unique()->sort()->values();
+        // Get position-based size order from config
+        $sizeOrder = [];
+        if ($packingList->po_id) {
+            $sizeOrder = PackingListConfigItem::where('po_id', $packingList->po_id)
+                ->where('status', 0)
+                ->orderBy('position', 'asc')
+                ->pluck('size')
+                ->unique()
+                ->values()
+                ->toArray();
+        }
 
-        // Packed quantities per size
-        $packedQuantities = $packingList->items
-            ->groupBy('size')
-            ->map(fn($itemsForSize) => $itemsForSize->sum('quantity'));
+        // Fallback to PO items if no config
+        if (empty($sizeOrder) && $packingList->po_id) {
+            $sizeOrder = PoItems::where('po_id', $packingList->po_id)
+                ->pluck('size')
+                ->unique()
+                ->values()
+                ->toArray();
+        }
+
+        // All sizes present in packing list - ORDERED BY POSITION
+        $allSizes = collect($sizeOrder);
+
+        // Determine carton prefix based on vendor
+        $cartonPrefix = in_array($packingList->vendor_id, [1, 5, 6]) ? 'C' : '';
+
+        // Get position mapping for sizes from config
+        $sizePositionMap = [];
+        if ($packingList->po_id) {
+            $configItems = PackingListConfigItem::where('po_id', $packingList->po_id)
+                ->where('status', 0)
+                ->get();
+
+            foreach ($configItems as $configItem) {
+                $sizePositionMap[$configItem->size] = [
+                    'position' => $configItem->position,
+                    'per_carton_qty' => $configItem->per_carton_qty
+                ];
+            }
+        }
+
+        // Step 1: Identify mixed cartons by grouping items from database carton_name
+        $itemsByDbCartonName = $packingList->items->groupBy('carton_name');
+        $mixedCartonDbNames = [];
+
+        foreach ($itemsByDbCartonName as $dbCartonName => $items) {
+            $uniqueSizes = $items->pluck('size')->unique();
+            if ($uniqueSizes->count() > 1) {
+                $mixedCartonDbNames[] = $dbCartonName;
+            }
+        }
+
+        // Step 2: Separate pure and mixed items, and assign position to each item
+        $pureItems = collect();
+        $mixedItems = collect();
+
+        foreach ($packingList->items as $item) {
+            $size = $item->size;
+            $position = $sizePositionMap[$size]['position'] ?? 999;
+            $perCartonQty = $sizePositionMap[$size]['per_carton_qty'] ?? 80;
+
+            $item->position = $position;
+            $item->per_carton_config_qty = $perCartonQty;
+
+            if (in_array($item->carton_name, $mixedCartonDbNames)) {
+                $item->is_mixed = true;
+                $item->original_carton_name = $item->carton_name;
+                $mixedItems->push($item);
+            } else {
+                $item->is_mixed = false;
+                $pureItems->push($item);
+            }
+        }
+
+        // Step 3: Categorize pure items into full and under-filled cartons
+        $fullCartons = collect();
+        $underFilledCartons = collect();
+
+        foreach ($pureItems as $item) {
+            $perCartonQty = $item->per_carton_config_qty ?? 0;
+
+            if ($perCartonQty > 0 && $item->quantity < $perCartonQty) {
+                // Under-filled carton
+                $item->is_under_filled = true;
+                $underFilledCartons->push($item);
+            } else {
+                // Full carton
+                $item->is_under_filled = false;
+                $fullCartons->push($item);
+            }
+        }
+
+        // Step 4: Sort full cartons by position, then by ID
+        $fullCartons = $fullCartons->sortBy([
+            ['position', 'asc'],
+            ['id', 'asc']
+        ]);
+
+        // Step 5: Sort under-filled cartons by position, then by ID
+        $underFilledCartons = $underFilledCartons->sortBy([
+            ['position', 'asc'],
+            ['id', 'asc']
+        ]);
+
+        // Step 6: Group items by per_carton_qty (position group)
+        $groupedByPerCartonQty = collect();
+
+        // Add full cartons to their respective groups
+        foreach ($fullCartons as $item) {
+            $key = $item->per_carton_config_qty;
+            if (!isset($groupedByPerCartonQty[$key])) {
+                $groupedByPerCartonQty[$key] = [
+                    'full' => collect(),
+                    'under_filled' => collect(),
+                    'position' => $item->position
+                ];
+            }
+            $groupedByPerCartonQty[$key]['full']->push($item);
+        }
+
+        // Add under-filled cartons to their respective groups
+        foreach ($underFilledCartons as $item) {
+            $key = $item->per_carton_config_qty;
+            if (!isset($groupedByPerCartonQty[$key])) {
+                $groupedByPerCartonQty[$key] = [
+                    'full' => collect(),
+                    'under_filled' => collect(),
+                    'position' => $item->position
+                ];
+            }
+            $groupedByPerCartonQty[$key]['under_filled']->push($item);
+        }
+
+        // Sort groups by position
+        $sortedGroups = $groupedByPerCartonQty->sortBy('position');
+
+        // Step 7: Assign dynamic carton names in order
+        $cartonCounter = 1;
+        $sortedPureItems = collect();
+
+        foreach ($sortedGroups as $group) {
+            // First assign names to full cartons in this group
+            foreach ($group['full'] as $item) {
+                $item->dynamic_carton_name = $cartonPrefix . $cartonCounter;
+                $cartonCounter++;
+                $sortedPureItems->push($item);
+            }
+
+            // Then assign names to under-filled cartons in this group
+            foreach ($group['under_filled'] as $item) {
+                $item->dynamic_carton_name = $cartonPrefix . $cartonCounter;
+                $cartonCounter++;
+                $sortedPureItems->push($item);
+            }
+        }
+
+        // Step 8: Group mixed items by their original carton_name and assign dynamic names
+        $mixedByOriginalCarton = $mixedItems->groupBy('original_carton_name');
+
+        foreach ($mixedByOriginalCarton as $originalCartonName => $items) {
+            $dynamicCartonName = $cartonPrefix . $cartonCounter;
+
+            foreach ($items as $item) {
+                $item->dynamic_carton_name = $dynamicCartonName;
+                $item->position = 9999; // Ensure they come last
+            }
+
+            $cartonCounter++;
+        }
+
+        // Step 9: Combine all items in the correct order
+        $sortedItems = $sortedPureItems->merge($mixedItems);
+
+        // Replace the original items collection with sorted items
+        $packingList->setRelation('items', $sortedItems);
+
+        // Packed quantities per size - ORDERED BY POSITION
+        $packedQuantities = collect();
+        foreach ($sizeOrder as $size) {
+            $packedQuantities[$size] = $packingList->items
+                ->where('size', $size)
+                ->sum('quantity');
+        }
 
         //
-        // Initialize variables for summary (used mainly for vendor_id == 2)
+        // Initialize variables for summary
         //
-        $orderedQuantities = collect(); // filtered order qty only for items in list
+        $orderedQuantities = collect();
         $balances = collect();
         $percentages = collect();
-        // Note: In Blade, you compute orderTotal and packTotal as needed
-
-        //
-        // tableData for main detail table
-        //
         $tableData = null;
 
         // Initialize vendor ID 4 specific totals
@@ -1950,37 +2116,36 @@ class PackingListController extends BaseController
         //
         if ($packingList->vendor_id == 2) {
             //
-            // VENDOR ID 2 (Skechers-specific) - Using PUMA logic with color and article_number grouping
+            // VENDOR ID 2 (Skechers-specific)
             //
 
-            // Initialize dispatch-related variables
             $dispatchQuantities = collect();
             $totalDispatches = 0;
             $orderQuantitiesFromAllPacks = collect();
             $currentDispatchNumber = 1;
 
-            // Get all packing lists for this PO ordered by ID (chronological order)
             $allPackingLists = PackingListMaster::where('po_id', $packingList->po_id)
                 ->orderBy('id', 'asc')
                 ->get();
 
             $totalDispatches = $allPackingLists->count();
 
-            // Get all unique color and article combinations from current packing list
-            $currentPackingListItems = PackingListItem::where('packing_list_id', $packingList->id)->get();
+            $currentPackingListItems = $packingList->items;
             $currentColorArticleCombinations = $currentPackingListItems
                 ->groupBy(function ($item) {
                     return $item->color . '|' . $item->article_number;
                 })
                 ->keys();
 
-            // Calculate ORDER QTY from PackingListConfigItem - aggregate by SIZE only for the template
+            // Initialize orderQuantitiesFromAllPacks with position order
             $orderQuantitiesFromAllPacks = collect();
+            foreach ($sizeOrder as $size) {
+                $orderQuantitiesFromAllPacks[$size] = 0;
+            }
 
             foreach ($currentColorArticleCombinations as $colorArticleKey) {
                 list($color, $articleNumber) = explode('|', $colorArticleKey);
 
-                // Get po_item_ids from PoItems based on article_number and color
                 $poItemIds = PoItems::where('po_id', $packingList->po_id)
                     ->where('article_number', $articleNumber)
                     ->where('color', $color)
@@ -1988,56 +2153,54 @@ class PackingListController extends BaseController
                     ->toArray();
 
                 if (!empty($poItemIds)) {
-                    // Get order quantities from PackingListConfigItem
                     $configItems = PackingListConfigItem::where('po_id', $packingList->po_id)
                         ->whereIn('po_item_id', $poItemIds)
                         ->where('status', 0)
                         ->get();
 
-                    // Aggregate by size across all color-article combinations
                     foreach ($configItems as $configItem) {
-                        $currentQty = $orderQuantitiesFromAllPacks->get($configItem->size, 0);
-                        $orderQuantitiesFromAllPacks[$configItem->size] = $currentQty + $configItem->po_qty;
+                        if (in_array($configItem->size, $sizeOrder)) {
+                            $currentQty = $orderQuantitiesFromAllPacks->get($configItem->size, 0);
+                            $orderQuantitiesFromAllPacks[$configItem->size] = $currentQty + $configItem->po_qty;
+                        }
                     }
                 }
             }
 
-            // Find the position of current packing list
             $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
                 return $item->id == $packingList->id;
             });
 
             $currentDispatchNumber = $currentPackingListIndex + 1;
 
-            // Calculate dispatch quantities for all packing lists up to and including current one
             foreach ($allPackingLists as $index => $pList) {
                 if ($index <= $currentPackingListIndex) {
-                    $dispatchNumber = $index + 1; // 1st dispatch, 2nd dispatch, etc.
-
-                    // Get items for this specific packing list
+                    $dispatchNumber = $index + 1;
                     $packingListItems = PackingListItem::where('packing_list_id', $pList->id)->get();
 
-                    // 🔹 Filter items by current article_number + color combinations
                     $filteredItems = $packingListItems->filter(function ($item) use ($currentColorArticleCombinations) {
                         $key = $item->color . '|' . $item->article_number;
                         return $currentColorArticleCombinations->contains($key);
                     });
 
-                    // Calculate quantities by size only for the filtered items
+                    // Initialize sizeQuantities with position order
                     $sizeQuantities = collect();
+                    foreach ($sizeOrder as $size) {
+                        $sizeQuantities[$size] = 0;
+                    }
+
                     foreach ($filteredItems as $item) {
-                        $currentQty = $sizeQuantities->get($item->size, 0);
-                        $sizeQuantities[$item->size] = $currentQty + $item->quantity;
+                        if (in_array($item->size, $sizeOrder)) {
+                            $currentQty = $sizeQuantities->get($item->size, 0);
+                            $sizeQuantities[$item->size] = $currentQty + $item->quantity;
+                        }
                     }
 
                     $dispatchQuantities[$dispatchNumber] = $sizeQuantities;
                 }
             }
 
-
-            // Get unique po_item_ids for this packing list based on article_number and color from PoItems
             $uniquePoItemIds = collect();
-
             foreach ($currentPackingListItems as $item) {
                 $poItem = PoItems::where('po_id', $packingList->po_id)
                     ->where('article_number', $item->article_number)
@@ -2052,24 +2215,28 @@ class PackingListController extends BaseController
 
             $uniquePoItemIds = $uniquePoItemIds->unique()->values()->toArray();
 
-            // Compute ordered quantities for items in this packing list from PackingListConfigItem
+            // Initialize orderedQuantities with position order
+            $orderedQuantities = collect();
+            foreach ($sizeOrder as $size) {
+                $orderedQuantities[$size] = 0;
+            }
+
             if (!empty($uniquePoItemIds)) {
                 $configItems = PackingListConfigItem::whereIn('po_item_id', $uniquePoItemIds)
                     ->where('status', 0)
                     ->get();
 
-                $orderedQuantities = $configItems
-                    ->groupBy('size')
-                    ->map(fn($itemsForSize) => $itemsForSize->sum('pack_qty'));
-            } else {
-                $orderedQuantities = collect();
+                foreach ($configItems as $configItem) {
+                    if (in_array($configItem->size, $sizeOrder)) {
+                        $currentQty = $orderedQuantities->get($configItem->size, 0);
+                        $orderedQuantities[$configItem->size] = $currentQty + $configItem->pack_qty;
+                    }
+                }
             }
 
-            // Compute balances & percentages per size
             foreach ($allSizes as $size) {
                 $ordered = $orderQuantitiesFromAllPacks->get($size, 0);
 
-                // Calculate total dispatched for this size across all dispatches
                 $totalDispatchedForSize = 0;
                 foreach ($dispatchQuantities as $dispatchQty) {
                     $totalDispatchedForSize += $dispatchQty->get($size, 0);
@@ -2082,86 +2249,88 @@ class PackingListController extends BaseController
                 $percentages[$size] = $percentage;
             }
 
-            // Get dynamic sizeOrder from PO items or fallback
-            $sizeOrder = [];
-            if ($packingList->po_id) {
-                $sizeOrder = PoItems::where('po_id', $packingList->po_id)
-                    ->pluck('size')
-                    ->unique()
-                    ->values()
-                    ->toArray();
-            }
-            if (empty($sizeOrder)) {
-                $sizeOrder = $allSizes->toArray();
-            }
+            // Separate pure and mixed cartons for processing
+            $pureItemsForTable = $sortedItems->where('is_mixed', false);
+            $mixedItemsForTable = $sortedItems->where('is_mixed', true);
 
-            // Step 1: Group by size and find continuous ranges within each size
-            $sizeRanges = [];
+            // Group pure carton items by position, article, color, size
+            $positionGroups = [];
 
-            foreach ($sizeOrder as $size) {
-                $sizeItems = $packingList->items->where('size', $size);
+            foreach ($pureItemsForTable->groupBy('position') as $position => $posItems) {
+                foreach (
+                    $posItems->groupBy(function ($item) {
+                        return $item->article_number . '|' . $item->color . '|' . $item->size;
+                    }) as $key => $items
+                ) {
+                    list($articleNumber, $color, $size) = explode('|', $key);
 
-                if ($sizeItems->isEmpty()) {
-                    continue;
-                }
+                    // Group consecutive cartons by dynamic_carton_name
+                    $consecutiveRanges = [];
+                    $currentRange = [];
+                    $lastCartonNum = null;
 
-                // Sort items by carton_name
-                $sortedItems = $sizeItems->sortBy(function ($item) {
-                    return intval($item->carton_name);
-                });
+                    foreach ($items as $item) {
+                        $currentCartonNum = intval(str_replace($cartonPrefix, '', $item->dynamic_carton_name));
 
-                // Group continuous carton names for this size
-                $currentGroup = [];
-                $lastCartonName = null;
-
-                foreach ($sortedItems as $item) {
-                    $currentCartonName = intval($item->carton_name);
-
-                    if ($lastCartonName === null || $currentCartonName == $lastCartonName + 1) {
-                        $currentGroup[] = $item;
-                    } else {
-                        // Gap detected, save current group and start new one
-                        if (!empty($currentGroup)) {
-                            $sizeRanges[] = [
-                                'size' => $size,
-                                'items' => collect($currentGroup)
-                            ];
+                        if ($lastCartonNum === null || $currentCartonNum == $lastCartonNum + 1) {
+                            $currentRange[] = $item;
+                        } else {
+                            if (!empty($currentRange)) {
+                                $consecutiveRanges[] = $currentRange;
+                            }
+                            $currentRange = [$item];
                         }
-                        $currentGroup = [$item];
+
+                        $lastCartonNum = $currentCartonNum;
                     }
 
-                    $lastCartonName = $currentCartonName;
-                }
+                    if (!empty($currentRange)) {
+                        $consecutiveRanges[] = $currentRange;
+                    }
 
-                // Don't forget the last group
-                if (!empty($currentGroup)) {
-                    $sizeRanges[] = [
-                        'size' => $size,
-                        'items' => collect($currentGroup)
-                    ];
+                    // Create groups for each consecutive range
+                    foreach ($consecutiveRanges as $range) {
+                        $rangeItems = collect($range);
+                        $rangeKey = $position . '|' . $articleNumber . '|' . $color . '|' . $size . '|' . count($positionGroups);
+
+                        $positionGroups[$rangeKey] = [
+                            'position' => $position,
+                            'article_number' => $articleNumber,
+                            'color' => $color,
+                            'size' => $size,
+                            'carton_names' => $rangeItems->pluck('dynamic_carton_name')->toArray(),
+                            'items' => $rangeItems,
+                            'size_quantities' => [$size => $rangeItems->sum('quantity')],
+                            'is_mixed' => false
+                        ];
+                    }
                 }
             }
 
-            // Step 2: Merge ranges that have overlapping carton names
-            $mergedRanges = [];
+            // Group mixed carton items by dynamic_carton_name
+            foreach ($mixedItemsForTable->groupBy('dynamic_carton_name') as $cartonName => $items) {
+                $rangeKey = '9999|mixed|' . $cartonName;
 
-            foreach ($sizeRanges as $range) {
-                $cartonNames = $range['items']->pluck('carton_name')->unique()->sort()->values()->toArray();
-                $rangeKey = implode('-', $cartonNames);
-
-                if (!isset($mergedRanges[$rangeKey])) {
-                    $mergedRanges[$rangeKey] = [
-                        'carton_names' => $cartonNames,
-                        'items' => collect(),
-                        'size_quantities' => []
-                    ];
+                $sizeQuantities = [];
+                foreach ($items as $item) {
+                    $sizeQuantities[$item->size] = ($sizeQuantities[$item->size] ?? 0) + $item->quantity;
                 }
 
-                $mergedRanges[$rangeKey]['items'] = $mergedRanges[$rangeKey]['items']->merge($range['items']);
-                $mergedRanges[$rangeKey]['size_quantities'][$range['size']] = $range['items']->sum('quantity');
+                $firstItem = $items->first();
+
+                $positionGroups[$rangeKey] = [
+                    'position' => 9999,
+                    'article_number' => $firstItem->article_number,
+                    'color' => $firstItem->color,
+                    'size' => 'Mixed',
+                    'carton_names' => [$cartonName],
+                    'items' => $items,
+                    'size_quantities' => $sizeQuantities,
+                    'is_mixed' => true
+                ];
             }
 
-            // Step 3: Create table rows
+            // Create table rows
             $tableRows = [];
             $totals = [
                 'carton_count' => 0,
@@ -2171,15 +2340,14 @@ class PackingListController extends BaseController
                 'total_gross_weight' => 0
             ];
 
-            foreach ($mergedRanges as $rangeKey => $rangeData) {
-                $cartonNames = $rangeData['carton_names'];
+            foreach ($positionGroups as $group) {
+                $cartonNames = $group['carton_names'];
                 $cartonCount = count($cartonNames);
-                $allItems = $rangeData['items'];
+                $allItems = $group['items'];
 
                 $firstName = $cartonNames[0];
                 $lastName = end($cartonNames);
 
-                // Create carton range
                 $ctnRange = $cartonCount > 1 ? $firstName . '-' . $lastName : $firstName;
 
                 $totalQty = $allItems->sum('quantity');
@@ -2207,7 +2375,6 @@ class PackingListController extends BaseController
 
                 $perCartonQty = $cartonCount > 0 ? round($totalQty / $cartonCount) : 0;
 
-                // Get po_item_id from PoItems based on article_number and color
                 $poItem = PoItems::where('po_id', $packingList->po_id)
                     ->where('article_number', $firstItem->article_number)
                     ->where('color', $firstItem->color)
@@ -2217,8 +2384,8 @@ class PackingListController extends BaseController
                 $poItemId = $poItem->id ?? $firstItem->po_item_id;
 
                 $row = [
-                    'article_number'  => $firstItem->article_number,
-                    'color'           => $firstItem->color,
+                    'article_number'  => $group['article_number'],
+                    'color'           => $group['color'],
                     'ctn_range'       => $ctnRange,
                     'ctn_first'       => $firstName,
                     'ctn_last'        => $lastName,
@@ -2234,23 +2401,22 @@ class PackingListController extends BaseController
                     'ctn_dim'         => $dimension,
                     'mrp'             => $mrp,
                     'po_item_id'      => $poItemId,
+                    'position'        => $group['position'],
+                    'is_mixed'        => $group['is_mixed']
                 ];
 
-                // Initialize all size columns to 0
                 foreach ($sizeOrder as $sizeCol) {
                     $row['per_size'][$sizeCol] = 0;
                 }
 
-                // Set quantities for each size
-                foreach ($rangeData['size_quantities'] as $size => $qty) {
+                foreach ($group['size_quantities'] as $size => $qty) {
                     if (in_array($size, $sizeOrder)) {
                         $row['per_size'][$size] = $qty;
                     }
                 }
 
-                // Update totals
                 $totals['carton_count'] += $cartonCount;
-                foreach ($rangeData['size_quantities'] as $size => $qty) {
+                foreach ($group['size_quantities'] as $size => $qty) {
                     if (isset($totals['per_size'][$size])) {
                         $totals['per_size'][$size] += $qty;
                     }
@@ -2262,10 +2428,13 @@ class PackingListController extends BaseController
                 $tableRows[] = $row;
             }
 
-            // Sort table rows by first carton number
-            usort($tableRows, function ($a, $b) {
-                $aFirst = intval(explode('-', $a['ctn_range'])[0]);
-                $bFirst = intval(explode('-', $b['ctn_range'])[0]);
+            // Sort by position (pure cartons first, mixed last), then by first carton number
+            usort($tableRows, function ($a, $b) use ($cartonPrefix) {
+                if ($a['position'] != $b['position']) {
+                    return $a['position'] - $b['position'];
+                }
+                $aFirst = intval(str_replace($cartonPrefix, '', explode('-', $a['ctn_range'])[0]));
+                $bFirst = intval(str_replace($cartonPrefix, '', explode('-', $b['ctn_range'])[0]));
                 return $aFirst - $bFirst;
             });
 
@@ -2289,228 +2458,328 @@ class PackingListController extends BaseController
             // VENDOR ID 3 (PUMA-specific)
             //
 
-            // Initialize dispatch-related variables
             $dispatchQuantities = collect();
             $totalDispatches = 0;
             $orderQuantitiesFromAllPacks = collect();
             $currentDispatchNumber = 1;
 
-            // Get all packing lists for this PO ordered by ID (chronological order)
             $allPackingLists = PackingListMaster::where('po_id', $packingList->po_id)
                 ->orderBy('id', 'asc')
                 ->get();
 
             $totalDispatches = $allPackingLists->count();
 
-            // Calculate ORDER QTY from all packing lists for this PO (total packed quantities across all dispatches)
-            $allPackingListIds = $allPackingLists->pluck('id')->toArray();
-            $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
+            // Initialize with position order
+            $orderQuantitiesFromAllPacks = collect();
+            foreach ($sizeOrder as $size) {
+                $orderQuantitiesFromAllPacks[$size] = 0;
+            }
 
-            $orderQuantitiesFromAllPacks = PackingListConfigItem::where('po_id', $packingList->po_id)
+            $configOrderQty = PackingListConfigItem::where('po_id', $packingList->po_id)
                 ->where('status', 0)
                 ->where('color', $packingList->color)
-                ->groupBy('size')
-                ->selectRaw('size, SUM(po_qty) as total_pack_qty')
-                ->pluck('total_pack_qty', 'size');
+                ->get();
 
-            // Find the position of current packing list
+            foreach ($configOrderQty as $config) {
+                if (in_array($config->size, $sizeOrder)) {
+                    $currentQty = $orderQuantitiesFromAllPacks->get($config->size, 0);
+                    $orderQuantitiesFromAllPacks[$config->size] = $currentQty + $config->po_qty;
+                }
+            }
+
             $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
                 return $item->id == $packingList->id;
             });
 
             $currentDispatchNumber = $currentPackingListIndex + 1;
 
-            // Calculate dispatch quantities for all packing lists up to and including current one
             foreach ($allPackingLists as $index => $pList) {
                 if ($index <= $currentPackingListIndex) {
-                    $dispatchNumber = $index + 1; // 1st dispatch, 2nd dispatch, etc.
-
-                    // Get items for this specific packing list
+                    $dispatchNumber = $index + 1;
                     $packingListItems = PackingListItem::where('packing_list_id', $pList->id)->get();
 
-                    // Calculate quantities by size for this dispatch
-                    $dispatchQtyBySize = $packingListItems
-                        ->groupBy('size')
-                        ->map(function ($items) {
-                            return $items->sum('quantity');
-                        });
+                    // Initialize with position order
+                    $dispatchQtyBySize = collect();
+                    foreach ($sizeOrder as $size) {
+                        $dispatchQtyBySize[$size] = 0;
+                    }
+
+                    foreach ($packingListItems as $item) {
+                        if (in_array($item->size, $sizeOrder)) {
+                            $currentQty = $dispatchQtyBySize->get($item->size, 0);
+                            $dispatchQtyBySize[$item->size] = $currentQty + $item->quantity;
+                        }
+                    }
 
                     $dispatchQuantities[$dispatchNumber] = $dispatchQtyBySize;
                 }
             }
 
-            // 1. Get all sizes from the PO (not just from current packing list)
-            $allSizesFromPO = collect();
-            if ($packingList->po_id) {
-                $allSizesFromPO = PoItems::where('po_id', $packingList->po_id)
-                    ->pluck('size')
-                    ->unique()
-                    ->sort()
-                    ->values();
-            }
+            $allSizesFromPO = collect($sizeOrder);
 
-            // If no sizes found in PO, fallback to current packing list sizes
-            if ($allSizesFromPO->isEmpty()) {
-                $allSizesFromPO = $allSizes;
-            }
-
-            // 2. Compute ordered quantities for all sizes in the PO
+            // Initialize orderedQuantities with position order
             $orderedQuantities = collect();
+            foreach ($sizeOrder as $size) {
+                $orderedQuantities[$size] = 0;
+            }
+
             if (!empty($uniquePoItemIds)) {
                 $poItemsFiltered = PoItems::whereIn('id', $uniquePoItemIds)->get();
-                $orderedQuantities = $poItemsFiltered
-                    ->groupBy('size')
-                    ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
+                foreach ($poItemsFiltered as $poItem) {
+                    if (in_array($poItem->size, $sizeOrder)) {
+                        $currentQty = $orderedQuantities->get($poItem->size, 0);
+                        $orderedQuantities[$poItem->size] = $currentQty + $poItem->qty;
+                    }
+                }
             } else {
-                // If no specific items, get all items for this PO
                 if ($packingList->po_id) {
                     $allPoItems = PoItems::where('po_id', $packingList->po_id)->get();
-                    $orderedQuantities = $allPoItems
-                        ->groupBy('size')
-                        ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
-                } else {
-                    $orderedQuantities = collect();
+                    foreach ($allPoItems as $poItem) {
+                        if (in_array($poItem->size, $sizeOrder)) {
+                            $currentQty = $orderedQuantities->get($poItem->size, 0);
+                            $orderedQuantities[$poItem->size] = $currentQty + $poItem->qty;
+                        }
+                    }
                 }
             }
 
             $allSizes = $allSizesFromPO;
 
-            // Get dynamic sizeOrder from PO items or fallback
-            $sizeOrder = [];
-            if ($packingList->po_id) {
-                $sizeOrder = PoItems::where('po_id', $packingList->po_id)
-                    ->pluck('size')
-                    ->unique()
-                    ->values()
-                    ->toArray();
-            }
-            if (empty($sizeOrder)) {
-                $sizeOrder = $allSizes->toArray();
-            }
+            // Separate pure and mixed cartons
+            $pureItems = $sortedItems->where('is_mixed', false);
+            $mixedItems = $sortedItems->where('is_mixed', true);
 
-            // NEW APPROACH: Group by carton ranges with quantity consistency check
+            // Separate full and under-filled cartons from pure items
+            $fullCartons = collect();
+            $underFilledCartons = collect();
 
-            // Step 1: Sort all items by carton_name
-            $sortedItems = $packingList->items->sortBy(function ($item) {
-                return intval($item->carton_name);
-            });
-
-            // Step 2: Group items by carton and calculate per-carton quantities by size
-            $cartonData = [];
-            foreach ($sortedItems as $item) {
-                $cartonName = $item->carton_name;
-                if (!isset($cartonData[$cartonName])) {
-                    $cartonData[$cartonName] = [
-                        'items' => collect(),
-                        'size_quantities' => [],
-                        'total_qty' => 0,
-                        'net_weight' => $item->net_weight ?? 0,
-                        'carton' => $item->carton,
-                        'po_item' => $item->po_item,
-                    ];
-                }
-
-                $cartonData[$cartonName]['items']->push($item);
-                $size = $item->size;
-                $cartonData[$cartonName]['size_quantities'][$size] =
-                    ($cartonData[$cartonName]['size_quantities'][$size] ?? 0) + $item->quantity;
-                $cartonData[$cartonName]['total_qty'] += $item->quantity;
-            }
-
-            // Step 3: Sort cartons by carton number
-            $sortedCartons = collect($cartonData)->sortBy(function ($data, $cartonName) {
-                return intval($cartonName);
-            });
-
-            // Step 4: Group cartons into ranges with same quantity pattern
-            $cartonRanges = [];
-            $currentRange = [];
-            $lastCartonName = null;
-            $lastQuantityPattern = null;
-
-            foreach ($sortedCartons as $cartonName => $cartonInfo) {
-                $currentCartonNum = intval($cartonName);
-
-                // Create a signature for this carton's quantity pattern
-                $quantityPattern = [];
-                foreach ($sizeOrder as $size) {
-                    $quantityPattern[$size] = $cartonInfo['size_quantities'][$size] ?? 0;
-                }
-
-                // Check if this carton can be grouped with the current range
-                $canGroup = false;
-
-                if ($lastCartonName !== null && $lastQuantityPattern !== null) {
-                    // Check if carton numbers are continuous (or same) AND quantity patterns match
-                    $isConsecutive = ($currentCartonNum == $lastCartonName + 1 || $currentCartonNum == $lastCartonName);
-                    $samePattern = ($quantityPattern == $lastQuantityPattern);
-
-                    $canGroup = $isConsecutive && $samePattern;
-                }
-
-                if ($canGroup) {
-                    // Add to current range
-                    $currentRange[] = [
-                        'carton_name' => $cartonName,
-                        'carton_num' => $currentCartonNum,
-                        'data' => $cartonInfo,
-                        'quantity_pattern' => $quantityPattern
-                    ];
+            foreach ($pureItems as $item) {
+                $perCartonQty = $item->per_carton_config_qty ?? 0;
+                if ($perCartonQty > 0 && $item->quantity < $perCartonQty) {
+                    // Under-filled carton
+                    $item->is_under_filled = true;
+                    $underFilledCartons->push($item);
                 } else {
-                    // Save current range and start new one
+                    // Full carton
+                    $item->is_under_filled = false;
+                    $fullCartons->push($item);
+                }
+            }
+
+            // Group full cartons by position and quantity pattern
+            $fullCartonGroups = [];
+
+            foreach ($fullCartons->groupBy('position') as $position => $posItems) {
+                // Group by quantity pattern
+                $patternGroups = [];
+
+                foreach ($posItems as $item) {
+                    $quantityPattern = [];
+                    foreach ($sizeOrder as $size) {
+                        $quantityPattern[$size] = $item->size == $size ? $item->quantity : 0;
+                    }
+
+                    $patternKey = md5(json_encode($quantityPattern));
+
+                    if (!isset($patternGroups[$patternKey])) {
+                        $patternGroups[$patternKey] = [
+                            'pattern' => $quantityPattern,
+                            'items' => collect()
+                        ];
+                    }
+
+                    $patternGroups[$patternKey]['items']->push($item);
+                }
+
+                // Create ranges for each pattern
+                foreach ($patternGroups as $patternKey => $patternData) {
+                    $items = $patternData['items']->sortBy('id');
+
+                    // Group consecutive cartons
+                    $cartonRanges = [];
+                    $currentRange = [];
+                    $lastCartonNum = null;
+
+                    foreach ($items as $item) {
+                        $currentCartonNum = intval(str_replace($cartonPrefix, '', $item->dynamic_carton_name));
+
+                        if ($lastCartonNum === null || $currentCartonNum == $lastCartonNum + 1) {
+                            $currentRange[] = $item;
+                        } else {
+                            if (!empty($currentRange)) {
+                                $cartonRanges[] = $currentRange;
+                            }
+                            $currentRange = [$item];
+                        }
+
+                        $lastCartonNum = $currentCartonNum;
+                    }
+
                     if (!empty($currentRange)) {
                         $cartonRanges[] = $currentRange;
                     }
-                    $currentRange = [[
-                        'carton_name' => $cartonName,
-                        'carton_num' => $currentCartonNum,
-                        'data' => $cartonInfo,
-                        'quantity_pattern' => $quantityPattern
-                    ]];
+
+                    // Create groups for each range
+                    foreach ($cartonRanges as $range) {
+                        $rangeItems = collect($range);
+                        $sizeQuantities = [];
+
+                        foreach ($rangeItems as $item) {
+                            $sizeQuantities[$item->size] = ($sizeQuantities[$item->size] ?? 0) + $item->quantity;
+                        }
+
+                        $fullCartonGroups[] = [
+                            'position' => $position,
+                            'carton_names' => $rangeItems->pluck('dynamic_carton_name')->toArray(),
+                            'items' => $rangeItems,
+                            'quantity_pattern' => $patternData['pattern'],
+                            'size_quantities' => $sizeQuantities,
+                            'is_mixed' => false,
+                            'is_under_filled' => false
+                        ];
+                    }
+                }
+            }
+
+            // Group under-filled cartons by quantity pattern (not by position)
+            $underFilledCartonGroups = [];
+            $underFilledPatternGroups = [];
+
+            foreach ($underFilledCartons as $item) {
+                $quantityPattern = [];
+                foreach ($sizeOrder as $size) {
+                    $quantityPattern[$size] = $item->size == $size ? $item->quantity : 0;
                 }
 
-                $lastCartonName = $currentCartonNum;
-                $lastQuantityPattern = $quantityPattern;
+                $patternKey = md5(json_encode($quantityPattern));
+
+                if (!isset($underFilledPatternGroups[$patternKey])) {
+                    $underFilledPatternGroups[$patternKey] = [
+                        'pattern' => $quantityPattern,
+                        'items' => collect()
+                    ];
+                }
+
+                $underFilledPatternGroups[$patternKey]['items']->push($item);
             }
 
-            // Don't forget the last range
-            if (!empty($currentRange)) {
-                $cartonRanges[] = $currentRange;
+            // Create ranges for under-filled cartons (sorted by ID, not position)
+            foreach ($underFilledPatternGroups as $patternKey => $patternData) {
+                $items = $patternData['items']->sortBy('id'); // Sort by packing list item ID
+
+                // Group consecutive cartons
+                $cartonRanges = [];
+                $currentRange = [];
+                $lastCartonNum = null;
+
+                foreach ($items as $item) {
+                    $currentCartonNum = intval(str_replace($cartonPrefix, '', $item->dynamic_carton_name));
+
+                    if ($lastCartonNum === null || $currentCartonNum == $lastCartonNum + 1) {
+                        $currentRange[] = $item;
+                    } else {
+                        if (!empty($currentRange)) {
+                            $cartonRanges[] = $currentRange;
+                        }
+                        $currentRange = [$item];
+                    }
+
+                    $lastCartonNum = $currentCartonNum;
+                }
+
+                if (!empty($currentRange)) {
+                    $cartonRanges[] = $currentRange;
+                }
+
+                // Create groups for each range
+                foreach ($cartonRanges as $range) {
+                    $rangeItems = collect($range);
+                    $sizeQuantities = [];
+
+                    foreach ($rangeItems as $item) {
+                        $sizeQuantities[$item->size] = ($sizeQuantities[$item->size] ?? 0) + $item->quantity;
+                    }
+
+                    $underFilledCartonGroups[] = [
+                        'position' => 999, // Use a high position value for sorting
+                        'carton_names' => $rangeItems->pluck('dynamic_carton_name')->toArray(),
+                        'items' => $rangeItems,
+                        'quantity_pattern' => $patternData['pattern'],
+                        'size_quantities' => $sizeQuantities,
+                        'is_mixed' => false,
+                        'is_under_filled' => true
+                    ];
+                }
             }
 
-            // Step 5: Create table rows from carton ranges
+            // Group mixed carton items
+            $mixedCartonGroups = [];
+            foreach ($mixedItems->groupBy('dynamic_carton_name') as $cartonName => $items) {
+                $sizeQuantities = [];
+                foreach ($items as $item) {
+                    $sizeQuantities[$item->size] = ($sizeQuantities[$item->size] ?? 0) + $item->quantity;
+                }
+
+                $mixedCartonGroups[] = [
+                    'position' => 9999,
+                    'carton_names' => [$cartonName],
+                    'items' => $items,
+                    'quantity_pattern' => [],
+                    'size_quantities' => $sizeQuantities,
+                    'is_mixed' => true,
+                    'is_under_filled' => false
+                ];
+            }
+
+            // Combine all groups in the correct order
+            $positionGroups = [];
+
+            // Sort full cartons by position
+            usort($fullCartonGroups, function ($a, $b) {
+                return $a['position'] - $b['position'];
+            });
+
+            // Sort under-filled cartons by first carton number (reflects ID order)
+            usort($underFilledCartonGroups, function ($a, $b) use ($cartonPrefix) {
+                $aFirst = intval(str_replace($cartonPrefix, '', $a['carton_names'][0]));
+                $bFirst = intval(str_replace($cartonPrefix, '', $b['carton_names'][0]));
+                return $aFirst - $bFirst;
+            });
+
+            // Sort mixed cartons by carton number
+            usort($mixedCartonGroups, function ($a, $b) use ($cartonPrefix) {
+                $aFirst = intval(str_replace($cartonPrefix, '', $a['carton_names'][0]));
+                $bFirst = intval(str_replace($cartonPrefix, '', $b['carton_names'][0]));
+                return $aFirst - $bFirst;
+            });
+
+            // Combine in order: full cartons, under-filled cartons, mixed cartons
+            $positionGroups = array_merge($fullCartonGroups, $underFilledCartonGroups, $mixedCartonGroups);
+
+            // Create table rows
             $tableRows = [];
 
-            foreach ($cartonRanges as $range) {
-                $cartonCount = count($range);
-                $firstCarton = $range[0];
-                $lastCarton = end($range);
+            foreach ($positionGroups as $group) {
+                $cartonCount = count($group['carton_names']);
+                $firstCartonName = $group['carton_names'][0];
+                $lastCartonName = end($group['carton_names']);
 
-                // Create carton range display
                 $ctnRange = $cartonCount > 1
-                    ? $firstCarton['carton_name'] . '-' . $lastCarton['carton_name']
-                    : $firstCarton['carton_name'];
+                    ? $firstCartonName . '-' . $lastCartonName
+                    : $firstCartonName;
 
-                // Calculate totals for this range
                 $totalQty = 0;
                 $totalNetWeight = 0;
                 $totalGrossWeight = 0;
-                $sizeQuantities = [];
 
-                foreach ($range as $cartonInfo) {
-                    $totalQty += $cartonInfo['data']['total_qty'];
-                    $totalNetWeight += $cartonInfo['data']['net_weight'];
-                    $totalGrossWeight += $cartonInfo['data']['net_weight'] + 1.50;
-
-                    // Add size quantities
-                    foreach ($cartonInfo['quantity_pattern'] as $size => $qty) {
-                        $sizeQuantities[$size] = ($sizeQuantities[$size] ?? 0) + $qty;
-                    }
+                foreach ($group['items'] as $item) {
+                    $totalQty += $item->quantity;
+                    $totalNetWeight += $item->net_weight ?? 0;
+                    $totalGrossWeight += ($item->net_weight ?? 0) + 1.50;
                 }
 
-                $firstItem = $firstCarton['data']['items']->first();
-                $carton = $firstCarton['data']['carton'];
-
+                $firstItem = $group['items']->first();
+                $carton = $firstItem->carton;
                 $dimension = '';
                 if (
                     ($carton->length ?? 0) > 0
@@ -2529,7 +2798,7 @@ class PackingListController extends BaseController
                     'ctn_range'    => $ctnRange,
                     'ttl_ctn'      => $cartonCount,
                     'color'        => $firstItem->po_item->id_color ?? '',
-                    'per_size'     => [],
+                    'per_size'     => $group['size_quantities'],
                     'per_ctn'      => $perCartonQty,
                     'total'        => $totalQty,
                     'net_wt_per'   => $totalNetWeight,
@@ -2537,30 +2806,15 @@ class PackingListController extends BaseController
                     'net_wt_total' => $totalNetWeight,
                     'grs_wt_total' => $totalGrossWeight,
                     'ctn_dim'      => $dimension,
+                    'position'     => $group['position'],
+                    'is_mixed'     => $group['is_mixed'],
+                    'is_under_filled' => $group['is_under_filled'] ?? false
                 ];
-
-                // Initialize all size columns to 0
-                foreach ($sizeOrder as $sizeCol) {
-                    $row['per_size'][$sizeCol] = 0;
-                }
-
-                // Set quantities for each size in this range
-                foreach ($sizeQuantities as $size => $qty) {
-                    if (in_array($size, $sizeOrder)) {
-                        $row['per_size'][$size] = $qty;
-                    }
-                }
 
                 $tableRows[] = $row;
             }
 
-            // Sort table rows by first carton number
-            usort($tableRows, function ($a, $b) {
-                $aFirst = intval(explode('-', $a['ctn_range'])[0]);
-                $bFirst = intval(explode('-', $b['ctn_range'])[0]);
-                return $aFirst - $bFirst;
-            });
-
+            // No additional sorting needed as groups are already organized
             $tableData = [
                 'sizeOrder' => $sizeOrder,
                 'rows'      => $tableRows,
@@ -2570,53 +2824,32 @@ class PackingListController extends BaseController
             // VENDOR ID 7 (Aditya-specific)
             //
 
-            // Get location from packing list
             $location = $packingList->location ?? '';
 
-            // Get all sizes from the PO for this location
-            $allSizesFromPO = collect();
-            if ($packingList->po_id && $location) {
-                $allSizesFromPO = PoItems::where('po_id', $packingList->po_id)
-                    ->where('location', $location)
-                    ->pluck('size')
-                    ->unique()
-                    ->sort()
-                    ->values();
-            }
+            $allSizesFromPO = collect($sizeOrder);
 
-            // If no sizes found, fallback to current packing list sizes
-            if ($allSizesFromPO->isEmpty()) {
-                $allSizesFromPO = $allSizes;
-            }
-
-            // Get dynamic sizeOrder from PO items for this location
-            $sizeOrder = [];
-            if ($packingList->po_id && $location) {
-                $sizeOrder = PoItems::where('po_id', $packingList->po_id)
-                    ->where('location', $location)
-                    ->pluck('size')
-                    ->unique()
-                    ->values()
-                    ->toArray();
-            }
-            if (empty($sizeOrder)) {
-                $sizeOrder = $allSizesFromPO->toArray();
-            }
-
-            // Get order quantities from PackingListConfigItem for this location
+            // Initialize with position order
             $orderQuantitiesFromConfig = collect();
+            foreach ($sizeOrder as $size) {
+                $orderQuantitiesFromConfig[$size] = 0;
+            }
+
             if ($packingList->po_id && $location) {
-                $orderQuantitiesFromConfig = PackingListConfigItem::where('po_id', $packingList->po_id)
+                $configItems = PackingListConfigItem::where('po_id', $packingList->po_id)
                     ->where('status', 0)
                     ->whereHas('poItem', function ($query) use ($location) {
                         $query->where('location', $location);
                     })
-                    ->groupBy('size')
-                    ->selectRaw('size, SUM(po_qty) as total_order_qty')
-                    ->pluck('total_order_qty', 'size');
+                    ->get();
+
+                foreach ($configItems as $config) {
+                    if (in_array($config->size, $sizeOrder)) {
+                        $currentQty = $orderQuantitiesFromConfig->get($config->size, 0);
+                        $orderQuantitiesFromConfig[$config->size] = $currentQty + $config->po_qty;
+                    }
+                }
             }
 
-            // Get carton dimensions from PackingListConfigMaster
             $ctnDimensions = '';
             if ($packingList->po_id) {
                 $configMaster = PackingListConfigMaster::where('po_id', $packingList->po_id)->first();
@@ -2628,18 +2861,16 @@ class PackingListController extends BaseController
                 }
             }
 
-            // Calculate net weight per carton_name (sum quantities but count each carton only once for weight)
+            // Calculate weights and CBM per carton
             $cartonWeights = [];
             $cartonCbm = [];
-            foreach ($packingList->items as $item) {
-                $cartonName = $item->carton_name;
+            foreach ($sortedItems as $item) {
+                $cartonName = $item->dynamic_carton_name;
 
-                // For net weight - only count each carton_name once, use the net_weight from the item
                 if (!isset($cartonWeights[$cartonName])) {
                     $cartonWeights[$cartonName] = $item->net_weight ?? 0;
                 }
 
-                // Calculate CBM for each item
                 if (!isset($cartonCbm[$cartonName])) {
                     $cartonCbm[$cartonName] = 0;
                 }
@@ -2648,81 +2879,84 @@ class PackingListController extends BaseController
                     ($item->carton->length ?? 0) *
                     ($item->carton->breadth ?? 0) *
                     ($item->carton->height ?? 0)
-                ) / 1000000; // Convert to cubic meters
+                ) / 1000000;
 
                 $cartonCbm[$cartonName] += $cbm;
             }
 
-            // Group items directly by carton_name and combine quantities by size
-            $cartonGroups = [];
+            // Separate pure and mixed cartons
+            $pureItems = $sortedItems->where('is_mixed', false);
+            $mixedItems = $sortedItems->where('is_mixed', true);
 
-            foreach ($packingList->items as $item) {
-                $cartonName = $item->carton_name;
-                $poItem = $item->po_item;
+            // Group pure items by position and size
+            $positionGroups = [];
 
-                if (!isset($cartonGroups[$cartonName])) {
-                    $cartonGroups[$cartonName] = [
-                        'carton_name' => $cartonName,
-                        'carton_num' => intval($cartonName),
-                        'article_number' => $item->article_number,
-                        'style_description' => $poItem->style_description ?? $poItem->part_description ?? '',
-                        'color' => $item->color,
-                        'sizes' => array_fill_keys($sizeOrder, 0),
-                        'total_qty' => 0
-                    ];
-                }
+            foreach ($pureItems->groupBy('position') as $position => $posItems) {
+                foreach ($posItems->groupBy('size') as $size => $sizeItems) {
+                    // Group consecutive cartons
+                    $cartonRanges = [];
+                    $currentRange = [];
+                    $lastCartonNum = null;
 
-                // Add quantity for this size
-                if (in_array($item->size, $sizeOrder)) {
-                    $cartonGroups[$cartonName]['sizes'][$item->size] += $item->quantity;
-                    $cartonGroups[$cartonName]['total_qty'] += $item->quantity;
-                }
-            }
+                    foreach ($sizeItems->sortBy('id') as $item) {
+                        $currentCartonNum = intval(str_replace($cartonPrefix, '', $item->dynamic_carton_name));
 
-            // Sort cartons by carton number
-            uasort($cartonGroups, function ($a, $b) {
-                return $a['carton_num'] - $b['carton_num'];
-            });
+                        if ($lastCartonNum === null || $currentCartonNum == $lastCartonNum + 1) {
+                            $currentRange[] = $item;
+                        } else {
+                            if (!empty($currentRange)) {
+                                $cartonRanges[] = $currentRange;
+                            }
+                            $currentRange = [$item];
+                        }
 
-            // Group consecutive cartons with same quantity pattern for ranges
-            $cartonRanges = [];
-            $currentRange = [];
-            $lastCartonNum = null;
-            $lastSizePattern = null;
+                        $lastCartonNum = $currentCartonNum;
+                    }
 
-            foreach ($cartonGroups as $cartonData) {
-                $currentCartonNum = $cartonData['carton_num'];
-                $sizePattern = $cartonData['sizes'];
-
-                // Check if this carton can be grouped with current range
-                $canGroup = false;
-                if ($lastCartonNum !== null && $lastSizePattern !== null) {
-                    $isConsecutive = ($currentCartonNum == $lastCartonNum + 1);
-                    $samePattern = ($sizePattern == $lastSizePattern);
-                    $canGroup = $isConsecutive && $samePattern;
-                }
-
-                if ($canGroup) {
-                    // Add to current range
-                    $currentRange[] = $cartonData;
-                } else {
-                    // Save current range and start new one
                     if (!empty($currentRange)) {
                         $cartonRanges[] = $currentRange;
                     }
-                    $currentRange = [$cartonData];
+
+                    // Create groups for each range
+                    foreach ($cartonRanges as $range) {
+                        $rangeItems = collect($range);
+
+                        $positionGroups[] = [
+                            'position' => $position,
+                            'carton_names' => $rangeItems->pluck('dynamic_carton_name')->toArray(),
+                            'article_number' => $rangeItems->first()->article_number,
+                            'style_description' => $rangeItems->first()->po_item->style_description ?? $rangeItems->first()->po_item->part_description ?? '',
+                            'color' => $rangeItems->first()->color,
+                            'sizes' => [$size => $rangeItems->sum('quantity')],
+                            'total_qty' => $rangeItems->sum('quantity'),
+                            'is_mixed' => false
+                        ];
+                    }
+                }
+            }
+
+            // Group mixed carton items
+            foreach ($mixedItems->groupBy('dynamic_carton_name') as $cartonName => $items) {
+                $sizes = [];
+                foreach ($items as $item) {
+                    $sizes[$item->size] = ($sizes[$item->size] ?? 0) + $item->quantity;
                 }
 
-                $lastCartonNum = $currentCartonNum;
-                $lastSizePattern = $sizePattern;
+                $firstItem = $items->first();
+
+                $positionGroups[] = [
+                    'position' => 9999,
+                    'carton_names' => [$cartonName],
+                    'article_number' => $firstItem->article_number,
+                    'style_description' => $firstItem->po_item->style_description ?? $firstItem->po_item->part_description ?? '',
+                    'color' => $firstItem->color,
+                    'sizes' => $sizes,
+                    'total_qty' => $items->sum('quantity'),
+                    'is_mixed' => true
+                ];
             }
 
-            // Don't forget the last range
-            if (!empty($currentRange)) {
-                $cartonRanges[] = $currentRange;
-            }
-
-            // Create table rows from carton ranges
+            // Create table rows
             $tableRows = [];
             $totals = [
                 'carton_count' => 0,
@@ -2730,42 +2964,40 @@ class PackingListController extends BaseController
                 'total_pieces' => 0
             ];
 
-            foreach ($cartonRanges as $range) {
-                $cartonCount = count($range);
-                $firstCarton = $range[0];
-                $lastCarton = end($range);
+            foreach ($positionGroups as $group) {
+                $cartonCount = count($group['carton_names']);
+                $firstName = $group['carton_names'][0];
+                $lastName = end($group['carton_names']);
 
-                // Create carton range display
                 $ctnRange = $cartonCount > 1
-                    ? $firstCarton['carton_name'] . ' to ' . $lastCarton['carton_name']
-                    : $firstCarton['carton_name'] . ' to ' . $firstCarton['carton_name'];
+                    ? $firstName . ' to ' . $lastName
+                    : $firstName . ' to ' . $firstName;
 
-                // Calculate totals for this range
-                $totalQty = 0;
+                $totalQty = $group['total_qty'];
+
+                // Prepare size quantities array with all sizes initialized to 0
                 $sizeQuantities = array_fill_keys($sizeOrder, 0);
-
-                foreach ($range as $carton) {
-                    $totalQty += $carton['total_qty'];
-                    foreach ($sizeOrder as $size) {
-                        $sizeQuantities[$size] += $carton['sizes'][$size];
+                foreach ($group['sizes'] as $size => $qty) {
+                    if (in_array($size, $sizeOrder)) {
+                        $sizeQuantities[$size] = $qty;
                     }
                 }
 
-                // Calculate per carton quantity (total divided by number of cartons)
                 $perCartonQty = $cartonCount > 0 ? round($totalQty / $cartonCount) : 0;
 
                 $row = [
-                    'article_number' => $firstCarton['article_number'],
-                    'style_description' => $firstCarton['style_description'],
-                    'color' => $firstCarton['color'],
+                    'article_number' => $group['article_number'],
+                    'style_description' => $group['style_description'],
+                    'color' => $group['color'],
                     'per_size' => $sizeQuantities,
                     'per_ctn' => $perCartonQty,
                     'total' => $totalQty,
                     'ctn_range' => $ctnRange,
-                    'total_ctns' => $cartonCount
+                    'total_ctns' => $cartonCount,
+                    'position' => $group['position'],
+                    'is_mixed' => $group['is_mixed']
                 ];
 
-                // Update totals
                 $totals['carton_count'] += $cartonCount;
                 foreach ($sizeQuantities as $size => $qty) {
                     if (isset($totals['per_size'][$size])) {
@@ -2777,20 +3009,18 @@ class PackingListController extends BaseController
                 $tableRows[] = $row;
             }
 
-            // Calculate totals for footer
-            $uniqueCartons = $packingList->items->pluck('carton_name')->unique();
+            // Sort by position (pure cartons first, mixed last)
+            usort($tableRows, function ($a, $b) {
+                return $a['position'] - $b['position'];
+            });
+
+            $uniqueCartons = $sortedItems->pluck('dynamic_carton_name')->unique();
             $totalCtn = $uniqueCartons->count();
 
-            // Calculate total net weight (sum of net weights for unique cartons only)
             $totalNetWeight = array_sum($cartonWeights);
-
-            // Calculate total gross weight (net weight + 1.5 per unique carton)
             $totalGrossWeight = $totalNetWeight + ($totalCtn * 1.5);
-
-            // Calculate total CBM
             $totalCbm = array_sum($cartonCbm);
 
-            // Calculate percentages for summary
             $percentages = collect();
             foreach ($sizeOrder as $size) {
                 $ordered = $orderQuantitiesFromConfig->get($size, 0);
@@ -2805,46 +3035,37 @@ class PackingListController extends BaseController
                 'totals' => $totals
             ];
 
-            // Set order quantities for summary
             $orderedQuantities = $orderQuantitiesFromConfig;
-
-            // Set location-specific data
             $allSizes = collect($sizeOrder);
-
-            // Override the global dimension display with the one from config
             $ctnDimDisplay = $ctnDimensions;
         } elseif ($packingList->vendor_id == 4) {
             //
-            // VENDOR ID 4 (Benetton-specific) - Group by size with continuous cartons, then merge same carton names across sizes
+            // VENDOR ID 4 (Benetton-specific)
             //
             $orderedQuantities = collect();
             $balances = collect();
             $percentages = collect();
 
-            // Get dynamic sizeOrder from PoSizes or fallback
-            $sizeOrder = [];
-            if ($packingList->po_id) {
-                $sizeOrder = PoSizes::where('po_id', $packingList->po_id)
-                    ->pluck('size')
-                    ->unique()
-                    ->values()
-                    ->toArray();
-            }
-            if (empty($sizeOrder)) {
-                $sizeOrder = $allSizes->toArray();
-            }
-
             $uniqueColors = $packingList->items->pluck('color')->unique()->values()->toArray();
 
-            // Get ordered quantities from PoSize
-            if ($packingList->po_id) {
-                $poSizesFiltered = PoSizes::whereIn('color', $uniqueColors)->where('po_id', $packingList->po_id)->get();
-                $orderedQuantities = $poSizesFiltered
-                    ->groupBy('size')
-                    ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
+            // Initialize with position order
+            foreach ($sizeOrder as $size) {
+                $orderedQuantities[$size] = 0;
             }
 
-            // Compute balances & percentages for summary
+            if ($packingList->po_id) {
+                $poSizesFiltered = PoSizes::whereIn('color', $uniqueColors)
+                    ->where('po_id', $packingList->po_id)
+                    ->get();
+
+                foreach ($poSizesFiltered as $poSize) {
+                    if (in_array($poSize->size, $sizeOrder)) {
+                        $currentQty = $orderedQuantities->get($poSize->size, 0);
+                        $orderedQuantities[$poSize->size] = $currentQty + $poSize->qty;
+                    }
+                }
+            }
+
             foreach ($allSizes as $size) {
                 $ordered = $orderedQuantities->get($size, 0);
                 $packed  = $packedQuantities->get($size, 0);
@@ -2855,75 +3076,122 @@ class PackingListController extends BaseController
                 $percentages[$size] = $percentage;
             }
 
-            // Step 1: Group by size and find continuous ranges within each size
-            $sizeRanges = [];
+            // Separate pure and mixed cartons
+            $pureItems = $sortedItems->where('is_mixed', false);
+            $mixedItems = $sortedItems->where('is_mixed', true);
 
-            foreach ($sizeOrder as $size) {
-                $sizeItems = $packingList->items->where('size', $size);
+            // Group pure items by position, then by carton names
+            $positionGroups = [];
 
-                if ($sizeItems->isEmpty()) {
-                    continue;
-                }
+            foreach ($pureItems->groupBy('position') as $position => $posItems) {
+                // Group by unique carton names
+                $cartonNameGroups = [];
 
-                // Sort items by carton_name
-                $sortedItems = $sizeItems->sortBy(function ($item) {
-                    return intval($item->carton_name);
-                });
+                foreach ($posItems as $item) {
+                    $cartonName = $item->dynamic_carton_name;
 
-                // Group continuous carton names for this size
-                $currentGroup = [];
-                $lastCartonName = null;
-
-                foreach ($sortedItems as $item) {
-                    $currentCartonName = intval($item->carton_name);
-
-                    if ($lastCartonName === null || $currentCartonName == $lastCartonName + 1) {
-                        $currentGroup[] = $item;
-                    } else {
-                        // Gap detected, save current group and start new one
-                        if (!empty($currentGroup)) {
-                            $sizeRanges[] = [
-                                'size' => $size,
-                                'items' => collect($currentGroup)
-                            ];
-                        }
-                        $currentGroup = [$item];
+                    if (!isset($cartonNameGroups[$cartonName])) {
+                        $cartonNameGroups[$cartonName] = collect();
                     }
 
-                    $lastCartonName = $currentCartonName;
+                    $cartonNameGroups[$cartonName]->push($item);
                 }
 
-                // Don't forget the last group
-                if (!empty($currentGroup)) {
-                    $sizeRanges[] = [
-                        'size' => $size,
-                        'items' => collect($currentGroup)
-                    ];
+                // Now group consecutive cartons with same size pattern
+                $cartonList = array_keys($cartonNameGroups);
+                sort($cartonList, SORT_NATURAL);
+
+                $ranges = [];
+                $currentRange = [];
+                $lastCartonNum = null;
+                $lastSizePattern = null;
+
+                foreach ($cartonList as $cartonName) {
+                    $items = $cartonNameGroups[$cartonName];
+                    $currentCartonNum = intval(str_replace($cartonPrefix, '', $cartonName));
+
+                    // Create size pattern for this carton
+                    $sizePattern = [];
+                    foreach ($items as $item) {
+                        $sizePattern[$item->size] = ($sizePattern[$item->size] ?? 0) + $item->quantity;
+                    }
+                    ksort($sizePattern);
+
+                    $canGroup = false;
+                    if ($lastCartonNum !== null && $lastSizePattern !== null) {
+                        $isConsecutive = ($currentCartonNum == $lastCartonNum + 1);
+                        $samePattern = ($sizePattern == $lastSizePattern);
+                        $canGroup = $isConsecutive && $samePattern;
+                    }
+
+                    if ($canGroup) {
+                        $currentRange[$cartonName] = $items;
+                    } else {
+                        if (!empty($currentRange)) {
+                            $ranges[] = $currentRange;
+                        }
+                        $currentRange = [$cartonName => $items];
+                    }
+
+                    $lastCartonNum = $currentCartonNum;
+                    $lastSizePattern = $sizePattern;
                 }
-            }
 
-            // Step 2: Group ranges by carton names (merge different sizes with same carton names)
-            $cartonGroups = [];
+                if (!empty($currentRange)) {
+                    $ranges[] = $currentRange;
+                }
 
-            foreach ($sizeRanges as $range) {
-                $cartonNames = $range['items']->pluck('carton_name')->unique()->sort()->values()->toArray();
-                $cartonNamesKey = implode(',', $cartonNames); // Use comma to create unique key
+                // Create groups for each range
+                foreach ($ranges as $range) {
+                    $cartonNames = array_keys($range);
+                    $allItems = collect();
+                    $sizeQuantities = [];
+                    $sizes = [];
 
-                if (!isset($cartonGroups[$cartonNamesKey])) {
-                    $cartonGroups[$cartonNamesKey] = [
+                    foreach ($range as $items) {
+                        $allItems = $allItems->merge($items);
+                        foreach ($items as $item) {
+                            $sizeQuantities[$item->size] = ($sizeQuantities[$item->size] ?? 0) + $item->quantity;
+                            if (!in_array($item->size, $sizes)) {
+                                $sizes[] = $item->size;
+                            }
+                        }
+                    }
+
+                    $positionGroups[] = [
+                        'position' => $position,
                         'carton_names' => $cartonNames,
-                        'items' => collect(),
-                        'size_quantities' => [],
-                        'sizes' => []
+                        'items' => $allItems,
+                        'size_quantities' => $sizeQuantities,
+                        'sizes' => $sizes,
+                        'is_mixed' => false
                     ];
                 }
-
-                $cartonGroups[$cartonNamesKey]['items'] = $cartonGroups[$cartonNamesKey]['items']->merge($range['items']);
-                $cartonGroups[$cartonNamesKey]['size_quantities'][$range['size']] = $range['items']->sum('quantity');
-                $cartonGroups[$cartonNamesKey]['sizes'][] = $range['size'];
             }
 
-            // Step 3: Create table rows
+            // Group mixed carton items
+            foreach ($mixedItems->groupBy('dynamic_carton_name') as $cartonName => $items) {
+                $sizeQuantities = [];
+                $sizes = [];
+
+                foreach ($items as $item) {
+                    $sizeQuantities[$item->size] = ($sizeQuantities[$item->size] ?? 0) + $item->quantity;
+                    if (!in_array($item->size, $sizes)) {
+                        $sizes[] = $item->size;
+                    }
+                }
+
+                $positionGroups[] = [
+                    'position' => 9999,
+                    'carton_names' => [$cartonName],
+                    'items' => $items,
+                    'size_quantities' => $sizeQuantities,
+                    'sizes' => $sizes,
+                    'is_mixed' => true
+                ];
+            }
+
+            // Create table rows
             $tableRows = [];
             $totals = [
                 'carton_count' => 0,
@@ -2934,15 +3202,14 @@ class PackingListController extends BaseController
                 'gross_weight' => 0
             ];
 
-            foreach ($cartonGroups as $cartonGroup) {
-                $cartonNames = $cartonGroup['carton_names'];
+            foreach ($positionGroups as $group) {
+                $cartonNames = $group['carton_names'];
                 $cartonCount = count($cartonNames);
-                $allItems = $cartonGroup['items'];
+                $allItems = $group['items'];
 
                 $firstName = $cartonNames[0];
                 $lastName = end($cartonNames);
 
-                // Create carton range
                 $ctnRange = $cartonCount > 1 ? $firstName . '-' . $lastName : $firstName;
 
                 $totalQty = $allItems->sum('quantity');
@@ -2966,25 +3233,25 @@ class PackingListController extends BaseController
                     'ctn_last'         => $lastName,
                     'ttl_ctn'          => $cartonCount,
                     'color_code'       => $firstItem->color,
-                    'per_size'         => array_fill_keys($sizeOrder, 0), // Initialize all sizes to 0
+                    'per_size'         => array_fill_keys($sizeOrder, 0),
                     'per_ctn'          => $perCartonQty,
                     'grand_total'      => $totalQty,
                     'net_weight'       => $totalNetWeightForRange,
                     'empty_box_weight' => $totalEmptyBoxWeight,
                     'gross_weight'     => $totalGrossWeightForRange,
-                    'totalCbm'   => array_unique($cartonGroup['sizes']) // Track which sizes are in this row
+                    'totalCbm'   => array_unique($group['sizes']),
+                    'position'   => $group['position'],
+                    'is_mixed'   => $group['is_mixed']
                 ];
 
-                // Set quantities for each size that exists in this carton group
-                foreach ($cartonGroup['size_quantities'] as $size => $qty) {
+                foreach ($group['size_quantities'] as $size => $qty) {
                     if (in_array($size, $sizeOrder)) {
                         $row['per_size'][$size] = $qty;
                     }
                 }
 
-                // Update totals
                 $totals['carton_count'] += $cartonCount;
-                foreach ($cartonGroup['size_quantities'] as $size => $qty) {
+                foreach ($group['size_quantities'] as $size => $qty) {
                     if (isset($totals['per_size'][$size])) {
                         $totals['per_size'][$size] += $qty;
                     }
@@ -2997,14 +3264,16 @@ class PackingListController extends BaseController
                 $tableRows[] = $row;
             }
 
-            // Sort table rows by first carton number
-            usort($tableRows, function ($a, $b) {
-                $aFirst = intval(explode('-', $a['ctn_range'])[0]);
-                $bFirst = intval(explode('-', $b['ctn_range'])[0]);
+            // Sort by position (pure cartons first, mixed last)
+            usort($tableRows, function ($a, $b) use ($cartonPrefix) {
+                if ($a['position'] != $b['position']) {
+                    return $a['position'] - $b['position'];
+                }
+                $aFirst = intval(str_replace($cartonPrefix, '', explode('-', $a['ctn_range'])[0]));
+                $bFirst = intval(str_replace($cartonPrefix, '', explode('-', $b['ctn_range'])[0]));
                 return $aFirst - $bFirst;
             });
 
-            // Set the vendor ID 4 specific totals
             $totalCtn = $totals['carton_count'];
             $totalNetWeight = $totals['net_weight'];
             $totalGrossWeight = $totals['gross_weight'];
@@ -3016,93 +3285,145 @@ class PackingListController extends BaseController
             ];
         } else {
             //
-            // OTHER VENDORS: generic summary similar to vendor_id 2
+            // OTHER VENDORS (1, 5, 6 and others): generic summary
             //
 
-            // 1. Get all sizes from the PO (not just from current packing list)
-            $allSizesFromPO = collect();
-            if ($packingList->po_id) {
-                $allSizesFromPO = PoItems::where('po_id', $packingList->po_id)
-                    ->pluck('size')
-                    ->unique()
-                    ->sort()
-                    ->values();
-            }
+            $allSizesFromPO = collect($sizeOrder);
 
-            // If no sizes found in PO, fallback to current packing list sizes
-            if ($allSizesFromPO->isEmpty()) {
-                $allSizesFromPO = $allSizes;
-            }
-
-            // 2. Compute ordered quantities for all sizes in the PO
+            // Initialize with position order
             $orderedQuantities = collect();
+            foreach ($sizeOrder as $size) {
+                $orderedQuantities[$size] = 0;
+            }
+
             if (!empty($uniquePoItemIds)) {
                 $poItemsFiltered = PoItems::whereIn('id', $uniquePoItemIds)->get();
-                $orderedQuantities = $poItemsFiltered
-                    ->groupBy('size')
-                    ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
+                foreach ($poItemsFiltered as $poItem) {
+                    if (in_array($poItem->size, $sizeOrder)) {
+                        $currentQty = $orderedQuantities->get($poItem->size, 0);
+                        $orderedQuantities[$poItem->size] = $currentQty + $poItem->qty;
+                    }
+                }
             } else {
-                // If no specific items, get all items for this PO
                 if ($packingList->po_id) {
                     $allPoItems = PoItems::where('po_id', $packingList->po_id)->get();
-                    $orderedQuantities = $allPoItems
-                        ->groupBy('size')
-                        ->map(fn($itemsForSize) => $itemsForSize->sum('qty'));
-                } else {
-                    $orderedQuantities = collect();
+                    foreach ($allPoItems as $poItem) {
+                        if (in_array($poItem->size, $sizeOrder)) {
+                            $currentQty = $orderedQuantities->get($poItem->size, 0);
+                            $orderedQuantities[$poItem->size] = $currentQty + $poItem->qty;
+                        }
+                    }
                 }
             }
 
             $allSizes = $allSizesFromPO;
 
-            // 3. Determine sizeOrder for any detail table or consistent ordering in summary
-            $sizeOrder = [];
-            if ($packingList->po_id) {
-                $sizeOrder = PoItems::where('po_id', $packingList->po_id)
-                    ->pluck('size')
-                    ->unique()
-                    ->values()
-                    ->toArray();
+            // Separate pure and mixed cartons
+            $pureItems = $sortedItems->where('is_mixed', false);
+            $mixedItems = $sortedItems->where('is_mixed', true);
+
+            // Group pure items by position, then by article, color, size
+            $positionGroups = [];
+
+            foreach ($pureItems->groupBy('position') as $position => $posItems) {
+                foreach (
+                    $posItems->groupBy(function ($item) {
+                        return $item->article_number . '|' . $item->color . '|' . $item->size;
+                    }) as $groupKey => $groupItems
+                ) {
+                    list($articleNumber, $color, $size) = explode('|', $groupKey);
+
+                    // Group consecutive cartons
+                    $cartonRanges = [];
+                    $currentRange = [];
+                    $lastCartonNum = null;
+
+                    foreach ($groupItems->sortBy('id') as $item) {
+                        $currentCartonNum = intval(str_replace($cartonPrefix, '', $item->dynamic_carton_name));
+
+                        if ($lastCartonNum === null || $currentCartonNum == $lastCartonNum + 1) {
+                            $currentRange[] = $item;
+                        } else {
+                            if (!empty($currentRange)) {
+                                $cartonRanges[] = $currentRange;
+                            }
+                            $currentRange = [$item];
+                        }
+
+                        $lastCartonNum = $currentCartonNum;
+                    }
+
+                    if (!empty($currentRange)) {
+                        $cartonRanges[] = $currentRange;
+                    }
+
+                    // Create groups for each range
+                    foreach ($cartonRanges as $range) {
+                        $rangeItems = collect($range);
+                        $cartonNames = $rangeItems->pluck('dynamic_carton_name')->toArray();
+                        $cartonCount = count($cartonNames);
+
+                        $firstName = $cartonNames[0];
+                        $lastName = end($cartonNames);
+
+                        $totalQty = $rangeItems->sum('quantity');
+
+                        $firstItem = $rangeItems->first();
+                        $carton = $firstItem->carton;
+
+                        $netWeightPerCarton = $firstItem->net_weight ?? 0;
+                        $grossWeightPerCarton = ($firstItem->net_weight + 1.45) ?? 0;
+
+                        $dimension = '';
+                        if (
+                            ($carton->length ?? 0) > 0
+                            || ($carton->breadth ?? 0) > 0
+                            || ($carton->height ?? 0) > 0
+                        ) {
+                            $dimension = ($carton->length ?? 0)
+                                . '*' . ($carton->breadth ?? 0)
+                                . '*' . ($carton->height ?? 0)
+                                . ' CMS';
+                        }
+
+                        $perCartonQty = $cartonCount > 0 ? round($totalQty / $cartonCount) : 0;
+                        $mrp = $firstItem->po_item->mrp ?? '';
+                        $poItemId = $firstItem->po_item_id;
+
+                        $positionGroups[] = [
+                            'position' => $position,
+                            'article_number'  => $articleNumber,
+                            'color'           => $color,
+                            'size'            => $size,
+                            'ctn_first'       => $firstName,
+                            'ctn_last'        => $lastName,
+                            'first_carton_id' => $cartonNames[0],
+                            'ttl_ctn'         => $cartonCount,
+                            'per_size'        => array_fill_keys($sizeOrder, 0),
+                            'per_ctn'         => $perCartonQty,
+                            'total'           => $totalQty,
+                            'net_wt_per'      => $netWeightPerCarton,
+                            'grs_wt_per'      => $grossWeightPerCarton,
+                            'ctn_dim'         => $dimension,
+                            'mrp'             => $mrp,
+                            'po_item_id'      => $poItemId,
+                            'is_mixed'        => false
+                        ];
+
+                        $positionGroups[count($positionGroups) - 1]['per_size'][$size] = $totalQty;
+                    }
+                }
             }
-            if (empty($sizeOrder)) {
-                $sizeOrder = $allSizes->toArray();
-            }
 
-            // 4. (Optional) Build a generic detail tableData if you want similar breakdown as Skechers:
-            //    If you do not need a full detail table for other vendors, you can skip building tableData.
-            $groupedItems = $packingList->items->groupBy(function ($item) {
-                return $item->article_number . '|' . $item->color . '|' . $item->size;
-            });
+            // Group mixed carton items
+            foreach ($mixedItems->groupBy('dynamic_carton_name') as $cartonName => $items) {
+                $firstItem = $items->first();
+                $carton = $firstItem->carton;
 
-            $tableRows = [];
-            $totals = [
-                'carton_count' => 0,
-                'per_size'     => array_fill_keys($sizeOrder, 0),
-                'total_pieces' => 0,
-            ];
-
-            foreach ($groupedItems as $groupKey => $groupItems) {
-                list($articleNumber, $color, $size) = explode('|', $groupKey);
-
-                // Carton info
-                $cartonNames = $groupItems->pluck('carton_name')->unique()->sort()->values();
-                $cartonIds   = $groupItems->pluck('carton_id')->unique()->values();
-                $cartonCount = $cartonNames->count();
-
-                $firstName = $cartonCount > 0 ? $cartonNames->first() : '';
-                $lastName  = $cartonCount > 0 ? $cartonNames->last()  : '';
-                $firstCartonId = $cartonCount > 0 ? $cartonIds->first() : null;
-
-                $totalQty = $groupItems->sum('quantity');
-
-                $firstItem = $groupItems->first();
-                $carton    = $firstItem->carton;
-                // dd($firstItem);
-                // Weight/dimension if needed
+                $totalQty = $items->sum('quantity');
                 $netWeightPerCarton = $firstItem->net_weight ?? 0;
                 $grossWeightPerCarton = ($firstItem->net_weight + 1.45) ?? 0;
-                // $netWeightPerCarton   = $carton->net_weight ?? 0;
-                // $grossWeightPerCarton = $carton->gross_weight ?? 0;
+
                 $dimension = '';
                 if (
                     ($carton->length ?? 0) > 0
@@ -3115,35 +3436,58 @@ class PackingListController extends BaseController
                         . ' CMS';
                 }
 
-                $perCartonQty = $cartonCount > 0 ? round($totalQty / $cartonCount) : 0;
                 $mrp = $firstItem->po_item->mrp ?? '';
                 $poItemId = $firstItem->po_item_id;
 
-                $row = [
-                    'article_number'  => $articleNumber,
-                    'color'           => $color,
-                    'size'            => $size,
-                    'ctn_first'       => $firstName,
-                    'ctn_last'        => $lastName,
-                    'first_carton_id' => $firstCartonId,
-                    'ttl_ctn'         => $cartonCount,
-                    'per_size'        => array_fill_keys($sizeOrder, 0),
-                    'per_ctn'         => $perCartonQty,
+                $perSizeArray = array_fill_keys($sizeOrder, 0);
+                foreach ($items as $item) {
+                    if (in_array($item->size, $sizeOrder)) {
+                        $perSizeArray[$item->size] += $item->quantity;
+                    }
+                }
+
+                $positionGroups[] = [
+                    'position' => 9999,
+                    'article_number'  => $firstItem->article_number,
+                    'color'           => $firstItem->color,
+                    'size'            => 'Mixed',
+                    'ctn_first'       => $cartonName,
+                    'ctn_last'        => $cartonName,
+                    'first_carton_id' => $cartonName,
+                    'ttl_ctn'         => 1,
+                    'per_size'        => $perSizeArray,
+                    'per_ctn'         => $totalQty,
                     'total'           => $totalQty,
                     'net_wt_per'      => $netWeightPerCarton,
                     'grs_wt_per'      => $grossWeightPerCarton,
                     'ctn_dim'         => $dimension,
                     'mrp'             => $mrp,
                     'po_item_id'      => $poItemId,
+                    'is_mixed'        => true
                 ];
-                $row['per_size'][$size] = $totalQty;
+            }
 
-                // Update totals
-                $totals['carton_count'] += $cartonCount;
-                $totals['per_size'][$size] += $totalQty;
-                $totals['total_pieces'] += $totalQty;
+            // Sort by position (pure cartons first, mixed last)
+            usort($positionGroups, function ($a, $b) {
+                return $a['position'] - $b['position'];
+            });
 
-                $tableRows[] = $row;
+            $tableRows = $positionGroups;
+
+            $totals = [
+                'carton_count' => 0,
+                'per_size'     => array_fill_keys($sizeOrder, 0),
+                'total_pieces' => 0,
+            ];
+
+            foreach ($tableRows as $row) {
+                $totals['carton_count'] += $row['ttl_ctn'];
+                foreach ($row['per_size'] as $size => $qty) {
+                    if (isset($totals['per_size'][$size])) {
+                        $totals['per_size'][$size] += $qty;
+                    }
+                }
+                $totals['total_pieces'] += $row['total'];
             }
 
             $tableData = [
@@ -3152,39 +3496,38 @@ class PackingListController extends BaseController
                 'totals'    => $totals,
             ];
 
-            // Pass totals or leave variables for view consistency
             $totalCtn = $totals['carton_count'];
-            // If you have weight totals, compute similarly; otherwise leave as 0
-            $totalNetWeight = $totals['total_pieces'] * 0; // or sum from rows if meaningful
+            $totalNetWeight = $totals['total_pieces'] * 0;
             $totalGrossWeight = $totals['total_pieces'] * 0;
 
-            $dispatchQuantities = collect(); // Collection to store dispatch quantities by dispatch number
+            $dispatchQuantities = collect();
             $totalDispatches = 0;
-            $orderQuantitiesFromAllPacks = collect(); // This will store the total order qty from all packing lists
+            $orderQuantitiesFromAllPacks = collect();
+            $currentDispatchNumber = 1;
 
             if (in_array($packingList->vendor_id, [1, 5, 6])) {
-                // Get all packing lists for this PO ordered by ID (chronological order)
                 $allPackingLists = PackingListMaster::where('po_id', $packingList->po_id)
                     ->orderBy('id', 'asc')
                     ->get();
 
                 $totalDispatches = $allPackingLists->count();
 
-                // Calculate ORDER QTY from all packing lists for this PO (total packed quantities across all dispatches)
-                $allPackingListIds = $allPackingLists->pluck('id')->toArray();
-                $allPackingListItems = PackingListItem::whereIn('packing_list_id', $allPackingListIds)->get();
+                // Initialize with position order
+                foreach ($sizeOrder as $size) {
+                    $orderQuantitiesFromAllPacks[$size] = 0;
+                }
 
-                $orderQuantitiesFromAllPacks = PackingListConfigItem::where('po_id', $packingList->po_id)
+                $configOrderQty = PackingListConfigItem::where('po_id', $packingList->po_id)
                     ->where('status', 0)
                     ->where('color', $packingList->color)
-                    ->groupBy('size')
-                    ->selectRaw('size, SUM(po_qty) as total_pack_qty')
-                    ->pluck('total_pack_qty', 'size');
+                    ->get();
 
-                // Find the position of current packing list
-                $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
-                    return $item->id == $packingList->id;
-                });
+                foreach ($configOrderQty as $config) {
+                    if (in_array($config->size, $sizeOrder)) {
+                        $currentQty = $orderQuantitiesFromAllPacks->get($config->size, 0);
+                        $orderQuantitiesFromAllPacks[$config->size] = $currentQty + $config->po_qty;
+                    }
+                }
 
                 // Find the position of current packing list
                 $currentPackingListIndex = $allPackingLists->search(function ($item) use ($packingList) {
@@ -3199,12 +3542,19 @@ class PackingListController extends BaseController
                         // Get items for this specific packing list
                         $packingListItems = PackingListItem::where('packing_list_id', $pList->id)->get();
 
+                        // Initialize with position order
+                        $dispatchQtyBySize = collect();
+                        foreach ($sizeOrder as $size) {
+                            $dispatchQtyBySize[$size] = 0;
+                        }
+
                         // Calculate quantities by size for this dispatch
-                        $dispatchQtyBySize = $packingListItems
-                            ->groupBy('size')
-                            ->map(function ($items) {
-                                return $items->sum('quantity');
-                            });
+                        foreach ($packingListItems as $item) {
+                            if (in_array($item->size, $sizeOrder)) {
+                                $currentQty = $dispatchQtyBySize->get($item->size, 0);
+                                $dispatchQtyBySize[$item->size] = $currentQty + $item->quantity;
+                            }
+                        }
 
                         $dispatchQuantities[$dispatchNumber] = $dispatchQtyBySize;
                     }
@@ -3251,15 +3601,12 @@ class PackingListController extends BaseController
             'totalCtn'                 => $totalCtn,
             'totalNetWeight'           => $totalNetWeight,
             'totalGrossWeight'         => $totalGrossWeight,
-            'dispatchQuantities'       => $dispatchQuantities, // Add this
-            'totalDispatches'          => $totalDispatches,    // Add this
-            'orderQuantitiesFromAllPacks' => $orderQuantitiesFromAllPacks, // Add this
-            'currentDispatchNumber'    => $currentDispatchNumber, // Add this
-            'totalCbm'    => $totalCbm, // Add this
+            'dispatchQuantities'       => $dispatchQuantities,
+            'totalDispatches'          => $totalDispatches,
+            'orderQuantitiesFromAllPacks' => $orderQuantitiesFromAllPacks,
+            'currentDispatchNumber'    => $currentDispatchNumber,
+            'totalCbm'    => $totalCbm ?? null,
         ];
-
-        //echo "<pre>".print_r($viewData,true)."</pre>";
-        // dd($viewData);
 
         // Choose the correct view template
         if ($packingList->vendor_id == 4) {

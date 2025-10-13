@@ -17,6 +17,8 @@ use App\Models\PackingListMaster;
 use App\Models\PoMaster;
 use App\Exports\SummaryExport;
 use App\Exports\SizeWiseExport;
+use App\Models\JobOrderMaster;
+use App\Models\JobOrderSizeMaster;
 
 class ReportController extends BaseController
 {
@@ -502,9 +504,12 @@ class ReportController extends BaseController
             $poQty = PackingListConfigItem::where('po_id', $po_id)
                 ->sum('po_qty');
 
-            // Get total ORS qty (pack_qty) from config items
-            $orsQty = PackingListConfigItem::where('po_id', $po_id)
-                ->sum('pack_qty');
+            // Get total ORS qty from JobOrderSizeMaster
+            $orsQty = 0;
+            if ($po->po_job_id) {
+                $orsQty = JobOrderSizeMaster::where('job_id', $po->po_job_id)
+                    ->sum('qty');
+            }
 
             // Get packed qty from packing list items created on the date
             $packedQty = PackingListItem::whereDate('created_at', $date)
@@ -579,11 +584,12 @@ class ReportController extends BaseController
                         ->where('color', $color)
                         ->sum('po_qty');
 
-                    // Get total ORS qty for this color
-                    $orsQty = PackingListConfigItem::where('po_id', $po_id)
-                        ->where('vendor_id', $vendor_id)
-                        ->where('color', $color)
-                        ->sum('pack_qty');
+                    // Get total ORS qty from JobOrderSizeMaster
+                    $orsQty = 0;
+                    if ($po->po_job_id) {
+                        $orsQty = JobOrderSizeMaster::where('job_id', $po->po_job_id)
+                            ->sum('qty');
+                    }
 
                     // Get size-wise packed quantities for this color
                     $sizeWisePacked = PackingListItem::whereDate('created_at', $date)
@@ -655,8 +661,12 @@ class ReportController extends BaseController
             $poQty = PackingListConfigItem::where('po_id', $po_id)
                 ->sum('po_qty');
 
-            $orsQty = PackingListConfigItem::where('po_id', $po_id)
-                ->sum('pack_qty');
+            // Get total ORS qty from JobOrderSizeMaster
+            $orsQty = 0;
+            if ($po->po_job_id) {
+                $orsQty = JobOrderSizeMaster::where('job_id', $po->po_job_id)
+                    ->sum('qty');
+            }
 
             $packedQty = PackingListItem::whereDate('created_at', $date)
                 ->whereHas('packingList', function ($q) use ($po_id) {
@@ -680,7 +690,7 @@ class ReportController extends BaseController
 
         $filename = "Daily-Packing-Summary-All-Vendors-{$date}.xlsx";
 
-        return Excel::download(new SummaryExport($summaryData, $date, 'All Vendors'), $filename);
+        return Excel::download(new SummaryExport($summaryData, $date), $filename);
     }
 
     public function daily_packing_sizewise_export(Request $request)
@@ -719,7 +729,7 @@ class ReportController extends BaseController
             $vendorPackingListIds = $vendorPackingListMasters->pluck('po_id')->unique()->toArray();
 
             foreach ($vendorPackingListIds as $po_id) {
-                $po = PoMaster::find($po_id);
+                $po = PoMaster::with('job_order')->find($po_id);
                 if (!$po) continue;
 
                 // Get packing table number from PackingListMaster
@@ -742,10 +752,12 @@ class ReportController extends BaseController
                         ->where('color', $color)
                         ->sum('po_qty');
 
-                    $orsQty = PackingListConfigItem::where('po_id', $po_id)
-                        ->where('vendor_id', $vendor_id)
-                        ->where('color', $color)
-                        ->sum('pack_qty');
+                    // Get total ORS qty from JobOrderMaster (not color-based)
+                    $orsQty = 0;
+                    if ($po->po_job_id) {
+                        $orsQty = JobOrderSizeMaster::where('job_id', $po->po_job_id)
+                            ->sum('qty');
+                    }
 
                     $sizeWisePacked = PackingListItem::whereDate('created_at', $date)
                         ->where('vendor_id', $vendor_id)
@@ -787,6 +799,6 @@ class ReportController extends BaseController
 
         $filename = "Daily-Packing-SizeWise-All-Vendors-{$date}.xlsx";
 
-        return Excel::download(new SizeWiseExport($sizeWiseData, $allSizes, $date, 'All Vendors'), $filename);
+        return Excel::download(new SizeWiseExport($sizeWiseData, $allSizes, $date), $filename);
     }
 }

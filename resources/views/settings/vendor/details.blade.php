@@ -230,6 +230,54 @@
                                         </div>
                                     </td>
                                 </tr>
+                                @if($vendor_details->id == 2)
+                                <!-- UAE Shipping Address Fields -->
+                                <tr>
+                                    <td colspan="3">
+                                        <div class="alert alert-info mb-3">
+                                            <i class="fas fa-globe me-2"></i>UAE Shipping Address
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td colspan="3">
+                                        <div class="d-flex flex-column gap-1">
+                                            <span class="text-uppercase text-secondary" style="font-size: 11px;">UAE Legal Name</span>
+                                            <span class="fw-semibold text-dark">{{ $vendor_details->uae_shipping_legal_name ?? 'N/A' }}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td colspan="3">
+                                        <div class="d-flex flex-column gap-1">
+                                            <span class="text-uppercase text-secondary" style="font-size: 11px;">UAE Address Line 1</span>
+                                            <span class="fw-semibold text-dark">{{ $vendor_details->uae_shipping_address_1 ?? 'N/A' }}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td colspan="3">
+                                        <div class="d-flex flex-column gap-1">
+                                            <span class="text-uppercase text-secondary" style="font-size: 11px;">UAE Address Line 2</span>
+                                            <span class="fw-semibold text-dark">{{ $vendor_details->uae_shipping_address_2 ?? 'N/A' }}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div class="d-flex flex-column gap-1">
+                                            <span class="text-uppercase text-secondary" style="font-size: 11px;">UAE City/Town/Village</span>
+                                            <span class="fw-semibold text-dark">{{ $vendor_details->uae_shipping_city_town_village ?? 'N/A' }}</span>
+                                        </div>
+                                    </td>
+                                    <td colspan="2">
+                                        <div class="d-flex flex-column gap-1">
+                                            <span class="text-uppercase text-secondary" style="font-size: 11px;">UAE Place Supply</span>
+                                            <span class="fw-semibold text-dark">{{ $vendor_details->uae_shipping_place_supply ?? 'N/A' }}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @endif
                             </table>
                         </div>
                     </div>

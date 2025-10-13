@@ -62,6 +62,22 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                 @endif
                 <!-- End::slide -->
 
+                <li class="slide has-sub {{ request()->is('job_order*') ? 'active open' : '' }}">
+                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('job_order*') ? 'active open' : '' }}">
+                        <i class="side-menu__icon fa-solid fa-folder-open"></i>
+                        <span class="side-menu__label ">Job Order</span>
+                        <i class="fe fe-chevron-right side-menu__angle"></i>
+                    </a>
+                    <ul class="slide-menu child1">
+                        <li class="slide">
+                            <a href="{{ route('job_order_add') }}" class="side-menu__item {{ request()->routeIs('job_order_add') ? 'active' : '' }}">Entry</a>
+                        </li>
+                        <li class="slide">
+                            <a href="{{ route('job_order_master') }}" class="side-menu__item {{ request()->routeIs('job_order_master') ? 'active' : '' }}">Master</a>
+                        </li>
+                    </ul>
+                </li>
+
                 <!-- Start::slide -->
                 <li class="slide has-sub {{ request()->is('po*') ? 'active open' : '' }}">
                     <a href="javascript:void(0);" class="side-menu__item {{ request()->is('po*') ? 'active' : '' }}">
@@ -165,6 +181,11 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                                 @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor-carton', 'list-vendor-carton', 'view-vendor-carton']))
                                 <li class="slide">
                                     <a href="{{route('carton_jack_master')}}" class="side-menu__item {{ request()->routeIs('carton_jack_master') ? 'active' : '' }}">Carton</a>
+                                </li>
+                                @endif
+                                @if($isSuperAdmin || auth()->user()->hasAnyDirectPermission(['create-vendor', 'list-vendor', 'view-vendor']))
+                                <li class="slide">
+                                    <a href="{{route('size_chart_master')}}" class="side-menu__item {{ request()->routeIs('size_chart_master') ? 'active' : '' }}">Size Chart</a>
                                 </li>
                                 @endif
                             </ul>

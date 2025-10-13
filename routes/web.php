@@ -12,6 +12,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\TransportController;
 use App\Http\Controllers\EInvoiceController;
 use App\Http\Controllers\AutoPackingListController;
+use App\Http\Controllers\JobOrderController;
 use App\Http\Controllers\ReportController;
 
 /*
@@ -146,6 +147,18 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/excel_download', [EInvoiceController::class, 'e_invoice_excel_download'])->name('e_invoice_excel_download');
     });
 
+    Route::group(['prefix' => 'job_order'], function () {
+        Route::get('/add', [JobOrderController::class, 'add'])->name('job_order_add');
+        Route::post('/get_sizes_by_vendor', [JobOrderController::class, 'get_sizes_by_vendor'])->name('get_sizes_by_vendor');
+        Route::post('/store', [JobOrderController::class, 'store'])->name('job_order_store');
+        Route::get('/master', [JobOrderController::class, 'master'])->name('job_order_master');
+        Route::post('/table', [JobOrderController::class, 'table'])->name('job_order_table');
+        Route::post('/details', [JobOrderController::class, 'get_job_order_details'])->name('get_job_order_details');
+        Route::get('/edit/{id}', [JobOrderController::class, 'edit'])->name('job_order_edit');
+        Route::put('/update/{id}', [JobOrderController::class, 'update'])->name('job_order_update');
+        Route::post('/delete', [JobOrderController::class, 'delete'])->name('job_order_delete');
+    });
+
     Route::group(['prefix' => 'report'], function () {
         Route::get('/dispatch_status', [ReportController::class, 'dispatch_status_report_master'])->name('dispatch_status_report_master');
         Route::post('/dispatch_status_table', [ReportController::class, 'dispatch_status_report_table'])->name('dispatch_status_report_table');
@@ -183,6 +196,16 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
                 Route::post('/edit', [VendorController::class, 'carton_edit'])->name('carton_edit');
                 Route::post('/update', [VendorController::class, 'carton_update'])->name('carton_update');
                 Route::post('/delete', [VendorController::class, 'carton_delete'])->name('carton_delete');
+            });
+
+            Route::group(['prefix' => 'size_chart'], function () {
+                Route::get('/master', [VendorController::class, 'size_chart_master'])->name('size_chart_master');
+                Route::post('/add', [VendorController::class, 'size_chart_add'])->name('size_chart_add');
+                Route::post('/store', [VendorController::class, 'size_chart_store'])->name('size_chart_store');
+                Route::post('/details', [VendorController::class, 'get_size_chart_details'])->name('get_size_chart_details');
+                Route::post('/edit', [VendorController::class, 'size_chart_edit'])->name('size_chart_edit');
+                Route::post('/update', [VendorController::class, 'size_chart_update'])->name('size_chart_update');
+                Route::post('/delete', [VendorController::class, 'size_chart_delete'])->name('size_chart_delete');
             });
         });
 

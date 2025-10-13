@@ -26,6 +26,7 @@ class InvoiceMaster extends Model
         'transporter_details',
         'grn_details',
         'vendor_id',
+        'country',
         'invoice_status_id',
         'created_at',
         'created_by',

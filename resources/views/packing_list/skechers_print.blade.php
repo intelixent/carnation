@@ -133,6 +133,59 @@
 </head>
 
 <body>
+    @php
+    // Determine which address to use based on country from packing list items
+    $useUAEAddress = false;
+    $countryFromItems = 'INDIA'; // Default
+
+    if($packing_list->items->isNotEmpty()) {
+    $firstItem = $packing_list->items->first();
+    $countryFromItems = strtoupper(trim($firstItem->country ?? 'INDIA'));
+
+    // Use UAE address if country is "UAE" and vendor_id is 2
+    $useUAEAddress = ($countryFromItems === 'UAE' && $packing_list->vendor_id == 2);
+    }
+
+    // Get shipping address based on country
+    $allAddressLines = [];
+
+    if($useUAEAddress && $packing_list->vendor) {
+    // UAE Shipping Address for vendor_id = 2 when country is "UAE"
+    $allAddressLines = array_filter([
+    $packing_list->vendor->uae_shipping_legal_name ?? '',
+    $packing_list->vendor->uae_shipping_address_1 ?? '',
+    $packing_list->vendor->uae_shipping_address_2 ?? '',
+    $packing_list->vendor->uae_shipping_city_town_village ?? '',
+    $packing_list->vendor->uae_shipping_place_supply ?? '',
+    ]);
+    } else {
+    // India Shipping Address (default) - Get from PO vendor_del_adr
+    if(isset($packing_list->po->vendor_del_adr)) {
+    $vendorAddress = $packing_list->po->vendor_del_adr;
+    if(is_string($vendorAddress)) {
+    $vendorAddress = json_decode($vendorAddress, true);
+    }
+    if(is_array($vendorAddress)) {
+    foreach($vendorAddress as $line) {
+    if(is_string($line)) {
+    $parts = explode('",', $line);
+    foreach($parts as $part) {
+    $trimmed = trim($part, ' "\'');
+    if(!empty($trimmed)) {
+    $allAddressLines[] = $trimmed;
+    }
+    }
+    }
+    }
+    }
+    }
+    }
+
+    // Add label for debugging/display
+    $addressLabel = $useUAEAddress ? 'UAE' : 'INDIA';
+    $displayCountry = $useUAEAddress ? 'UAE' : 'INDIA';
+    @endphp
+
     <!-- Main Packing Table -->
     <table style="width:100%; border-collapse: collapse; border: 1px solid black; font-weight: bold;">
         <!-- Header -->
@@ -141,6 +194,7 @@
                 PACKING LIST
             </td>
         </tr>
+
         <!-- Row 1 -->
         <tr>
             <td style="width: 10%; text-align: left; border: none;">UNIT</td>
@@ -152,30 +206,6 @@
             <td style="width: 25%; border: none; border-left: 1px solid black;"></td>
         </tr>
 
-        @php
-        $allAddressLines = [];
-
-        if(isset($packing_list->po->vendor_del_adr)) {
-        $vendorAddress = $packing_list->po->vendor_del_adr;
-        if(is_string($vendorAddress)) {
-        $vendorAddress = json_decode($vendorAddress, true);
-        }
-        if(is_array($vendorAddress)) {
-        foreach($vendorAddress as $line) {
-        if(is_string($line)) {
-        $parts = explode('",', $line);
-        foreach($parts as $part) {
-        $trimmed = trim($part);
-        if(!empty($trimmed)) {
-        $allAddressLines[] = $trimmed;
-        }
-        }
-        }
-        }
-        }
-        }
-        @endphp
-
         <!-- Row 2 -->
         <tr>
             <td style="border: none; text-align: left;">PO NO</td>
@@ -185,7 +215,7 @@
             <td style="border: none; text-align: right;">Ship To,</td>
             <!-- Last column: only left border -->
             <td style="width: 25%; border: none; border-left: 1px solid black;">
-                {{ $allAddressLines[0] ?? 'No Address Line 1' }}
+                {{ $allAddressLines[0] ?? 'No Address Available' }}
             </td>
         </tr>
 
