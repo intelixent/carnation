@@ -19,6 +19,8 @@ class PoMaster extends Model
         'vendor_id',
         'po_ref_num',
         'po_job_num',
+        'po_job_id',
+        'po_job_type',
         'po_num',
         'po_date',
         'goods_ready_date',
@@ -63,5 +65,10 @@ class PoMaster extends Model
     public function packingListConfigs()
     {
         return $this->hasMany(PackingListConfigMaster::class, 'po_id');
+    }
+
+    public function job_order()
+    {
+        return $this->belongsTo(JobOrderMaster::class, 'po_job_id');
     }
 }

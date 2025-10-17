@@ -13,6 +13,7 @@ use App\Utils\POutils;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Models\JobOrderMaster;
 use Yajra\DataTables\Facades\DataTables;
 
 class PdfExtractController extends BaseController
@@ -623,7 +624,7 @@ class PdfExtractController extends BaseController
                 // Sort by total quantity (highest first)
                 usort($group, fn($a, $b) => $b['total_qty'] <=> $a['total_qty']);
                 foreach ($group as $i => $item) {
-                    $countryMap[$item['index']] = $i === 0 ? 'India' : 'Other';
+                    $countryMap[$item['index']] = $i === 0 ? 'India' : 'UAE';
                 }
             }
         }
@@ -987,23 +988,35 @@ class PdfExtractController extends BaseController
             ]);
         }
 
-        return view('pdf_extract.amend_details', compact('po_master'));
+        $job_orders = JobOrderMaster::where('vendor_id', $po_master->vendor_id)
+            ->where('status', 0)
+            ->select('id', 'job_no', 'type')
+            ->get();
+
+        return view('pdf_extract.amend_details', compact('po_master', 'job_orders'));
     }
 
     public function po_amended(Request $request)
     {
         $request->validate([
-            'po_id'      => 'required',
-            'job_number' => 'required',
+            'po_id' => 'required',
+            'job_order_id' => 'required|exists:job_order_master,id',
         ]);
 
         $po = PoMaster::findOrFail($request->po_id);
-        $po->status     = 1;
-        $po->po_job_num = $request->job_number;
-        $po->remarks    = $request->remarks;
-        $po->amended_at    =  now();
-        $po->amended_by    = auth()->user()->id;
+        $job_order = JobOrderMaster::findOrFail($request->job_order_id);
+
+        $po->status = 1;
+        $po->po_job_num = $job_order->job_no;
+        $po->po_job_id = $job_order->id;
+        $po->po_job_type = $job_order->type;
+        $po->remarks = $request->remarks;
+        $po->amended_at = now();
+        $po->amended_by = auth()->user()->id;
         $po->save();
+
+        $job_order->status = 1;
+        $job_order->save();
 
         return response()->json([
             'success' => true,

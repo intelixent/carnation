@@ -13,9 +13,22 @@
                 <input type="hidden" name="po_id" value="{{ $po_master->id }}" />
 
                 <div class="row mb-3">
-                    <label for="job_number" class="col-form-label col-sm-2">Job Number:</label>
+                    <label for="job_order_id" class="col-form-label col-sm-2">Job Order:</label>
                     <div class="col-sm-10">
-                        <input type="text" class="form-control" id="job_number" name="job_number" required />
+                        <select class="form-control select2-modal" id="job_order_id" name="job_order_id" required>
+                            <option value="">Select Job Order</option>
+                            @if($job_orders->count() > 0)
+                            @foreach($job_orders as $job_order)
+                            <option value="{{ $job_order->id }}">{{ $job_order->job_no }}
+                                @if($job_order->type)
+                                - {{ $job_order->type }}
+                                @endif
+                            </option>
+                            @endforeach
+                            @else
+                            <option value="" disabled>No job orders available for this vendor</option>
+                            @endif
+                        </select>
                     </div>
                 </div>
 
@@ -29,8 +42,11 @@
         </div>
 
         <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"> Close</button>
-            <button type="submit" form="amendForm" class="btn btn-primary"> Save Changes</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="submit" form="amendForm" class="btn btn-primary"
+                @if($job_orders->count() == 0) disabled @endif>
+                Save Changes
+            </button>
         </div>
     </div>
 </div>

@@ -157,6 +157,59 @@
                     <!-- Shipping Address Tab -->
                     <div class="tab-pane" id="nav-shipping" role="tabpanel">
                         <h6 class="mb-3 text-success">Shipping Address</h6>
+
+                        @if($vendor_details['id'] == 2)
+                        <!-- UAE Shipping Address Section -->
+                        <div class="alert alert-info mb-4">
+                            <i class="fas fa-globe me-2"></i><strong>UAE Shipping Address</strong>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-sm-12">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="uae_shipping_legal_name" name="uae_shipping_legal_name" value="{{ $vendor_details['uae_shipping_legal_name'] }}" placeholder="UAE Legal Name">
+                                    <label for="uae_shipping_legal_name">UAE Legal Name</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <textarea class="form-control" id="uae_shipping_address_1" name="uae_shipping_address_1" placeholder="UAE Address Line 1" style="height: 80px">{{ $vendor_details['uae_shipping_address_1'] }}</textarea>
+                                    <label for="uae_shipping_address_1">UAE Address Line 1</label>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <textarea class="form-control" id="uae_shipping_address_2" name="uae_shipping_address_2" placeholder="UAE Address Line 2" style="height: 80px">{{ $vendor_details['uae_shipping_address_2'] }}</textarea>
+                                    <label for="uae_shipping_address_2">UAE Address Line 2</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="uae_shipping_city_town_village" name="uae_shipping_city_town_village" value="{{ $vendor_details['uae_shipping_city_town_village'] }}" placeholder="UAE City/Town/Village">
+                                    <label for="uae_shipping_city_town_village">UAE City/Town/Village</label>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="uae_shipping_place_supply" name="uae_shipping_place_supply" value="{{ $vendor_details['uae_shipping_place_supply'] }}" placeholder="UAE Place Supply">
+                                    <label for="uae_shipping_place_supply">UAE Place Supply</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+                        <div class="alert alert-secondary mb-4">
+                            <i class="fas fa-map-marker-alt me-2"></i><strong>Regular Shipping Address</strong>
+                        </div>
+                        @endif
+
+                        <!-- Regular Shipping Address Fields (existing code) -->
                         <div class="row mb-3">
                             <div class="col-sm-6">
                                 <div class="form-floating">
@@ -174,6 +227,8 @@
                                 </select>
                             </div>
                         </div>
+
+                        <!-- Rest of the existing shipping fields remain the same -->
                         <div class="row mb-3">
                             <div class="col-sm-6">
                                 <div class="form-floating">
@@ -188,6 +243,7 @@
                                 </div>
                             </div>
                         </div>
+
                         <div class="row mb-3">
                             <div class="col-sm-6">
                                 <div class="form-floating">
@@ -202,6 +258,7 @@
                                 </div>
                             </div>
                         </div>
+
                         <div class="row mb-3">
                             <div class="col-sm-6">
                                 <div class="form-floating">
@@ -216,6 +273,7 @@
                                 </div>
                             </div>
                         </div>
+
                         <div class="row mb-3">
                             <div class="col-sm-6">
                                 <div class="form-floating">

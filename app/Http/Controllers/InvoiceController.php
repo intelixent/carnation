@@ -78,22 +78,43 @@ class InvoiceController extends BaseController
     {
         $poId = $request->id;
         $vendor_id = $request->vendor_id;
-        // $packed_lists = PackingListMaster::where(array('po_id' => $poId, 'pack_status' => 1))->withCount('items')->get();
-        $packed_lists = DB::table('packing_list_items as pli')
-            ->join('packing_list_masters as plm', 'pli.packing_list_id', '=', 'plm.id')
-            ->select(
-                'pli.packing_list_id as id',
-                'plm.pack_ref_no',
-                DB::raw('MIN(pli.created_at) as created_at'),
-                DB::raw('MIN(pli.color) as color'),
-                DB::raw('COUNT(DISTINCT pli.carton_name) as carton_count')
-            )
-            ->where('plm.po_id', $poId)
-            ->where('plm.pack_status', 1)
-            ->groupBy('pli.packing_list_id', 'plm.pack_ref_no')
-            ->get();
 
-        if (!$packed_lists) {
+        if ($vendor_id == 2) {
+            // For vendor ID 2, group by country and show country information
+            $packed_lists = DB::table('packing_list_items as pli')
+                ->join('packing_list_masters as plm', 'pli.packing_list_id', '=', 'plm.id')
+                ->select(
+                    'pli.packing_list_id as id',
+                    'plm.pack_ref_no',
+                    'pli.country',
+                    DB::raw('MIN(pli.created_at) as created_at'),
+                    DB::raw('MIN(pli.color) as color'),
+                    DB::raw('COUNT(DISTINCT pli.carton_name) as carton_count')
+                )
+                ->where('plm.po_id', $poId)
+                ->where('plm.pack_status', 1)
+                ->where('plm.vendor_id', $vendor_id)
+                ->groupBy('pli.packing_list_id', 'plm.pack_ref_no', 'pli.country')
+                ->get();
+        } else {
+            // For other vendors, use existing logic
+            $packed_lists = DB::table('packing_list_items as pli')
+                ->join('packing_list_masters as plm', 'pli.packing_list_id', '=', 'plm.id')
+                ->select(
+                    'pli.packing_list_id as id',
+                    'plm.pack_ref_no',
+                    DB::raw('MIN(pli.created_at) as created_at'),
+                    DB::raw('MIN(pli.color) as color'),
+                    DB::raw('COUNT(DISTINCT pli.carton_name) as carton_count'),
+                    DB::raw('NULL as country')
+                )
+                ->where('plm.po_id', $poId)
+                ->where('plm.pack_status', 1)
+                ->groupBy('pli.packing_list_id', 'plm.pack_ref_no')
+                ->get();
+        }
+
+        if ($packed_lists->isEmpty()) {
             return response()->json(['error' => 'Not found'], 404);
         }
 
@@ -135,7 +156,29 @@ class InvoiceController extends BaseController
             'invoice_no'         => 'required|string|max:100|unique:invoice_masters,ref_no',
             'invoice_date'       => 'required|date',
             'gst'                => 'required|numeric|min:0|max:100',
+            'country'            => 'nullable|string|max:100', // Add country validation
         ]);
+
+        // For vendor ID 2, validate that all selected packing lists have the same country
+        if ($data['selected_vendor_id'] == 2) {
+            $countries = PackingListItem::whereIn('packing_list_id', $data['selectedpackids'])
+                ->distinct()
+                ->pluck('country')
+                ->filter()
+                ->unique();
+
+            if ($countries->count() > 1) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'All selected packing lists must be from the same country for this vendor.',
+                ], 422);
+            }
+
+            // Get the country for the invoice
+            $invoiceCountry = $countries->first();
+        } else {
+            $invoiceCountry = null;
+        }
 
         try {
             $invoice = InvoiceMaster::create([
@@ -147,6 +190,7 @@ class InvoiceController extends BaseController
                 'po_id'             => $data['selected_po'],
                 'pack_ids'          => implode(',', $data['selectedpackids']),
                 'vendor_id'         => $data['selected_vendor_id'],
+                'country'           => $invoiceCountry, // Store country in invoice
                 'invoice_status_id' => 1,
                 'created_by'        => auth()->id(),
                 'created_at'        => now(),
@@ -366,122 +410,185 @@ class InvoiceController extends BaseController
         // Get invoice GST rate
         $invoiceGstRate = floatval($invoice->gst);
 
-        // Group items by size, aggregate all colors, sum quantities & cartons
-        $packedItems = PackingListItem::whereIn('packing_list_id', $packIds)
-            ->select([
-                'size',
-                DB::raw('GROUP_CONCAT(DISTINCT color ORDER BY color SEPARATOR ", ") AS colors'),
-                DB::raw('SUM(quantity) AS total_quantity'),
-                DB::raw('COUNT(DISTINCT carton_name) AS carton_counts'),
-            ])
-            ->groupBy('size')
-            ->get();
-
         // Build invoice line‑items array
         $items = [];
         $poUnitPrice = floatval($po_details->vcp);
         $articleInfo = json_decode($po_details->article_info, true) ?: [];
 
-        foreach ($packedItems as $pi) {
-            $description = $style = $hsn_code = '';
-            $uom = 'PCS';
-            $unit_price = $poUnitPrice;
+        // Special handling for vendor ID 7
+        if ($vendor->id === 7) {
+            // Group by location and size only, aggregate colors, sum quantities
+            $packedItems = PackingListItem::whereIn('packing_list_id', $packIds)
+                ->join('po_items', 'packing_list_items.po_item_id', '=', 'po_items.id')
+                ->select([
+                    'po_items.location',
+                    'packing_list_items.size',
+                    DB::raw('GROUP_CONCAT(DISTINCT packing_list_items.color ORDER BY packing_list_items.color SEPARATOR ", ") AS colors'),
+                    DB::raw('SUM(packing_list_items.quantity) AS total_quantity'),
+                    DB::raw('COUNT(DISTINCT packing_list_items.carton_name) AS carton_counts'),
+                ])
+                ->groupBy('po_items.location', 'packing_list_items.size')
+                ->get();
 
-            // Choose a representative color for lookups
-            $colors = explode(',', $pi->colors);
-            $firstColor = trim($colors[0]);
+            foreach ($packedItems as $pi) {
+                // Get first color for lookups
+                $colors = explode(',', $pi->colors);
+                $firstColor = trim($colors[0]);
 
-            // Fetch PoItems by representative color & size
-            $itm = PoItems::where('po_id', $po_details->id)
-                ->where('size', $pi->size)
-                ->where('color', $firstColor)
-                ->first();
+                // Fetch po_items data by location, size, and representative color
+                $poItem = PoItems::where('po_id', $po_details->id)
+                    ->where('location', $pi->location)
+                    ->where('size', $pi->size)
+                    ->where('color', $firstColor)
+                    ->first();
 
-            // Use invoice GST rate
-            $igstRate = $invoiceGstRate;
+                $description = $poItem->style_description ?? '';
+                $hsn_code = $poItem->hsn_code ?? '';
+                $style = $poItem->article_number ?? '';
+                $location = $pi->location ?? '';
+                $uom = $poItem->uom ?? 'PCS';
+                $unit_price = $poItem ? floatval($poItem->material_value ?? 0) : $poUnitPrice;
+                $igstRate = $invoiceGstRate;
 
-            switch ($vendor->id) {
-                case 1:
-                case 5:
-                case 6:
-                    $description = $articleInfo['Article description'] ?? '';
-                    $style = $articleInfo['ARTICLE'] ?? '';
-                    if ($itm) {
-                        $hsn_code = $itm->hsn_code;
-                        $uom = $itm->uom;
-                    }
-                    break;
+                // Compute amounts
+                $amount = $pi->total_quantity * $unit_price;
+                $discountPct = $vendor->discount ?? 0;
+                $discountAmount = ($amount * $discountPct) / 100;
+                $taxableValue = $amount - $discountAmount;
+                $igstAmount = ($taxableValue * $igstRate) / 100;
 
-                case 4:
-                    $poSize = PoSizes::where('po_id', $po_details->id)
-                        ->where('size', $pi->size)
-                        ->where('color', $firstColor)
-                        ->first();
-                    if ($poSize) {
-                        $unit_price = $poSize->unit_price ?: $unit_price;
-                        $hsn_code = $poSize->hsn_code ?? '';
-                        $uom = $poSize->uom ?? 'PCS';
-                    }
-                    if ($itm) {
-                        $unit_price = $unit_price ?: floatval($itm->unit_price);
-                        $hsn_code = $hsn_code ?: $itm->hsn_code;
-                        $uom = $uom ?: $itm->uom;
-                        $description = $itm->part_description ?? '';
-                        $style = $itm->article_number ?? '';
-                    }
-                    break;
+                $items[] = [
+                    'description' => $description,
+                    'hsn_code' => $hsn_code,
+                    'order_no' => $po_details->po_num ?? '',
+                    'style' => $style,
+                    'location' => $location,
+                    'colors' => $pi->colors,
+                    'total_cartons' => $pi->carton_counts,
+                    'unit' => $uom,
+                    'size' => $pi->size,
+                    'qty' => $pi->total_quantity,
+                    'rate' => $unit_price,
+                    'amount' => $amount,
+                    'discount' => $discountAmount,
+                    'taxable_value' => $taxableValue,
+                    'igst_rate' => $igstRate,
+                    'igst_amount' => $igstAmount,
+                ];
+            }
+        } else {
+            // Original logic for other vendors - Group items by size only
+            $packedItems = PackingListItem::whereIn('packing_list_id', $packIds)
+                ->select([
+                    'size',
+                    DB::raw('GROUP_CONCAT(DISTINCT color ORDER BY color SEPARATOR ", ") AS colors'),
+                    DB::raw('SUM(quantity) AS total_quantity'),
+                    DB::raw('COUNT(DISTINCT carton_name) AS carton_counts'),
+                ])
+                ->groupBy('size')
+                ->get();
 
-                case 2:
-                case 3:
-                    if ($itm) {
-                        $unit_price = floatval($itm->unit_price ?? 0);
-                        $hsn_code = $itm->hsn_code ?? '';
-                        $uom = $itm->uom ?? 'PCS';
-                        if ($vendor->id === 2) {
-                            $description = $itm->type;
-                            $style = $itm->article_number;
-                        } else {
-                            $description = $itm->style_description;
-                            $style = $itm->article_number;
+            foreach ($packedItems as $pi) {
+                $description = $style = $hsn_code = '';
+                $uom = 'PCS';
+                $unit_price = $poUnitPrice;
+
+                // Choose a representative color for lookups
+                $colors = explode(',', $pi->colors);
+                $firstColor = trim($colors[0]);
+
+                // Fetch PoItems by representative color & size
+                $itm = PoItems::where('po_id', $po_details->id)
+                    ->where('size', $pi->size)
+                    ->where('color', $firstColor)
+                    ->first();
+
+                // Use invoice GST rate
+                $igstRate = $invoiceGstRate;
+
+                switch ($vendor->id) {
+                    case 1:
+                    case 5:
+                    case 6:
+                        $description = $articleInfo['Article description'] ?? '';
+                        $style = $articleInfo['ARTICLE'] ?? '';
+                        if ($itm) {
+                            $hsn_code = $itm->hsn_code;
+                            $uom = $itm->uom;
                         }
-                    }
-                    break;
+                        break;
 
-                default:
-                    $description = $articleInfo['Article description'] ?? '';
-                    $style = $articleInfo['ARTICLE'] ?? '';
-                    break;
+                    case 4:
+                        $poSize = PoSizes::where('po_id', $po_details->id)
+                            ->where('size', $pi->size)
+                            ->where('color', $firstColor)
+                            ->first();
+                        if ($poSize) {
+                            $unit_price = $poSize->unit_price ?: $unit_price;
+                            $hsn_code = $poSize->hsn_code ?? '';
+                            $uom = $poSize->uom ?? 'PCS';
+                        }
+                        if ($itm) {
+                            $unit_price = $unit_price ?: floatval($itm->unit_price);
+                            $hsn_code = $hsn_code ?: $itm->hsn_code;
+                            $uom = $uom ?: $itm->uom;
+                            $description = $itm->part_description ?? '';
+                            $style = $itm->article_number ?? '';
+                        }
+                        break;
+
+                    case 2:
+                    case 3:
+                        if ($itm) {
+                            $unit_price = floatval($itm->unit_price ?? 0);
+                            $hsn_code = $itm->hsn_code ?? '';
+                            $uom = $itm->uom ?? 'PCS';
+                            if ($vendor->id === 2) {
+                                $description = $itm->type;
+                                $style = $itm->article_number;
+                            } else {
+                                $description = $itm->style_description;
+                                $style = $itm->article_number;
+                            }
+                        }
+                        break;
+
+                    default:
+                        $description = $articleInfo['Article description'] ?? '';
+                        $style = $articleInfo['ARTICLE'] ?? '';
+                        break;
+                }
+
+                // Fallback hsn_code
+                if (empty($hsn_code) && $itm) {
+                    $hsn_code = $itm->hsn_code;
+                    $uom = $itm->uom;
+                }
+
+                // Compute amounts
+                $amount = $pi->total_quantity * $unit_price;
+                $discountPct = $vendor->discount ?? 0;
+                $discountAmount = ($amount * $discountPct) / 100;
+                $taxableValue = $amount - $discountAmount;
+                $igstAmount = ($taxableValue * $igstRate) / 100;
+
+                $items[] = [
+                    'description' => $description,
+                    'hsn_code' => $hsn_code,
+                    'style' => $style,
+                    'colors' => $pi->colors,
+                    'total_cartons' => $pi->carton_counts,
+                    'unit' => $uom,
+                    'size' => $pi->size,
+                    'qty' => $pi->total_quantity,
+                    'rate' => $unit_price,
+                    'amount' => $amount,
+                    'discount' => $discountAmount,
+                    'taxable_value' => $taxableValue,
+                    'igst_rate' => $igstRate,
+                    'igst_amount' => $igstAmount,
+                ];
             }
-
-            // Fallback hsn_code
-            if (empty($hsn_code) && $itm) {
-                $hsn_code = $itm->hsn_code;
-                $uom = $itm->uom;
-            }
-
-            // Compute amounts
-            $amount = $pi->total_quantity * $unit_price;
-            $discountPct = $vendor->discount ?? 0;
-            $discountAmount = ($amount * $discountPct) / 100;
-            $taxableValue = $amount - $discountAmount;
-            $igstAmount = ($taxableValue * $igstRate) / 100;
-
-            $items[] = [
-                'description' => $description,
-                'hsn_code' => $hsn_code,
-                'style' => $style,
-                'colors' => $pi->colors,
-                'total_cartons' => $pi->carton_counts,
-                'unit' => $uom,
-                'size' => $pi->size,
-                'qty' => $pi->total_quantity,
-                'rate' => $unit_price,
-                'amount' => $amount,
-                'discount' => $discountAmount,
-                'taxable_value' => $taxableValue,
-                'igst_rate' => $igstRate,
-                'igst_amount' => $igstAmount,
-            ];
         }
 
         $billTo = json_decode($invoice->bill_to_details, true) ?: [];
@@ -802,12 +909,16 @@ class InvoiceController extends BaseController
         $states = StateMaster::all();
         $transports = TransportMaster::where('status', 0)->get();
 
+        // Get invoice country - defaults to 'India' if not set
+        $invoiceCountry = $invoice->country ?? 'India';
+
         // Decode JSON data or use empty arrays as fallback
         $billedToDetails = json_decode($invoice->bill_to_details, true) ?? [];
         $shippedToDetails = json_decode($invoice->ship_to_details, true) ?? [];
         $irnDetails = json_decode($invoice->irn_details, true) ?? [];
         $transportDetails = json_decode($invoice->transporter_details, true) ?? [];
 
+        // Populate billed to details (always use India/default billing info)
         if (empty($billedToDetails)) {
             $billedToDetails = [
                 'billed_legal_name' => $vendor->billing_legal_name ?? '',
@@ -822,18 +933,35 @@ class InvoiceController extends BaseController
             ];
         }
 
+        // Populate shipped to details based on country
         if (empty($shippedToDetails)) {
-            $shippedToDetails = [
-                'shipped_legal_name' => $vendor->shipping_legal_name ?? '',
-                'shipped_address_1' => $vendor->shipping_address_1 ?? '',
-                'shipped_address_2' => $vendor->shipping_address_2 ?? '',
-                'shipped_city' => $vendor->shipping_city_town_village ?? '',
-                'shipped_state' => $vendor->shipping_state_id ?? '',
-                'shipped_gst_no' => $vendor->shipping_gst_no ?? '',
-                'shipped_pan_no' => $vendor->shipping_pan_no ?? '',
-                'shipped_pincode' => $vendor->shipping_pincode ?? '',
-                'shipped_place_of_supply' => $vendor->shipping_place_supply ?? '',
-            ];
+            if (strtolower($invoiceCountry) === 'india') {
+                // Use India shipping details
+                $shippedToDetails = [
+                    'shipped_legal_name' => $vendor->shipping_legal_name ?? '',
+                    'shipped_address_1' => $vendor->shipping_address_1 ?? '',
+                    'shipped_address_2' => $vendor->shipping_address_2 ?? '',
+                    'shipped_city' => $vendor->shipping_city_town_village ?? '',
+                    'shipped_state' => $vendor->shipping_state_id ?? '',
+                    'shipped_gst_no' => $vendor->shipping_gst_no ?? '',
+                    'shipped_pan_no' => $vendor->shipping_pan_no ?? '',
+                    'shipped_pincode' => $vendor->shipping_pincode ?? '',
+                    'shipped_place_of_supply' => $vendor->shipping_place_supply ?? '',
+                ];
+            } else {
+                // Use UAE shipping details for other countries
+                $shippedToDetails = [
+                    'shipped_legal_name' => $vendor->uae_shipping_legal_name ?? '',
+                    'shipped_address_1' => $vendor->uae_shipping_address_1 ?? '',
+                    'shipped_address_2' => $vendor->uae_shipping_address_2 ?? '',
+                    'shipped_city' => $vendor->uae_shipping_city_town_village ?? '',
+                    'shipped_state' => '',
+                    'shipped_gst_no' => '', 
+                    'shipped_pan_no' => '',
+                    'shipped_pincode' => '',
+                    'shipped_place_of_supply' => $vendor->uae_shipping_place_supply ?? '',
+                ];
+            }
         }
 
         // Handle transport distance - show stored or fallback to vendor
@@ -865,7 +993,8 @@ class InvoiceController extends BaseController
             'billedToDetails',
             'shippedToDetails',
             'irnDetails',
-            'transportDetails'
+            'transportDetails',
+            'invoiceCountry'
         ));
     }
 

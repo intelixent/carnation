@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\VendorMaster;
 use App\Models\StateMaster;
 use App\Models\CartonMaster;
+use App\Models\SizeChartMaster;
 
 class VendorController extends BaseController
 {
@@ -126,7 +127,7 @@ class VendorController extends BaseController
         try {
             $vendor = VendorMaster::findOrFail($request->vendor_id);
 
-            $vendor->update([
+            $updateData = [
                 'mobile' => $request->mobile,
                 'email' => $request->email,
                 'notes' => $request->notes,
@@ -149,14 +150,25 @@ class VendorController extends BaseController
                 'shipping_gst_no' => $request->shipping_gst_no,
                 'shipping_pan_no' => $request->shipping_pan_no,
                 'shipping_place_supply' => $request->shipping_place_supply,
-                'shipping_distance'=>$request->shipping_distance,
+                'shipping_distance' => $request->shipping_distance,
                 'shipping_state_id' => $request->shipping_state_id,
                 // Other Fields
                 'excess' => $request->excess,
                 'shortage' => $request->shortage,
                 'discount' => $request->discount,
                 'payment_terms' => $request->payment_terms,
-            ]);
+            ];
+
+            // Add UAE fields only for vendor ID 2
+            if ($request->vendor_id == 2) {
+                $updateData['uae_shipping_legal_name'] = $request->uae_shipping_legal_name;
+                $updateData['uae_shipping_address_1'] = $request->uae_shipping_address_1;
+                $updateData['uae_shipping_address_2'] = $request->uae_shipping_address_2;
+                $updateData['uae_shipping_city_town_village'] = $request->uae_shipping_city_town_village;
+                $updateData['uae_shipping_place_supply'] = $request->uae_shipping_place_supply;
+            }
+
+            $vendor->update($updateData);
 
             return response()->json([
                 'success' => true,
@@ -402,6 +414,306 @@ class VendorController extends BaseController
                     'message' => 'Carton not found!'
                 ]);
             }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function size_chart_master()
+    {
+        $page_data = [
+            'page_title' => "Size Chart",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Master",
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        // Get all size charts with vendor relationship
+        $sizeCharts = SizeChartMaster::with('vendor')
+            ->whereIn('status', [0, 1])
+            ->orderBy('vendor_id', 'asc')
+            ->orderBy('type', 'asc')
+            ->get();
+
+        // Group by vendor_id and type
+        $vendors = $sizeCharts->groupBy(function ($item) {
+            return $item->vendor_id . '-' . ($item->type ?? 'default');
+        });
+
+        $page_data['vendors'] = $vendors;
+
+        return view('settings.vendor.size_chart.master', $page_data);
+    }
+
+    public function size_chart_add()
+    {
+        $vendors = VendorMaster::where('status', 0)->get();
+
+        // Get existing sizes grouped by vendor and type
+        $existingSizes = SizeChartMaster::whereIn('status', [0, 1])
+            ->orderBy('vendor_id')
+            ->orderBy('type')
+            ->orderBy('size')
+            ->get()
+            ->groupBy(function ($item) {
+                return $item->vendor_id . '-' . ($item->type ?? 'default');
+            });
+
+        return view('settings.vendor.size_chart.add', compact('vendors', 'existingSizes'));
+    }
+
+    public function size_chart_store(Request $request)
+    {
+        try {
+            $rules = [
+                'vendor_id' => 'required|exists:vendor_master,id',
+                'sizes' => 'required|array|min:1',
+                'sizes.*' => 'required|string|max:255',
+            ];
+
+            if ($request->vendor_id == 1) {
+                $rules['type'] = 'required|in:Junior,Men';
+            }
+
+            $request->validate($rules);
+
+            $duplicates = [];
+            $created = 0;
+
+            foreach ($request->sizes as $size) {
+                // Check for duplicate
+                $duplicateQuery = SizeChartMaster::where('vendor_id', $request->vendor_id)
+                    ->where('size', trim($size))
+                    ->whereIn('status', [0, 1]);
+
+                if ($request->vendor_id == 1) {
+                    $duplicateQuery->where('type', $request->type);
+                }
+
+                if ($duplicateQuery->exists()) {
+                    $duplicates[] = $size;
+                    continue;
+                }
+
+                // Create the size chart entry
+                SizeChartMaster::create([
+                    'vendor_id' => $request->vendor_id,
+                    'size' => trim($size),
+                    'type' => $request->vendor_id == 1 ? $request->type : null,
+                    'created_by' => auth()->id(),
+                    'created_at' => now(),
+                    'status' => 0
+                ]);
+                $created++;
+            }
+
+            $message = $created > 0 ? "$created size(s) added successfully!" : "No sizes were added.";
+            if (!empty($duplicates)) {
+                $message .= " Duplicate sizes skipped: " . implode(', ', $duplicates);
+            }
+
+            return response()->json([
+                'success' => $created > 0,
+                'message' => $message,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function get_size_chart_details(Request $request)
+    {
+        try {
+            $vendor_id = $request->vendor_id;
+            $type = $request->type;
+
+            $query = SizeChartMaster::with('vendor')
+                ->where('vendor_id', $vendor_id)
+                ->whereIn('status', [0, 1]);
+
+            if ($vendor_id == 1 && $type && $type != 'null') {
+                $query->where('type', $type);
+            }
+
+            $size_chart_details = $query->orderBy('size', 'asc')->get();
+            $vendor = VendorMaster::find($vendor_id);
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor not found'
+                ], 404);
+            }
+
+            return view('settings.vendor.size_chart.details', compact('size_chart_details', 'vendor', 'type'));
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function size_chart_edit(Request $request)
+    {
+        try {
+            $vendor_id = $request->vendor_id;
+            $type = $request->type;
+
+            $query = SizeChartMaster::where('vendor_id', $vendor_id)
+                ->whereIn('status', [0, 1]);
+
+            if ($vendor_id == 1 && $type && $type != 'null') {
+                $query->where('type', $type);
+            }
+
+            $existing_sizes = $query->orderBy('size', 'asc')->get();
+            $vendor = VendorMaster::find($vendor_id);
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor not found'
+                ], 404);
+            }
+
+            // Pass size_chart_details for backward compatibility if needed
+            $size_chart_details = $existing_sizes->first();
+
+            return view('settings.vendor.size_chart.edit', compact('existing_sizes', 'vendor', 'type', 'size_chart_details'));
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function size_chart_update(Request $request)
+    {
+        try {
+            $rules = [
+                'vendor_id' => 'required|exists:vendor_master,id',
+                'new_sizes' => 'nullable|array',
+                'new_sizes.*' => 'required|string|max:255',
+                'updated_sizes' => 'nullable|array',
+                'updated_sizes.*.id' => 'required|exists:size_chart_master,id',
+                'updated_sizes.*.size' => 'required|string|max:255',
+            ];
+
+            if ($request->vendor_id == 1) {
+                $rules['type'] = 'required|in:Junior,Men';
+            }
+
+            $request->validate($rules);
+
+            $duplicates = [];
+            $updated = 0;
+            $created = 0;
+
+            // Update existing sizes
+            if ($request->updated_sizes) {
+                foreach ($request->updated_sizes as $sizeData) {
+                    $sizeChart = SizeChartMaster::find($sizeData['id']);
+
+                    // Check for duplicate before updating
+                    $duplicateQuery = SizeChartMaster::where('vendor_id', $request->vendor_id)
+                        ->where('size', trim($sizeData['size']))
+                        ->where('id', '!=', $sizeData['id'])
+                        ->whereIn('status', [0, 1]);
+
+                    if ($request->vendor_id == 1) {
+                        $duplicateQuery->where('type', $request->type);
+                    }
+
+                    if ($duplicateQuery->exists()) {
+                        $duplicates[] = $sizeData['size'];
+                        continue;
+                    }
+
+                    $sizeChart->update([
+                        'size' => trim($sizeData['size']),
+                    ]);
+                    $updated++;
+                }
+            }
+
+            // Create new sizes
+            if ($request->new_sizes) {
+                foreach ($request->new_sizes as $size) {
+                    // Check for duplicate
+                    $duplicateQuery = SizeChartMaster::where('vendor_id', $request->vendor_id)
+                        ->where('size', trim($size))
+                        ->whereIn('status', [0, 1]);
+
+                    if ($request->vendor_id == 1) {
+                        $duplicateQuery->where('type', $request->type);
+                    }
+
+                    if ($duplicateQuery->exists()) {
+                        $duplicates[] = $size;
+                        continue;
+                    }
+
+                    SizeChartMaster::create([
+                        'vendor_id' => $request->vendor_id,
+                        'size' => trim($size),
+                        'type' => $request->vendor_id == 1 ? $request->type : null,
+                        'created_by' => auth()->id(),
+                        'created_at' => now(),
+                        'status' => 0
+                    ]);
+                    $created++;
+                }
+            }
+
+            $message = [];
+            if ($updated > 0) $message[] = "$updated size(s) updated";
+            if ($created > 0) $message[] = "$created new size(s) added";
+            if (empty($message)) $message[] = "No changes made";
+
+            $finalMessage = implode(', ', $message) . "!";
+
+            if (!empty($duplicates)) {
+                $finalMessage .= " Duplicate sizes skipped: " . implode(', ', $duplicates);
+            }
+
+            return response()->json([
+                'success' => ($updated > 0 || $created > 0),
+                'message' => $finalMessage,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    public function size_chart_delete(Request $request)
+    {
+        try {
+            $sizeChart = SizeChartMaster::find($request->id);
+
+            if (!$sizeChart) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Size chart not found'
+                ]);
+            }
+
+            $sizeChart->update(['status' => 2]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Size deleted successfully'
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

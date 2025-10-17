@@ -64,6 +64,10 @@
             border-right: 1px solid #000;
         }
 
+        .invoice-table tbody tr:last-child td {
+            border-bottom: 1px solid #000;
+        }
+
         .no-border {
             border: none;
         }
@@ -229,7 +233,19 @@
                 {{ $invoice['ref_no'] ?? '' }}
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
-                <strong>Invoice Date:</strong> {{ !empty($invoice['inv_date']) ? \Carbon\Carbon::createFromFormat('Y-m-d', $invoice['inv_date'])->format('d-m-Y') : '' }}
+                <strong>Invoice Date:</strong>
+                @if(!empty($invoice['inv_date']))
+                @php
+                try {
+                // Try parsing as Y-m-d format
+                $date = \Carbon\Carbon::parse($invoice['inv_date']);
+                echo $date->format('d-m-Y');
+                } catch (\Exception $e) {
+                // If parsing fails, just display the original value
+                echo $invoice['inv_date'];
+                }
+                @endphp
+                @endif
             </td>
             <td style="border-right: 1px solid #000; border-bottom: none; border-top: none; border-left: none;">
                 <!-- Empty cell -->
@@ -275,10 +291,37 @@
                 <strong>Details of Consignee (Shipped to)</strong><br />
                 <strong>Name:</strong> {{ $ship_to_details['shipped_legal_name'] ?? '' }}<br />
                 <strong>Address:</strong> {{ $ship_to_details['shipped_address_1'] ?? '' }}<br />
-                {{ $ship_to_details['shipped_address_2'] ?? '' }}<br />
-                {{ $ship_to_details['shipped_city'] ?? '' }}-{{ $ship_to_details['shipped_pincode'] ?? '' }}, STATE : {{ $ship_to_details['shipped_state_name'] ?? '' }}<br />
+                @if(!empty($ship_to_details['shipped_address_2']))
+                {{ $ship_to_details['shipped_address_2'] }}<br />
+                @endif
+                @php
+                    $isVendor2 = isset($invoice['vendor_id']) && $invoice['vendor_id'] == 2;
+                    
+                    // Build the city/pincode/state line
+                    $cityLine = $ship_to_details['shipped_city'] ?? '';
+                    if ($isVendor2) {
+                        if (!empty($ship_to_details['shipped_pincode'])) {
+                            $cityLine .= '-' . $ship_to_details['shipped_pincode'];
+                        }
+                        if (!empty($ship_to_details['shipped_state_name'])) {
+                            $cityLine .= ', STATE : ' . $ship_to_details['shipped_state_name'];
+                        }
+                    } else {
+                        $cityLine .= '-' . ($ship_to_details['shipped_pincode'] ?? '');
+                        $cityLine .= ', STATE : ' . ($ship_to_details['shipped_state_name'] ?? '');
+                    }
+                @endphp
+                {{ $cityLine }}<br />
+                @php
+                    $showStateCode = !$isVendor2 || !empty($ship_to_details['shipped_state_code']);
+                    $showGSTIN = !$isVendor2 || !empty($ship_to_details['shipped_gst_no']);
+                @endphp
+                @if($showStateCode)
                 <strong>State code:</strong> {{ $ship_to_details['shipped_state_code'] ?? '' }}<br />
+                @endif
+                @if($showGSTIN)
                 <strong>GSTIN/UNIQUE ID:</strong> {{ $ship_to_details['shipped_gst_no'] ?? '' }}
+                @endif
             </td>
         </tr>
     </table>
@@ -288,22 +331,41 @@
     $totalAmount = 0;
     $totalDiscount = 0;
     $totalTaxable = 0;
+    $totalIgstAmount = 0;
     foreach ($invoice_item_details as $item) {
     $totalQty += $item['qty'];
     $totalAmount += $item['amount'];
     $totalDiscount += $item['discount'];
     $totalTaxable += $item['taxable_value'];
+    $totalIgstAmount += $item['igst_amount'];
     }
     $assessableValue = $totalTaxable;
-    $igstAmount = round($assessableValue * 0.05, 2);
     $cess = 0.00;
-    $totalTaxAmount = $igstAmount + $cess;
+    $totalTaxAmount = $totalIgstAmount + $cess;
     $finalAmount = $assessableValue + $totalTaxAmount;
     @endphp
 
     <table class="invoice-table">
         <thead>
             <tr>
+                @if($vendor->id == 7)
+                {{-- Columns for Vendor ID 7 - 14 columns total (15 with IGST split) --}}
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">S.No</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Description of Goods</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">HSN Code</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">STYLE NO</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">LOCATION CODE</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">COLOR</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Total<br>Cartons</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Unit</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Qty</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Rate</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Total</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Discount</th>
+                <th class="text-center" style="vertical-align: middle;" rowspan="2">Taxable Value</th>
+                <th class="text-center" style="vertical-align: middle;" colspan="2">IGST</th>
+                @else
+                {{-- Original columns for all other vendors - 12 columns total (14 with IGST split) --}}
                 <th class="text-center" style="vertical-align: middle;" rowspan="2">SI No</th>
                 <th class="text-center" style="vertical-align: middle;" rowspan="2">Description</th>
                 <th class="text-center" style="vertical-align: middle;" rowspan="2">HSN</th>
@@ -317,6 +379,7 @@
                 <th class="text-center" style="vertical-align: middle;" rowspan="2">Discount</th>
                 <th class="text-center" style="vertical-align: middle;" rowspan="2">Taxable Value</th>
                 <th class="text-center" style="vertical-align: middle;" colspan="2">IGST</th>
+                @endif
             </tr>
             <tr>
                 <th class="text-center">Rate</th>
@@ -326,11 +389,14 @@
         <tbody>
             @foreach ($invoice_item_details as $i => $item)
             <tr>
+                @if($vendor->id == 7)
+                {{-- Row structure for Vendor ID 7 --}}
                 <td class="text-center">{{ $i+1 }}</td>
                 <td>{{ $item['description'] }}, {{ $item['size'] }}</td>
                 <td>{{ $item['hsn_code'] }}</td>
                 <td class="text-center">{{ $item['style'] }}</td>
-                <td class="text-center">{{ $item['colors'] }}</td> {{-- now holds comma‑list --}}
+                <td class="text-center">{{ $item['location'] }}</td>
+                <td class="text-center">{{ $item['colors'] }}</td>
                 @if ($i === 0)
                 <td class="text-center"
                     style="vertical-align: middle;"
@@ -346,11 +412,48 @@
                 <td class="text-right">{{ IND_money_format($item['taxable_value'], 2) }}</td>
                 <td class="text-center">{{ IND_money_format($item['igst_rate'], 2) }}%</td>
                 <td class="text-right">{{ IND_money_format($item['igst_amount'], 2) }}</td>
+                @else
+                {{-- Original row structure for all other vendors --}}
+                <td class="text-center">{{ $i+1 }}</td>
+                <td>{{ $item['description'] }}, {{ $item['size'] }}</td>
+                <td>{{ $item['hsn_code'] }}</td>
+                <td class="text-center">{{ $item['style'] }}</td>
+                <td class="text-center">{{ $item['colors'] }}</td>
+                @if ($i === 0)
+                <td class="text-center"
+                    style="vertical-align: middle;"
+                    rowspan="{{ count($invoice_item_details) }}">
+                    <strong>{{ $totalCartonsInInvoice }}</strong>
+                </td>
+                @endif
+                <td class="text-right">{{ $item['unit'] }}</td>
+                <td class="text-right">{{ $item['qty'] }}</td>
+                <td class="text-right">{{ IND_money_format($item['rate'], 2) }}</td>
+                <td class="text-right">{{ IND_money_format($item['amount'], 2) }}</td>
+                <td class="text-right">{{ IND_money_format($item['discount'], 2) }}</td>
+                <td class="text-right">{{ IND_money_format($item['taxable_value'], 2) }}</td>
+                <td class="text-center">{{ IND_money_format($item['igst_rate'], 2) }}%</td>
+                <td class="text-right">{{ IND_money_format($item['igst_amount'], 2) }}</td>
+                @endif
             </tr>
             @endforeach
         </tbody>
         <tfoot>
             <tr>
+                @if($vendor->id == 7)
+                {{-- Total row for Vendor ID 7: 6 columns before cartons --}}
+                <td colspan="6" align="right"><strong>Total</strong></td>
+                <td class="text-center"><strong>{{ $totalCartonsInInvoice }}</strong></td>
+                <td></td>
+                <td class="text-right"><strong>{{ $totalQty }}</strong></td>
+                <td></td>
+                <td class="text-right"><strong>{{ IND_money_format($totalAmount, 2) }}</strong></td>
+                <td class="text-right"><strong>{{ IND_money_format($totalDiscount, 2) }}</strong></td>
+                <td class="text-right"><strong>{{ IND_money_format($totalTaxable, 2) }}</strong></td>
+                <td></td>
+                <td class="text-right"><strong>{{ IND_money_format($totalTaxAmount, 2) }}</strong></td>
+                @else
+                {{-- Total row for other vendors: 5 columns before cartons --}}
                 <td colspan="5" align="right"><strong>Total</strong></td>
                 <td class="text-center"><strong>{{ $totalCartonsInInvoice }}</strong></td>
                 <td></td>
@@ -361,9 +464,14 @@
                 <td class="text-right"><strong>{{ IND_money_format($totalTaxable, 2) }}</strong></td>
                 <td></td>
                 <td class="text-right"><strong>{{ IND_money_format($totalTaxAmount, 2) }}</strong></td>
+                @endif
             </tr>
             <tr>
+                @if($vendor->id == 7)
+                <td colspan="14" align="right"><strong>Final Amount</strong></td>
+                @else
                 <td colspan="13" align="right"><strong>Final Amount</strong></td>
+                @endif
                 <td class="text-right"><strong>{{ IND_money_format($finalAmount, 2) }}</strong></td>
             </tr>
             @php
@@ -386,22 +494,43 @@
             }
             @endphp
             <tr>
+                @if($vendor->id == 7)
+                <td colspan="15" align="left"><strong>Invoice Total ( In Words) : INR {{ $totalInWords }} ONLY</strong></td>
+                @else
                 <td colspan="14" align="left"><strong>Invoice Total ( In Words) : INR {{ $totalInWords }} ONLY</strong></td>
+                @endif
             </tr>
             <tr>
+                @if($vendor->id == 7)
+                <td colspan="15" align="left">
+                    <strong>Certified that the Particulars given above are true and correct and the amount indicated</strong></br>
+                    a) represent the price actually charged and that there is no flow additional consideration directly or indirectly from the buyer or </br>
+                    b) is provisional as additional consideration will be received from the buyer on account of
+                </td>
+                @else
                 <td colspan="14" align="left">
                     <strong>Certified that the Particulars given above are true and correct and the amount indicated</strong></br>
                     a) represent the price actually charged and that there is no flow additional consideration directly or indirectly from the buyer or </br>
                     b) is provisional as additional consideration will be received from the buyer on account of
                 </td>
+                @endif
             </tr>
             <tr>
+                @if($vendor->id == 7)
+                <td colspan="15" align="left">
+                    <strong>TERMS OF SALE</strong></br>
+                    1) Goods once sold will not be taken back or exchanged </br>
+                    2) Jurisdiction : Coimbatore </br>
+                    3) Payment Terms : {{ $vendor->payment_terms }}
+                </td>
+                @else
                 <td colspan="14" align="left">
                     <strong>TERMS OF SALE</strong></br>
                     1) Goods once sold will not be taken back or exchanged </br>
                     2) Jurisdiction : Coimbatore </br>
                     3) Payment Terms : {{ $vendor->payment_terms }}
                 </td>
+                @endif
             </tr>
         </tfoot>
     </table>

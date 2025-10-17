@@ -74,7 +74,7 @@
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
             }
         });
-        
+
         $('.select2').select2({
             width: '100%'
         });
@@ -120,7 +120,7 @@
             poSelect.prop('disabled', true).html('<option value="">Select PO</option>');
             $('#po_details').hide();
             $('#invoicePreviewSection').hide();
-            
+
             if (vendorId) {
                 $.ajax({
                     url: '{{ route("get_complete_vendor_packing_list") }}',
@@ -152,7 +152,7 @@
             var poId = $(this).val();
             var vendor_id = $("#vendor_id").val();
             $('#invoicePreviewSection').hide();
-            
+
             $.ajax({
                 url: '{{ route("get_packging_list") }}',
                 method: 'POST',
@@ -177,6 +177,33 @@
 
         $(document).on('change', '.po_pack', function() {
             let selectedCount = $('.po_pack:checked').length;
+            let vendorId = $('.selected_vendor_id').val();
+
+            // For vendor ID 2, validate country selection
+            if (vendorId == 2 && selectedCount > 0) {
+                let countries = [];
+                $('.po_pack:checked').each(function() {
+                    let country = $(this).data('country');
+                    if (country && countries.indexOf(country) === -1) {
+                        countries.push(country);
+                    }
+                });
+
+                if (countries.length > 1) {
+                    // Uncheck the last selected checkbox
+                    $(this).prop('checked', false);
+
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Country Mismatch',
+                        text: 'All selected packing lists must be from the same country for this vendor.',
+                        confirmButtonText: 'OK'
+                    });
+
+                    selectedCount = $('.po_pack:checked').length;
+                }
+            }
+
             if (selectedCount > 0) {
                 $('#generateBtnContainer').show();
             } else {
@@ -218,20 +245,20 @@
                             </tr>
                         </thead>
                         <tbody>`;
-            
+
             let totalAmount = 0;
             let totalDiscount = 0;
             let totalTaxable = 0;
             let totalGstAmount = 0;
             let totalQty = 0;
-            
+
             invoiceData.items.forEach((item, index) => {
                 totalAmount += parseFloat(item.amount);
                 totalDiscount += parseFloat(item.discount);
                 totalTaxable += parseFloat(item.taxable_value);
                 totalGstAmount += parseFloat(item.gst_amount);
                 totalQty += parseInt(item.qty);
-                
+
                 previewHtml += `
                     <tr>
                         <td>${index + 1}</td>
@@ -250,7 +277,7 @@
                         <td class="text-right">₹${parseFloat(item.gst_amount).toFixed(2)}</td>
                     </tr>`;
             });
-            
+
             let finalAmount = totalTaxable + totalGstAmount;
             previewHtml += `
                         </tbody>
@@ -272,7 +299,7 @@
                         </tfoot>
                     </table>
                 </div>`;
-            
+
             $('#invoicePreviewContainer').html(previewHtml);
             $('#invoicePreviewSection').show();
         }
@@ -321,7 +348,7 @@
                         });
                         return;
                     }
-                    
+
                     // Proceed with invoice generation
                     proceedWithInvoiceGeneration(selectedIds, invoiceNo, invoiceDate, gstRate);
                 },
@@ -374,7 +401,7 @@
                     })
                     .fail(xhr => {
                         let errorMessage = 'Unexpected error occurred';
-                        
+
                         if (xhr.responseJSON) {
                             if (xhr.responseJSON.duplicate) {
                                 errorMessage = xhr.responseJSON.error;
@@ -384,7 +411,7 @@
                                 errorMessage = xhr.responseJSON.error || xhr.responseJSON.message || errorMessage;
                             }
                         }
-                        
+
                         Swal.fire({
                             icon: 'error',
                             title: 'Error Generating Invoice',

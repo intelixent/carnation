@@ -43,6 +43,12 @@ class VendorMaster extends Model
         'shipping_place_supply',
         'shipping_state_id',
         'shipping_distance',
+        // UAE Shipping Address Fields
+        'uae_shipping_legal_name',
+        'uae_shipping_address_1',
+        'uae_shipping_address_2',
+        'uae_shipping_city_town_village',
+        'uae_shipping_place_supply',
         // Other Fields
         'excess',
         'shortage',
