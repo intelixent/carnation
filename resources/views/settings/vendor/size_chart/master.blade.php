@@ -40,7 +40,7 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-bordered text-nowrap w-100 dataTable">
+                        <table class="table table-bordered text-nowrap w-100" id="sizeChartTable">
                             <thead>
                                 <tr>
                                     <th>S.No</th>
@@ -87,10 +87,6 @@
                                 </tr>
                                 @endif
                                 @endforeach
-                                @else
-                                <tr>
-                                    <td colspan="4" class="text-center text-muted">No size charts found</td>
-                                </tr>
                                 @endif
                             </tbody>
                         </table>
@@ -114,11 +110,66 @@
             }
         });
 
-        var table = $(".dataTable").DataTable({
-            "order": [
-                [0, "asc"]
-            ]
-        });
+        // Initialize DataTable with proper error handling
+        function initializeDataTable() {
+            // Check if DataTable is already initialized
+            if ($.fn.DataTable.isDataTable('#sizeChartTable')) {
+                $('#sizeChartTable').DataTable().destroy();
+            }
+
+            // Validate table structure before initialization
+            var headerColumns = $('#sizeChartTable thead th').length;
+            var hasData = $('#sizeChartTable tbody tr').length > 0;
+            var validStructure = true;
+
+            if (hasData) {
+                $('#sizeChartTable tbody tr').each(function(index) {
+                    var rowColumns = $(this).find('td').length;
+                    var hasColspan = $(this).find('td[colspan]').length > 0;
+
+                    if (!hasColspan && rowColumns !== headerColumns) {
+                        console.warn('Row ' + index + ' has ' + rowColumns + ' columns but header has ' + headerColumns);
+                        validStructure = false;
+                    }
+                });
+            }
+
+            if (validStructure) {
+                try {
+                    var table = $("#sizeChartTable").DataTable({
+                        "processing": true,
+                        "order": [
+                            [0, "asc"]
+                        ],
+                        "pageLength": 25,
+                        "responsive": true,
+                        "columnDefs": [{
+                            "targets": [3],
+                            "orderable": false,
+                            "searchable": false
+                        }],
+                        "language": {
+                            "emptyTable": "No size charts found",
+                            "zeroRecords": "No matching records found"
+                        },
+                        "drawCallback": function(settings) {
+                            // Reinitialize any tooltips or other components after redraw
+                            $('[data-bs-toggle="tooltip"]').tooltip();
+                        }
+                    });
+                } catch (error) {
+                    console.error('DataTable initialization error:', error);
+                    // Fallback: show table without DataTable enhancements
+                    $('#sizeChartTable').show();
+                }
+            } else {
+                console.error('Table structure is invalid for DataTable initialization');
+                $('#sizeChartTable').show();
+            }
+        }
+
+        // Initialize DataTable on page load
+        initializeDataTable();
 
         $(document).on('click', '.add-size', function() {
             $.ajax({
@@ -128,6 +179,13 @@
                     $("#add_modal").html(response);
                     initAddValidation();
                     $("#add_modal").modal('show');
+                },
+                error: function(xhr) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Could not load add form'
+                    });
                 }
             });
         });
@@ -441,6 +499,15 @@
                 }
             });
         }
+
+        // Refresh DataTable after AJAX operations
+        window.refreshDataTable = function() {
+            if ($.fn.DataTable.isDataTable('#sizeChartTable')) {
+                $('#sizeChartTable').DataTable().ajax.reload(null, false);
+            } else {
+                location.reload();
+            }
+        };
     });
 </script>
 @endpush
