@@ -99,7 +99,7 @@ class JobOrderController extends BaseController
                 $query->where('type', $request->type);
             }
 
-            $sizes = $query->orderBy('size', 'asc')->get();
+            $sizes = $query->orderBy('id', 'asc')->get();
 
             return response()->json([
                 'success' => true,
