@@ -144,7 +144,11 @@ class PackingListController extends BaseController
         $totalPackQty = 0;
         foreach ($colorSizeMatrix as $color => $sizes) {
             foreach ($sizes as $size => $qty) {
-                $packQty = floor($qty * (1 + $excessPercentage / 100));
+                $calcQty = $qty * (1 + $excessPercentage / 100);
+                $packQty = round($calcQty);
+                if ($packQty > $calcQty) {
+                    $packQty--;
+                }
                 $packQtyMatrix[$color][$size] = $packQty;
                 $totalPackQty += $packQty;
             }
@@ -257,8 +261,11 @@ class PackingListController extends BaseController
 
                 foreach ($items as $item) {
                     $poQty   = $item->qty;
-                    $packQty = floor($poQty * (1 + $excess / 100));
-
+                    $calcQty = $poQty * (1 + $excess / 100);
+                    $packQty = round($calcQty);
+                    if ($packQty > $calcQty) {
+                        $packQty--;
+                    }
                     // Get position, per_carton_qty, and weight_per_piece for Benetton as well
                     $position = $positions[$item->size] ?? 1;
                     $perCartonQty = $perCartonQtys[$item->size] ?? 0;
@@ -291,7 +298,11 @@ class PackingListController extends BaseController
                     $color   = $item->color ?? $item->id_color ?? 'N/A';
                     $size    = $item->size ?? 'N/A';
                     $poQty   = $item->qty ?? 0;
-                    $packQty = ceil($poQty * (1 + $excess / 100));
+                    $calcQty = $poQty * (1 + $excess / 100);
+                    $packQty = round($calcQty);
+                    if ($packQty > $calcQty) {
+                        $packQty--;
+                    }
                     $country = $item->country ?? null; // Get country from PoItems
 
                     // Get position, per_carton_qty, and weight_per_piece
@@ -328,8 +339,11 @@ class PackingListController extends BaseController
                     $color   = $item->color ?? $item->id_color ?? 'N/A';
                     $size    = $item->size ?? 'N/A';
                     $poQty   = $item->qty ?? 0;
-                    $packQty = ceil($poQty * (1 + $excess / 100));
-
+                    $calcQty = $poQty * (1 + $excess / 100);
+                    $packQty = round($calcQty);
+                    if ($packQty > $calcQty) {
+                        $packQty--;
+                    }
                     // Get position, per_carton_qty, and weight_per_piece for ALL vendors
                     $position = $positions[$size] ?? 1;
                     $perCartonQty = $perCartonQtys[$size] ?? 0;
@@ -1994,12 +2008,13 @@ class PackingListController extends BaseController
         foreach ($pureItems as $item) {
             $perCartonQty = $item->per_carton_config_qty ?? 0;
 
+            // Changed: Use <= instead of < to handle exact matches correctly
             if ($perCartonQty > 0 && $item->quantity < $perCartonQty) {
                 // Under-filled carton
                 $item->is_under_filled = true;
                 $underFilledCartons->push($item);
             } else {
-                // Full carton
+                // Full carton (including exact matches)
                 $item->is_under_filled = false;
                 $fullCartons->push($item);
             }
@@ -2053,15 +2068,17 @@ class PackingListController extends BaseController
         $cartonCounter = 1;
         $sortedPureItems = collect();
 
+        // FIRST PASS: Process all FULL cartons across ALL position groups
         foreach ($sortedGroups as $group) {
-            // First assign names to full cartons in this group
             foreach ($group['full'] as $item) {
                 $item->dynamic_carton_name = $cartonPrefix . $cartonCounter;
                 $cartonCounter++;
                 $sortedPureItems->push($item);
             }
+        }
 
-            // Then assign names to under-filled cartons in this group
+        // SECOND PASS: Process all UNDER-FILLED cartons across ALL position groups
+        foreach ($sortedGroups as $group) {
             foreach ($group['under_filled'] as $item) {
                 $item->dynamic_carton_name = $cartonPrefix . $cartonCounter;
                 $cartonCounter++;
@@ -2264,7 +2281,18 @@ class PackingListController extends BaseController
                 ) {
                     list($articleNumber, $color, $size) = explode('|', $key);
 
-                    // Group consecutive cartons by dynamic_carton_name
+                    // Get per_carton_qty from config for this SPECIFIC combination
+                    $configItem = PackingListConfigItem::where('po_id', $packingList->po_id)
+                        ->whereHas('poItem', function ($q) use ($articleNumber, $color, $size) {
+                            $q->where('article_number', $articleNumber)
+                                ->where('color', $color)
+                                ->where('size', $size);
+                        })
+                        ->first();
+
+                    $perCartonQty = $configItem ? $configItem->per_carton_qty : 30;
+
+                    // CHANGED: Group ALL consecutive cartons together regardless of fill status
                     $consecutiveRanges = [];
                     $currentRange = [];
                     $lastCartonNum = null;
@@ -2272,26 +2300,34 @@ class PackingListController extends BaseController
                     foreach ($items as $item) {
                         $currentCartonNum = intval(str_replace($cartonPrefix, '', $item->dynamic_carton_name));
 
-                        if ($lastCartonNum === null || $currentCartonNum == $lastCartonNum + 1) {
-                            $currentRange[] = $item;
-                        } else {
+                        // Start a new range only if not consecutive
+                        if ($lastCartonNum === null || $currentCartonNum != $lastCartonNum + 1) {
                             if (!empty($currentRange)) {
-                                $consecutiveRanges[] = $currentRange;
+                                $consecutiveRanges[] = ['items' => $currentRange];
                             }
                             $currentRange = [$item];
+                        } else {
+                            $currentRange[] = $item;
                         }
 
                         $lastCartonNum = $currentCartonNum;
                     }
 
                     if (!empty($currentRange)) {
-                        $consecutiveRanges[] = $currentRange;
+                        $consecutiveRanges[] = ['items' => $currentRange];
                     }
 
                     // Create groups for each consecutive range
-                    foreach ($consecutiveRanges as $range) {
-                        $rangeItems = collect($range);
-                        $rangeKey = $position . '|' . $articleNumber . '|' . $color . '|' . $size . '|' . count($positionGroups);
+                    foreach ($consecutiveRanges as $rangeIndex => $range) {
+                        $rangeItems = collect($range['items']);
+
+                        // FIXED: Use the specific perCartonQty for THIS size
+                        $hasUnderFilled = $rangeItems->contains(function ($item) use ($perCartonQty) {
+                            return $item->quantity < $perCartonQty;
+                        });
+
+                        // Create unique key without fill status separation
+                        $rangeKey = $position . '|' . $articleNumber . '|' . $color . '|' . $size . '|' . $rangeIndex;
 
                         $positionGroups[$rangeKey] = [
                             'position' => $position,
@@ -2301,7 +2337,9 @@ class PackingListController extends BaseController
                             'carton_names' => $rangeItems->pluck('dynamic_carton_name')->toArray(),
                             'items' => $rangeItems,
                             'size_quantities' => [$size => $rangeItems->sum('quantity')],
-                            'is_mixed' => false
+                            'is_mixed' => false,
+                            'is_full' => !$hasUnderFilled,
+                            'per_carton_qty' => $perCartonQty
                         ];
                     }
                 }
@@ -2326,7 +2364,8 @@ class PackingListController extends BaseController
                     'carton_names' => [$cartonName],
                     'items' => $items,
                     'size_quantities' => $sizeQuantities,
-                    'is_mixed' => true
+                    'is_mixed' => true,
+                    'is_full' => false
                 ];
             }
 
@@ -2402,7 +2441,8 @@ class PackingListController extends BaseController
                     'mrp'             => $mrp,
                     'po_item_id'      => $poItemId,
                     'position'        => $group['position'],
-                    'is_mixed'        => $group['is_mixed']
+                    'is_mixed'        => $group['is_mixed'],
+                    'is_full'         => $group['is_full'] ?? false
                 ];
 
                 foreach ($sizeOrder as $sizeCol) {
@@ -2428,11 +2468,9 @@ class PackingListController extends BaseController
                 $tableRows[] = $row;
             }
 
-            // Sort by position (pure cartons first, mixed last), then by first carton number
+            // Sort: Keep the natural order from dynamic carton names (already correct from earlier sorting)
+            // Just extract the first carton number and sort by that
             usort($tableRows, function ($a, $b) use ($cartonPrefix) {
-                if ($a['position'] != $b['position']) {
-                    return $a['position'] - $b['position'];
-                }
                 $aFirst = intval(str_replace($cartonPrefix, '', explode('-', $a['ctn_range'])[0]));
                 $bFirst = intval(str_replace($cartonPrefix, '', explode('-', $b['ctn_range'])[0]));
                 return $aFirst - $bFirst;
