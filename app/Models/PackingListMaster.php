@@ -28,6 +28,8 @@ class PackingListMaster extends Model
         'pack_status',
         'color',
         'location',
+        'article_number',
+        'country',
         'packing_table_no',
     ];
 

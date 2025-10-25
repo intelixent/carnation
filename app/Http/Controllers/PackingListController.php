@@ -1166,6 +1166,7 @@ class PackingListController extends BaseController
         $carton_id = $po_details['carton_id'];
         $country = $po_details['country'] ?? null;
         $packing_table_no = $po_details['packing_table_no'] ?? null; // Get packing table number
+        $article_number = $carton_data[0]['article_number'] ?? null; // Get article from first carton item
 
         // Fetch PO early so we know vendor_id
         $po = PoMaster::with('vendor')->find($po_id);
@@ -1223,6 +1224,18 @@ class PackingListController extends BaseController
                 'created_by' => auth()->user()->id,
                 'created_at' => now(),
             ];
+
+            // Include location for vendor 2
+            if ($vendorId == 2) {
+                if ($article_number) {
+                    $searchCriteria['article_number'] = $article_number;
+                    $createData['article_number'] = $article_number;
+                }
+                if ($country) {
+                    $searchCriteria['country'] = $country;
+                    $createData['country'] = $country;
+                }
+            }
 
             // Include location for vendor 7
             if ($vendorId == 7) {
