@@ -157,7 +157,7 @@
                     <!-- Additional Fields -->
                     <div class="col-md-6 mb-3">
                         <label for="business_head">Business Head</label>
-                        <select class="form-control select2" id="business_head" name="business_head">
+                        <select class="form-control select3" id="business_head" name="business_head">
                             <option value="">Select Business Head</option>
                             <option value="Rajesh" {{ ($GrnDetails['business_head'] ?? '') == 'Rajesh' ? 'selected' : '' }}>Rajesh</option>
                             <option value="Divya" {{ ($GrnDetails['business_head'] ?? '') == 'Divya' ? 'selected' : '' }}>Divya</option>
@@ -165,7 +165,7 @@
                     </div>
                     <div class="col-md-6 mb-3">
                         <label for="grn_status">GRN Status</label>
-                        <select class="form-control select2" id="grn_status" name="grn_status">
+                        <select class="form-control select3" id="grn_status" name="grn_status">
                             <option value="">Select GRN Status</option>
                             <option value="In Transit" {{ ($GrnDetails['status'] ?? '') == 'In Transit' ? 'selected' : '' }}>In Transit</option>
                             <option value="GRN Pending" {{ ($GrnDetails['status'] ?? '') == 'GRN Pending' ? 'selected' : '' }}>GRN Pending</option>
@@ -179,7 +179,7 @@
 
                     <div class="col-md-6 mb-3">
                         <label for="status">Status</label>
-                        <select class="form-control select2" id="status" name="status">
+                        <select class="form-control select3" id="status" name="status">
                             <option value="">Select Status</option>
                             <option value="In Transit" {{ ($GrnDetails['status'] ?? '') == 'In Transit' ? 'selected' : '' }}>In Transit</option>
                             <option value="GRN Pending" {{ ($GrnDetails['status'] ?? '') == 'GRN Pending' ? 'selected' : '' }}>GRN Pending</option>
@@ -193,7 +193,7 @@
 
                     <div class="col-md-6 mb-3">
                         <label for="week">Week</label>
-                        <select class="form-control select2" id="week" name="week">
+                        <select class="form-control select3" id="week" name="week">
                             <option value="">Select Week</option>
                             <option value="Week 1" {{ ($GrnDetails['week'] ?? '') == 'Week 1' ? 'selected' : '' }}>Week 1</option>
                             <option value="Week 2" {{ ($GrnDetails['week'] ?? '') == 'Week 2' ? 'selected' : '' }}>Week 2</option>
