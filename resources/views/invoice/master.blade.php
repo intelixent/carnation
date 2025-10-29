@@ -916,9 +916,12 @@
         }
 
         function initGrnValidation() {
-            $('.select2').select2({
-                width: '100%',
-                dropdownParent: $('.modal-body')
+            $('.select3').each(function() {
+                const $this = $(this);
+                $this.select2({
+                    width: '100%',
+                    dropdownParent: $this.closest('.modal-content')
+                });
             });
 
             // Auto-calculate when GRN qty changes
