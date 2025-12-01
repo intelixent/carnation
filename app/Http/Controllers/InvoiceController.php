@@ -956,7 +956,7 @@ class InvoiceController extends BaseController
                     'shipped_address_2' => $vendor->uae_shipping_address_2 ?? '',
                     'shipped_city' => $vendor->uae_shipping_city_town_village ?? '',
                     'shipped_state' => '',
-                    'shipped_gst_no' => '', 
+                    'shipped_gst_no' => '',
                     'shipped_pan_no' => '',
                     'shipped_pincode' => '',
                     'shipped_place_of_supply' => $vendor->uae_shipping_place_supply ?? '',
@@ -985,6 +985,8 @@ class InvoiceController extends BaseController
             $transportDetails['transport_date_time'] = $this->convertDateForInput($transportDetails['transport_date_time']);
         }
 
+        $invoice->inv_date = $this->formatDateForInput($invoice->inv_date);
+
         return view('invoice.invoice_details', compact(
             'invoice',
             'vendor',
@@ -996,6 +998,44 @@ class InvoiceController extends BaseController
             'transportDetails',
             'invoiceCountry'
         ));
+    }
+
+    private function formatDateForInput($date)
+    {
+        if (empty($date)) {
+            return '';
+        }
+
+        try {
+            // Try direct Carbon parsing first
+            return \Carbon\Carbon::parse($date)->format('Y-m-d');
+        } catch (\Exception $e) {
+            // If parse() fails, try manually with known formats
+            $formats = [
+                'd-m-Y',
+                'd/m/Y',
+                'd.m.Y',
+                'd-m-y',
+                'Y-m-d',
+                'Y/m/d',
+                'Y.m.d',
+                'm-d-Y',
+                'm/d/Y',
+                'd M Y',
+                'M d, Y'
+            ];
+
+            foreach ($formats as $format) {
+                try {
+                    return \Carbon\Carbon::createFromFormat($format, $date)->format('Y-m-d');
+                } catch (\Exception $e2) {
+                    continue;
+                }
+            }
+        }
+
+        // If nothing works, return blank instead of breaking UI
+        return '';
     }
 
     /**
