@@ -881,7 +881,7 @@
                                 text: response.message,
                                 timer: 3000
                             }).then(() => {
-                                location.reload();
+                                // location.reload();
                             });
                         } else {
                             Swal.fire({
@@ -981,7 +981,7 @@
                                     text: response.message,
                                     timer: 3000
                                 }).then(() => {
-                                    location.reload();
+                                    // location.reload();
                                 });
                             } else {
                                 Swal.fire({
