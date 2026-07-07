@@ -183,6 +183,7 @@
                 reader.onload = function(e) {
                     const base64Pdf = e.target.result.split(',')[1];
                     const extractionNo = $('#extraction_no').val();
+                    const vendorId = $('#vendor_id').val();
 
                     Swal.fire({
                         title: 'Loading...',
@@ -199,7 +200,8 @@
                         type: "POST",
                         data: {
                             'extraction_no': extractionNo,
-                            'pdf_base64': base64Pdf
+                            'pdf_base64': base64Pdf,
+                            'vendor_id': vendorId // needed for the D-Mart size-chart lookup
                         },
                         //contentType: "application/json",
                         dataType: "json",
@@ -208,9 +210,12 @@
 
                             if (response.status == true) {
                                 $('.resultsContainer').html(response.html);
-                                document.getElementById("verifyCheck").addEventListener("change", function() {
-                                    document.getElementById("saveButton").disabled = !this.checked;
-                                });
+
+                                // If the D-Mart carton/size table was rendered, seed it with one
+                                // empty color row so the user has somewhere to start typing.
+                                if ($('#cartonQtyTable').length) {
+                                    cartonAddColorRow();
+                                }
 
                                 $.toast({
                                     heading: 'Success',
@@ -254,6 +259,143 @@
         });
     });
 
+    // ------------------------------------------------------------------
+    // Verify checkbox toggles Save button - delegated because #verifyCheck
+    // only exists once a vendor's response partial has been injected.
+    // ------------------------------------------------------------------
+    $(document).on('change', '#verifyCheck', function() {
+        $('#saveButton').prop('disabled', !this.checked);
+    });
+
+    // ------------------------------------------------------------------
+    // D-Mart Carton Qty / Size Breakdown table.
+    // dmart_response_view.blade.php is loaded into .resultsContainer via AJAX and contains
+    // no <script> of its own - all the wiring for its "Add Color" table lives here, bound
+    // through event delegation on document since the table only exists after injection.
+    // ------------------------------------------------------------------
+
+    function cartonGetSizes() {
+        try {
+            return JSON.parse($('#cartonQtyTable').attr('data-sizes') || '[]');
+        } catch (e) {
+            return [];
+        }
+    }
+
+    // Total Qty (pieces) extracted from the PDF at the PO level - used to derive
+    // Total Cartons = Total Qty / Case Lot, the same way data-sizes drives the columns.
+    function cartonGetTotalQty() {
+        var raw = $('#cartonQtyTable').attr('data-total-qty') || '0';
+        return parseFloat(String(raw).replace(/,/g, '')) || 0;
+    }
+
+    function cartonRecalcRowTotal($row) {
+        var total = 0;
+        $row.find('.carton-qty-input').each(function() {
+            total += parseFloat($(this).val()) || 0;
+        });
+        $row.find('.row-total').text(total);
+    }
+
+    function cartonRecalcAll() {
+        var $tbody = $('#cartonQtyBody');
+        if (!$tbody.length) return;
+
+        var sizesList = cartonGetSizes();
+        var sizeTotals = {};
+        sizesList.forEach(function(size) {
+            sizeTotals[size] = 0;
+        });
+
+        var grandTotal = 0;
+        var colorCount = 0;
+
+        $tbody.find('tr').each(function() {
+            var $row = $(this);
+            var colorVal = $row.find('.carton-color-input').val().trim();
+            if (colorVal !== '') colorCount++;
+
+            $row.find('.carton-qty-input').each(function() {
+                var size = $(this).data('size');
+                var val = parseFloat($(this).val()) || 0;
+                sizeTotals[size] = (sizeTotals[size] || 0) + val;
+                grandTotal += val;
+            });
+        });
+
+        $('.total-size-cell').each(function() {
+            var size = $(this).data('size');
+            $(this).text(sizeTotals[size] || 0);
+        });
+
+        $('#grandTotalQty').text(grandTotal);
+        $('#colorCountDisplay').val(colorCount);
+
+        var caseLot = parseFloat($('#caseLotInput').val()) || 0;
+        var ratio = colorCount > 0 ? (caseLot / colorCount) : 0;
+        $('#ratioDisplay').val(ratio ? ratio.toFixed(2) : 0);
+
+        // Total Cartons = Total Qty (from PDF) ÷ Case Lot
+        var totalQtyFromPdf = cartonGetTotalQty();
+        var totalCartons = caseLot > 0 ? (totalQtyFromPdf / caseLot) : 0;
+        $('#totalCartonsDisplay').val(totalCartons ? totalCartons.toFixed(2) : 0);
+
+        cartonSerialize(ratio, totalCartons);
+    }
+
+    function cartonSerialize(ratio, totalCartons) {
+        var $tbody = $('#cartonQtyBody');
+        var caseLot = parseFloat($('#caseLotInput').val()) || 0;
+        var payload = [];
+
+        $tbody.find('tr').each(function() {
+            var $row = $(this);
+            var color = $row.find('.carton-color-input').val().trim();
+            if (color === '') return;
+
+            $row.find('.carton-qty-input').each(function() {
+                var qty = parseInt($(this).val()) || 0;
+                if (qty > 0) {
+                    payload.push({
+                        color: color,
+                        size: $(this).data('size'),
+                        qty: qty,
+                        case_lot: caseLot,
+                        ratio: ratio ? Number(ratio.toFixed(2)) : 0,
+                        total_cartons: totalCartons ? Number(totalCartons.toFixed(2)) : 0
+                    });
+                }
+            });
+        });
+
+        $('.carton_qty_sizes').val(JSON.stringify(payload));
+    }
+
+    function cartonAddColorRow() {
+        var $template = $('#cartonRowTemplate');
+        if (!$template.length) return;
+
+        var $clone = $template.clone();
+        $clone.removeAttr('id');
+        $('#cartonQtyBody').append($clone);
+        cartonRecalcAll();
+    }
+
+    $(document).on('click', '#addColorRowBtn', function() {
+        cartonAddColorRow();
+    });
+
+    $(document).on('input', '.carton-qty-input, .carton-color-input, #caseLotInput', function() {
+        var $row = $(this).closest('#cartonQtyBody tr');
+        if ($row.length) cartonRecalcRowTotal($row);
+        cartonRecalcAll();
+    });
+
+    $(document).on('click', '.remove-color-row', function() {
+        $(this).closest('tr').remove();
+        cartonRecalcAll();
+    });
+
     $(document).on('click', '#saveButton', function() {
         var vendor_name = $("#vendor_name").val();
         var custom_field_no = $("#custom_field_no").val();
@@ -276,6 +418,7 @@
         var po_items = $(".po_items").val();
         var po_unit_price = $(".po_unit_price").val();
         var po_qty = $(".po_qty").val();
+        var carton_qty_sizes = $(".carton_qty_sizes").val();
 
         $.ajax({
             url: "{{route('check_po_exists')}}",
@@ -341,6 +484,11 @@
             formData.append('vendor_name', vendor_name);
             formData.append('vendor_id', vendor_id);
             formData.append('hsn_code', hsn_code);
+
+            if (carton_qty_sizes && carton_qty_sizes.trim() !== "") {
+                formData.append('carton_qty_sizes', carton_qty_sizes);
+            }
+
             formData.append('_token', '{{ csrf_token() }}');
 
             // Append PDF file if exists

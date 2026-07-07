@@ -7,8 +7,10 @@ use Illuminate\Http\Request;
 use App\Models\VendorMaster;
 use App\Models\PoMaster;
 use App\Models\PoItems;
+use App\Models\PoDmartSizes;
 use App\Models\PrefixSetting;
 use App\Models\PoSizes;
+use App\Models\SizeChartMaster;
 use App\Utils\POutils;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -201,6 +203,7 @@ class PdfExtractController extends BaseController
     {
         $extraction_no = $request->input('extraction_no');
         $pdfBase64 = $request->input('pdf_base64');
+        $vendor_id = $request->input('vendor_id');
 
         $response = Http::post('http://localhost:8000/process', [
             'extraction_no' => $extraction_no,
@@ -211,9 +214,9 @@ class PdfExtractController extends BaseController
             $res_data = $response->json();
             $data = $res_data['data'];
 
-            // print_r($data);
-
             // Handle different company data structures
+            $viewData = ['data' => $data];
+
             if ($extraction_no === '1') {
                 $view = 'pdf_extract.jack_jones_response_view';
             } elseif ($extraction_no === '2') {
@@ -222,15 +225,37 @@ class PdfExtractController extends BaseController
                 $data['po_details']['customer_address'] = $data['customer_details']['address'] ?? '';
                 unset($data['customer_details']);
                 $view = 'pdf_extract.puma_response_view';
+                $viewData['data'] = $data;
             } elseif ($extraction_no === '4') {
                 $view = 'pdf_extract.benetton_response_view';
             } elseif ($extraction_no === '5') {
                 $view = 'pdf_extract.aditiya_response_view';
+            } elseif ($extraction_no === '6') {
+                $view = 'pdf_extract.dmart_response_view';
+
+                // Sizes come from the vendor's size chart - drives the carton qty/size table columns.
+                // status = 0 means active for size_chart_master rows (same convention used when
+                // these rows are created elsewhere), shown in the id order they were added.
+                $sizes = SizeChartMaster::where('vendor_id', $vendor_id)
+                    ->where('status', 0)
+                    ->orderBy('id', 'asc')
+                    ->pluck('size')
+                    ->toArray();
+
+                // Sum of the per-line "case lot" values extracted from the PDF, used as the
+                // starting value for the editable Case Lot field
+                $totalCaseLot = 0;
+                foreach ($data['po_items'] ?? [] as $item) {
+                    $totalCaseLot += (float) str_replace(',', '', $item['case_lot'] ?? 0);
+                }
+
+                $viewData['sizes'] = $sizes;
+                $viewData['totalCaseLot'] = $totalCaseLot;
             } else {
                 $view = 'pdf_extract.jack_jones_response_view';
             }
 
-            $html = view($view, compact('data'))->render();
+            $html = view($view, $viewData)->render();
             return response()->json(['status' => true, 'html' => $html]);
         } else {
             return response()->json(['error' => "Error processing PDF"], 500);
@@ -250,6 +275,8 @@ class PdfExtractController extends BaseController
                 } elseif ($vendor_id === "4") {
                     $po_num = $data['order_no'] ?? null;
                 } elseif ($vendor_id === "7") {
+                    $po_num = $data['po_number'] ?? null;
+                } elseif ($vendor_id === "8") {
                     $po_num = $data['po_number'] ?? null;
                 }
             } else {
@@ -335,6 +362,10 @@ class PdfExtractController extends BaseController
             $vendor_id = $request->input('vendor_id');
             $hsn_code = $request->input('hsn_code');
 
+            // The color/size carton breakdown the user builds in the UI (D-Mart only) - goes
+            // into po_carton_qty_sizes, never into po_items
+            $carton_qty_sizes = json_decode($request->input('carton_qty_sizes'), true) ?? [];
+
             // Modified data extraction logic
             if ($request->has('po_data')) {
                 // For Skechers and Benetton - use entire po_data as po_details
@@ -364,7 +395,7 @@ class PdfExtractController extends BaseController
             $prefixSetting->save();
 
             // Create PO Items
-            $this->createPoItems($vendor_id, $pomaster->id, $po_items, $po_details, $hsn_code);
+            $this->createPoItems($vendor_id, $pomaster->id, $po_items, $po_details, $hsn_code, $carton_qty_sizes);
 
             return response()->json([
                 'success' => true,
@@ -513,6 +544,48 @@ class PdfExtractController extends BaseController
                     ]), // Store vendor info in article_info as JSON
                 ]);
                 break;
+
+            case "8":
+                // Case Lot is a per-line field on the extracted PDF - roll it up to a PO-level total
+                $totalCaseLot = 0;
+                $itemDescriptions = [];
+                foreach ($po_details['po_items'] ?? [] as $item) {
+                    $totalCaseLot += (float) str_replace(',', '', $item['case_lot'] ?? 0);
+                    if (!empty($item['description'])) {
+                        $itemDescriptions[] = $item['description'];
+                    }
+                }
+
+                $poData = array_merge($poData, [
+                    'po_num'           => $po_details['po_number'] ?? null,
+                    'po_date'          => $po_details['po_date'] ?? null,
+                    'goods_ready_date' => $po_details['exp_delivery_dt'] ?? null,
+                    'vendor_del_adr'   => $po_details['buyer_address'] ?? null,
+                    'vendor_com_adr'   => $po_details['vendor_address'] ?? null,
+                    'vendor_gst'       => $po_details['vendor_gstin'] ?? null,
+                    'po_unit_price'    => $po_details['po_items'][0]['net_price'] ?? 0,
+                    'po_qty'           => (float) str_replace(',', '', $po_details['total_qty'] ?? 0),
+                    'article_info'     => json_encode([
+                        'buyer_name'        => $po_details['buyer_name'] ?? null,
+                        'buyer_cin'         => $po_details['buyer_cin'] ?? null,
+                        'buyer_gstin'       => $po_details['buyer_gstin'] ?? null,
+                        'buyer_attn'        => $po_details['buyer_attn'] ?? null,
+                        'buyer_email'       => $po_details['buyer_email'] ?? null,
+                        'buyer_buyer'       => $po_details['buyer_buyer'] ?? null,
+                        'vendor_name'       => $po_details['vendor_name'] ?? null,
+                        'vendor_phone'      => $po_details['vendor_phone'] ?? null,
+                        'vendor_email'      => $po_details['vendor_email'] ?? null,
+                        'total_boxes'       => $po_details['total_boxes'] ?? null,
+                        'total_value'       => $po_details['total_value'] ?? null,
+                        'amount_in_words'   => $po_details['amount_in_words'] ?? null,
+                        'total_ctn'         => $po_details['total_boxes'] ?? null,
+                        'total_caselot'     => $totalCaseLot,
+                        'total_qty'         => $po_details['total_qty'] ?? null,
+                        'item_descriptions' => $itemDescriptions,
+                        'po_items'          => $po_details['po_items'] ?? [],
+                    ]),
+                ]);
+                break;
         }
 
         return PoMaster::create($poData);
@@ -525,7 +598,7 @@ class PdfExtractController extends BaseController
         return $vendor->id;
     }
 
-    private function createPoItems($vendor_id, $po_id, $po_items, $po_details, $hsn_code)
+    private function createPoItems($vendor_id, $po_id, $po_items, $po_details, $hsn_code, $carton_qty_sizes = [])
     {
         switch ($vendor_id) {
             case "1":
@@ -548,6 +621,10 @@ class PdfExtractController extends BaseController
 
             case "7":
                 $this->createAdityaItems($po_id, $po_items, $po_details, $hsn_code);
+                break;
+
+            case "8":
+                $this->createDmartItems($po_id, $po_items, $po_details, $hsn_code, $carton_qty_sizes);
                 break;
         }
     }
@@ -826,6 +903,88 @@ class PdfExtractController extends BaseController
         }
     }
 
+    private function createDmartItems($po_id, $po_items, $po_details, $hsn_code, $carton_qty_sizes = [])
+    {
+        // Representative article info taken from the extracted PDF line item(s)
+        $firstItem = $po_items[0] ?? [];
+        $articleDescription = $this->extractArticleDescription($firstItem['description'] ?? null);
+        $eanCode = $firstItem['ean'] ?? null;
+        $hsnCode = $firstItem['hsn'] ?: $hsn_code;
+
+        $gstPercentage = $this->cleanPercentage($firstItem['cgst_igst_pct'] ?? 0);
+        $price = $this->cleanNumber($firstItem['l_price'] ?? 0);
+        $mrpPrice = $this->cleanNumber($firstItem['mrp'] ?? 0);
+
+        // Total qty is a PO-level figure from the PDF (not a per-line sum)
+        $totalQtyFromPdf = (float) str_replace(',', '', $po_details['total_qty'] ?? 0);
+
+        // Ratio = case lot / number of distinct colors entered by the user
+        $colorCount = collect($carton_qty_sizes)->pluck('color')->filter()->unique()->count();
+
+        foreach ($carton_qty_sizes as $row) {
+            $color = trim($row['color'] ?? '');
+            $size = $row['size'] ?? null;
+            $qty = isset($row['qty']) ? (int) str_replace(',', '', $row['qty']) : 0;
+
+            if ($color === '' || empty($size) || $qty <= 0) {
+                continue;
+            }
+
+            $caseLot = isset($row['case_lot']) ? (float) str_replace(',', '', $row['case_lot']) : 0;
+
+            $ratio = isset($row['ratio'])
+                ? (float) $row['ratio']
+                : ($colorCount > 0 ? round($caseLot / $colorCount, 2) : 0);
+
+            $totalCartons = isset($row['total_cartons'])
+                ? (float) $row['total_cartons']
+                : ($caseLot > 0 ? round($totalQtyFromPdf / $caseLot, 2) : 0);
+
+            PoDmartSizes::create([
+                'po_id'                => $po_id,
+                'article_description'  => $articleDescription,
+                'ean_code'             => $eanCode,
+                'hsn_code'             => $hsnCode,
+                'color'                => $color,
+                'size'                 => $size,
+                'carton_qty'           => $qty,
+                'ratio'                => $ratio,
+                'total_cartons'        => $totalCartons,
+                'case_lot'             => $caseLot,
+                'total_qty'            => $totalQtyFromPdf,
+                'gst_percentage'       => $gstPercentage,
+                'price'                => $price,
+                'mrp_price'            => $mrpPrice,
+                'created_at'           => now(),
+                'created_by'           => auth()->user()->id,
+                'status'               => 0,
+            ]);
+        }
+    }
+
+    private function extractArticleDescription(?string $description): ?string
+    {
+        if (empty($description)) {
+            return null;
+        }
+
+        $description = trim($description);
+
+        $sizeToken = '(?:XS|S|M|L|XL|XXL|XXXL|[2-9]XL)';
+
+        $pattern = '/\s' . $sizeToken . '(?:-' . $sizeToken . ')?(?=[\s@\[]|$)/i';
+
+        if (preg_match($pattern, $description, $matches, PREG_OFFSET_CAPTURE)) {
+            $cutAt = $matches[0][1];
+            $name = trim(substr($description, 0, $cutAt));
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        return $description;
+    }
+
     public function get_po_details(Request $request)
     {
         $po_id = $request->input('po_id');
@@ -864,6 +1023,16 @@ class PdfExtractController extends BaseController
             $size_breakdown = [
                 'data' => $breakdown,
                 'sizes' => $sizes,
+            ];
+        }
+
+        // For D-Mart (vendor 8), pull the carton qty/size breakdown from its own table
+        $carton_qty_sizes = [];
+        if ($vendor_id == 8) {
+            $cartonRows = PoDmartSizes::where('po_id', $po_id)->get();
+            $carton_qty_sizes = [
+                'data' => $cartonRows,
+                'sizes' => $cartonRows->pluck('size')->unique()->values()->toArray(),
             ];
         }
 
@@ -936,7 +1105,8 @@ class PdfExtractController extends BaseController
             'po_items',
             'hsn_code',
             'formatted_po_items',
-            'size_breakdown'
+            'size_breakdown',
+            'carton_qty_sizes'
         );
 
         // Add reconstructed data for Aditiya
@@ -962,6 +1132,9 @@ class PdfExtractController extends BaseController
                 break;
             case 7:
                 $view = 'pdf_extract.aditiya_details';
+                break;
+            case 8:
+                $view = 'pdf_extract.dmart_details';
                 break;
             default:
                 $view = 'pdf_extract.details';

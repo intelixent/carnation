@@ -42,6 +42,7 @@
                         <a class="nav-link" href="{{route('carton_benetton_master')}}">Benetton</a>
                         <a class="nav-link" href="{{route('carton_selected_master')}}">Selected</a>
                         <a class="nav-link" href="{{route('carton_vero_master')}}">Vero Modo</a>
+                        <a class="nav-link" href="{{route('carton_dmart_master')}}">Dmart</a>
                     </nav>
                     <div class="tab-content">
                         <div class="tab-pane show active text-muted" id="nav-skecher" role="tabpanel">

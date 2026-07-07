@@ -32,12 +32,14 @@
 <div class="row mt-2">
     <div class="col-md-12">
         <div class="d-flex justify-content-end">
+            @if($showPositionCartonQty ?? true)
             <button type="button" class="btn btn-sm btn-info me-2 reset-positions">
                 <i class="fas fa-sort-numeric-up"></i> Reset Positions
             </button>
             <button type="button" class="btn btn-sm btn-warning me-2 clear-carton-qty">
                 <i class="fas fa-eraser"></i> Clear Per Carton Qty
             </button>
+            @endif
             <button type="button" class="btn btn-sm btn-secondary clear-weights">
                 <i class="fas fa-weight-hanging"></i> Clear Weights
             </button>
@@ -96,7 +98,12 @@
                             @endforeach
                         </tr>
 
-                        {{-- POSITION Row (common for all colors) - Available for ALL vendors --}}
+                        {{--
+                            POSITION and PER CARTON QTY rows - hidden entirely for D-Mart (Vendor ID 8).
+                            When hidden, no positions[]/per_carton_qtys[] inputs are submitted at all,
+                            and the backend always stores position/per_carton_qty as null for this vendor.
+                        --}}
+                        @if($showPositionCartonQty ?? true)
                         <tr class="bg-light">
                             <td class="text-center" colspan="2"><strong>POSITION</strong></td>
                             @foreach($allSizes as $size)
@@ -115,7 +122,6 @@
                             @endforeach
                         </tr>
 
-                        {{-- PER CARTON QTY Row (common for all colors) - Available for ALL vendors --}}
                         <tr class="bg-light">
                             <td class="text-center" colspan="2"><strong>PER CARTON QTY</strong></td>
                             @foreach($allSizes as $size)
@@ -133,8 +139,9 @@
                             </td>
                             @endforeach
                         </tr>
+                        @endif
 
-                        {{-- PER PIECE WEIGHT Row (common for all colors) - Available for ALL vendors --}}
+                        {{-- PER PIECE WEIGHT Row (common for all colors) - Available for ALL vendors, including D-Mart --}}
                         <tr class="bg-light">
                             <td class="text-center" colspan="2"><strong>PER PIECE WEIGHT (KG)</strong></td>
                             @foreach($allSizes as $size)

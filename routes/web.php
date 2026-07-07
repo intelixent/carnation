@@ -14,6 +14,7 @@ use App\Http\Controllers\EInvoiceController;
 use App\Http\Controllers\AutoPackingListController;
 use App\Http\Controllers\JobOrderController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\DmartPackingListController;
 
 /*
 |--------------------------------------------------------------------------
@@ -117,6 +118,10 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/save-lp-number', [PackingListController::class, 'saveLpNumber'])->name('packing_list_store_lp_number');
         Route::get('/get-po-countries', [PackingListController::class, 'get_po_countries'])->name('get_po_countries');
         Route::get('/get-country-colors', [PackingListController::class, 'get_country_colors'])->name('get_country_colors');
+        Route::post('/dmart/item-add', [DmartPackingListController::class, 'item_add'])->name('dmart_packing_list_item_add');
+        Route::post('/dmart/item-store', [DmartPackingListController::class, 'item_store'])->name('dmart_packing_list_item_store');
+        Route::get('/dmart/items', [DmartPackingListController::class, 'list_items'])->name('dmart_packing_list_items');
+        Route::post('/dmart/delete-carton', [DmartPackingListController::class, 'item_delete_carton'])->name('dmart_packing_list_delete_carton');
     });
 
     Route::group(['prefix' => 'invoice'], function () {
@@ -190,6 +195,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
                 Route::get('/benetton_master', [VendorController::class, 'carton_benetton_master'])->name('carton_benetton_master');
                 Route::get('/selected_master', [VendorController::class, 'carton_selected_master'])->name('carton_selected_master');
                 Route::get('/vero_master', [VendorController::class, 'carton_vero_master'])->name('carton_vero_master');
+                Route::get('/dmart_master', [VendorController::class, 'carton_dmart_master'])->name('carton_dmart_master');
                 Route::post('/add', [VendorController::class, 'carton_add'])->name('carton_add');
                 Route::post('/store', [VendorController::class, 'carton_store'])->name('carton_store');
                 Route::post('/details', [VendorController::class, 'get_carton_details'])->name('get_carton_details');
