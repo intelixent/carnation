@@ -2393,6 +2393,193 @@ def extract_aditiya(pdf_path):
     
     return results
 
+def extract_dmart(pdf_path):
+    print(f"Starting D-Mart extraction from: {pdf_path}")
+    result = {
+        "po_number": "",
+        "po_date": "",
+        "exp_delivery_dt": "",
+        "buyer_name": "",
+        "buyer_address": "",
+        "buyer_cin": "",
+        "buyer_gstin": "",
+        "buyer_attn": "",
+        "buyer_email": "",
+        "buyer_buyer": "",
+        "vendor_name": "",
+        "vendor_address": "",
+        "vendor_phone": "",
+        "vendor_email": "",
+        "vendor_gstin": "",
+        "po_items": [],
+        "total_qty": "",
+        "total_boxes": "",
+        "total_value": "",
+        "amount_in_words": "",
+    }
+
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            page = pdf.pages[0]
+            width = page.width
+
+            # Find where the item table header ("Sno ...") starts, so we know
+            # where the two-column header block ends.
+            header_bottom = 375
+            for w in page.extract_words():
+                if w['text'] == 'Sno':
+                    header_bottom = w['top'] - 2
+                    break
+
+            # Crop left (Ship/Bill To / buyer block) and right (PO# / Vendor
+            # block) separately so their lines don't interleave.
+            left_text = page.crop((0, 0, width * 0.55, header_bottom)).extract_text() or ""
+            right_text = page.crop((width * 0.55, 0, width, header_bottom)).extract_text() or ""
+
+            # Everything from the item table downward (and any further pages)
+            # is single-column, so plain text extraction is fine there.
+            body_text = ""
+            for p in pdf.pages:
+                if p is page:
+                    body_text += (p.crop((0, header_bottom, p.width, p.height)).extract_text() or "") + "\n"
+                else:
+                    body_text += (p.extract_text() or "") + "\n"
+
+            def field(pattern, text, flags=0):
+                m = re.search(pattern, text, flags)
+                return m.group(1).strip() if m else ""
+
+            # ---- Buyer / Ship-Bill-To (left column) ----
+            result["buyer_name"] = field(r'Ship/Bill To\s+(.+)', left_text)
+            addr_lines = []
+            capture = False
+            for line in left_text.split("\n"):
+                if line.startswith("Ship/Bill To"):
+                    capture = True
+                    continue
+                if capture:
+                    if re.match(r'^(Lat/Long|Phone|Attn|Email|Buyer|Vendor FSSAI|Validity)', line):
+                        break
+                    addr_lines.append(line.strip())
+            result["buyer_address"] = ", ".join(l for l in addr_lines if l)
+            result["buyer_cin"] = field(r'CIN:\s*([\w]+)', left_text)
+            result["buyer_gstin"] = field(r'GSTIN:\s*([\w]+)', left_text)
+            result["buyer_attn"] = field(r'Attn\s+(.+)', left_text)
+            result["buyer_email"] = field(r'Email\s+(\S+@\S+)', left_text)
+            result["buyer_buyer"] = field(r'Buyer\s+(.+)', left_text)
+            print(f"Buyer: {result['buyer_name']} | {result['buyer_address']}")
+
+            # ---- PO details / Vendor (right column) ----
+            result["po_number"] = field(r'PO\s*#\s*(\S+)', right_text)
+            result["po_date"] = field(r'PO Date\s+([\d.]+)', right_text)
+            result["exp_delivery_dt"] = field(r'Expc\.Delv\.Dt\s+([\d.]+)', right_text)
+            result["vendor_name"] = field(r'Vendor\s+(.+)', right_text)
+
+            vendor_addr_lines = []
+            capture = False
+            for line in right_text.split("\n"):
+                if line.startswith("Vendor "):
+                    capture = True
+                    continue
+                if capture:
+                    if re.match(r'^(Phone|Fax|Email|GSTIN)', line):
+                        break
+                    vendor_addr_lines.append(line.strip())
+            result["vendor_address"] = ", ".join(l for l in vendor_addr_lines if l)
+            result["vendor_phone"] = field(r'Phone\s+(\S+)', right_text)
+            result["vendor_email"] = field(r'Email\s+(\S+@\S+)', right_text)
+            result["vendor_gstin"] = field(r'GSTIN\s+(\S+)', right_text)
+            print(f"PO#: {result['po_number']} | Vendor: {result['vendor_name']}")
+
+            # ---- Item table (single item per row, description can wrap
+            # across several lines including delivery date + box count) ----
+            lines = body_text.split("\n")
+            items = []
+            i = 0
+            while i < len(lines):
+                line = lines[i].strip()
+                m = re.match(
+                    r'^(\d+)\s+(\d{6,})\s+(.+?)\s+(EA|PC|PCS|NOS)\s+(\d+)\s+(\d+)\s+'
+                    r'([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+'
+                    r'([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d,.]+)$',
+                    line
+                )
+                if m:
+                    desc_extra = []
+                    boxes = ""
+                    j = i + 1
+                    while j < len(lines):
+                        nxt = lines[j].strip()
+                        if not nxt or re.match(r'^(Total|Amount in words|Terms)', nxt):
+                            break
+                        if re.match(r'^\d+\s+\d{6,}', nxt):
+                            break
+                        desc_extra.append(nxt)
+                        j += 1
+
+                    delivery_dt = ""
+                    if desc_extra:
+                        dm = re.match(r'^(\d{2}\.\d{2}\.\d{4})\s*(.*)$', desc_extra[0])
+                        if dm:
+                            delivery_dt = dm.group(1)
+                            rest = dm.group(2)
+                            bx = re.search(r'(\d+)\s*$', rest)
+                            if bx:
+                                boxes = bx.group(1)
+                                rest = rest[:bx.start()].strip()
+                            desc_extra[0] = rest
+
+                    full_desc = (m.group(3).strip() + " " + " ".join(d for d in desc_extra if d)).strip()
+                    full_desc = re.sub(r'\s+', ' ', full_desc)
+
+                    hsn = ""
+                    hm = re.search(r'HSN\s*Code\s*:\s*(\d+)', full_desc, re.IGNORECASE)
+                    if hm:
+                        hsn = hm.group(1)
+
+                    items.append({
+                        "sno": m.group(1),
+                        "ean": m.group(2),
+                        "description": full_desc,
+                        "hsn": hsn,
+                        "delivery_dt": delivery_dt,
+                        "uom": m.group(4),
+                        "case_lot": m.group(5),
+                        "boxes": boxes,
+                        "qty": m.group(6),
+                        "b_price": m.group(7),
+                        "trade_disc": m.group(8),
+                        "promo_disc": m.group(9),
+                        "vol_disc": m.group(10),
+                        "net_price": m.group(11),
+                        "sgst_pct": m.group(12),
+                        "cgst_igst_pct": m.group(13),
+                        "cess": m.group(14),
+                        "l_price": m.group(15),
+                        "mrp": m.group(16),
+                        "t_value": m.group(17),
+                    })
+                    print(f"Item extracted: {items[-1]}")
+                    i = j
+                    continue
+                i += 1
+
+            result["po_items"] = items
+
+            result["total_qty"] = field(r'^Total\s+([\d,]+)', body_text, re.MULTILINE)
+            result["total_boxes"] = field(r'Total boxes:\s*(\d+)', body_text)
+            result["total_value"] = field(r'^Total\s+[\d,]+\s+([\d,.]+)', body_text, re.MULTILINE)
+            result["amount_in_words"] = field(r'Amount in words\s+(.+)', body_text)
+
+            print(f"Extraction complete. {len(items)} item(s), total qty {result['total_qty']}")
+
+    except Exception as e:
+        print(f"Error during D-Mart extraction: {e}")
+        import traceback
+        traceback.print_exc()
+
+    return result
+
 @app.post("/process")
 async def process_pdf(request: dict = Body(...)):
     extraction_no = request.get("extraction_no", "")
@@ -2421,6 +2608,8 @@ async def process_pdf(request: dict = Body(...)):
                 result = extract_benetton(temp_path)
             elif "5" in extraction_no:
                 result = extract_aditiya(temp_path)
+            elif "6" in extraction_no:
+                result = extract_dmart(temp_path)
             else:
                 result = None
 

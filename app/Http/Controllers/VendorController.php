@@ -32,7 +32,7 @@ class VendorController extends BaseController
             $this->middleware('permissions:delete-vendor')->only('delete');
             $this->middleware('permissions:status-vendor')->only('update_status');
             $this->middleware('permissions:create-vendor-carton')->only(['carton_add', 'carton_store']);
-            $this->middleware('permissions:list-vendor-carton')->only(['carton_selected_master', 'carton_puma_master', 'carton_jack_master', 'carton_skecher_master', 'carton_benetton_master', 'carton_vero_master']);
+            $this->middleware('permissions:list-vendor-carton')->only(['carton_selected_master', 'carton_puma_master', 'carton_jack_master', 'carton_skecher_master', 'carton_benetton_master', 'carton_vero_master', 'carton_dmart_master']);
             $this->middleware('permissions:view-vendor-carton')->only(['get_carton_details']);
             $this->middleware('permissions:edit-vendor-carton')->only(['carton_edit', 'carton_update']);
             $this->middleware('permissions:delete-vendor-carton')->only('carton_delete');
@@ -306,6 +306,23 @@ class VendorController extends BaseController
         ];
 
         return view('settings.vendor.carton.vero_master', $page_data);
+    }
+
+    public function carton_dmart_master()
+    {
+        $cartons = CartonMaster::where('vendor_id', 8)
+            ->where('status', 0)
+            ->get();
+
+        $page_data = [
+            'page_title' => "Master",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Carton",
+            'cartons' => $cartons,
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        return view('settings.vendor.carton.dmart_master', $page_data);
     }
 
     public function carton_add()

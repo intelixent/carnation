@@ -15,8 +15,10 @@ use App\Models\PackingListItem;
 use App\Models\PackingListConfigMaster;
 use App\Models\PackingListConfigItem;
 use App\Models\PackingListLpNumber;
+use App\Models\PoDmartSizes;
 use Illuminate\Support\Facades\Http;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Http\Controllers\DmartPackingListController;
 
 class PackingListController extends BaseController
 {
@@ -101,6 +103,11 @@ class PackingListController extends BaseController
             case 6:
                 $styleRef = $articleInfo['style_ref'] ?? '';
                 break;
+            case 8:
+                // D-Mart: article description lives on po_dmart_sizes, not article_info
+                $firstDmartRow = PoDmartSizes::where('po_id', $po->id)->first();
+                $styleRef = $firstDmartRow->article_description ?? '';
+                break;
             default:
                 $styleRef = $articleInfo['style_description'] ?? $articleInfo['Article description'] ?? '';
         }
@@ -123,8 +130,23 @@ class PackingListController extends BaseController
                 $allSizes[] = $size;
                 $colorSizeMatrix[$color][$size] = ($colorSizeMatrix[$color][$size] ?? 0) + $qty;
             }
+        } elseif ($po->vendor_id == 8) {
+            // D-Mart (Vendor ID 8): use po_dmart_sizes.
+            // PO Qty per color/size = carton_qty (qty per carton, from the "Add Color" grid)
+            // multiplied by total_cartons (total_qty from PDF / case_lot, same value on every row).
+            $dmartItems = PoDmartSizes::where('po_id', $po->id)
+                ->get(['color', 'size', 'carton_qty', 'total_cartons']);
+
+            foreach ($dmartItems as $item) {
+                $color = $item->color ?: 'N/A';
+                $size = $item->size ?: 'N/A';
+                $qty = $item->carton_qty * $item->total_cartons;
+
+                $allSizes[] = $size;
+                $colorSizeMatrix[$color][$size] = ($colorSizeMatrix[$color][$size] ?? 0) + $qty;
+            }
         } else {
-            // Default: use PoItems table for all other vendors (1, 3, 5, 6)
+            // Default: use PoItems table for all other vendors (1, 2, 3, 5, 6)
             $poItems = PoItems::where('po_id', $po->id)->get();
             foreach ($poItems as $item) {
                 $color = $item->color ?? $item->id_color ?? 'N/A';
@@ -138,7 +160,7 @@ class PackingListController extends BaseController
 
         $allSizes = array_values(array_unique($allSizes));
 
-        // Get excess percentage and calculate packQtyMatrix
+        // Get excess percentage and calculate packQtyMatrix (same excess-based rounding for every vendor, including D-Mart)
         $excessPercentage = $po->vendor->excess ?? 0;
         $packQtyMatrix = [];
         $totalPackQty = 0;
@@ -163,6 +185,10 @@ class PackingListController extends BaseController
             $poQtyBySizeTotal[$size] = $poQty;
             $packQtyBySizeTotal[$size] = $packQty;
         }
+
+        // Position / Per Carton Qty are not applicable for D-Mart (Vendor ID 8) - the UI hides
+        // those rows entirely for this vendor and they are always stored as null on save.
+        $showPositionCartonQty = $po->vendor_id != 8;
 
         // For ALL vendors - get existing position, per_carton_qty, and weight_per_piece data
         $positionData = [];
@@ -205,7 +231,8 @@ class PackingListController extends BaseController
             'hasPackingListItems',
             'positionData',
             'perCartonQtyData',
-            'weightPerPieceData'
+            'weightPerPieceData',
+            'showPositionCartonQty'
         ));
     }
 
@@ -245,7 +272,7 @@ class PackingListController extends BaseController
             }
             $configMaster->save();
 
-            // Get position, per_carton_qty, and weight_per_piece data for ALL vendors
+            // Get position, per_carton_qty, and weight_per_piece data (not used for D-Mart)
             $positions = $request->input('positions', []);
             $perCartonQtys = $request->input('per_carton_qtys', []);
             $weightPerPieces = $request->input('weight_per_pieces', []);
@@ -266,7 +293,6 @@ class PackingListController extends BaseController
                     if ($packQty > $calcQty) {
                         $packQty--;
                     }
-                    // Get position, per_carton_qty, and weight_per_piece for Benetton as well
                     $position = $positions[$item->size] ?? 1;
                     $perCartonQty = $perCartonQtys[$item->size] ?? 0;
                     $weightPerPiece = $weightPerPieces[$item->size] ?? 0;
@@ -282,6 +308,45 @@ class PackingListController extends BaseController
                         'pack_qty'        => $packQty,
                         'position'        => $position,
                         'per_carton_qty'  => $perCartonQty,
+                        'weight_per_piece' => $weightPerPiece,
+                        'status'          => 0,
+                        'created_by'      => auth()->user()->id,
+                        'created_at'      => now(),
+                    ]);
+
+                    $keepIds[] = $configItem->id;
+                }
+            } elseif ($vendor_id == 8) {
+                // For D-Mart (Vendor ID 8): use PoDmartSizes.
+                // PO Qty = carton_qty * total_cartons (recomputed server-side, same as the config screen).
+                // Position and Per Carton Qty are not applicable for D-Mart - always saved as null,
+                // regardless of what (if anything) was posted for them.
+                $items = PoDmartSizes::where('po_id', $po_id)
+                    ->get(['color', 'size', 'carton_qty', 'total_cartons']);
+
+                foreach ($items as $item) {
+                    $color   = $item->color ?: 'N/A';
+                    $size    = $item->size ?: 'N/A';
+                    $poQty   = $item->carton_qty * $item->total_cartons;
+                    $calcQty = $poQty * (1 + $excess / 100);
+                    $packQty = round($calcQty);
+                    if ($packQty > $calcQty) {
+                        $packQty--;
+                    }
+
+                    $weightPerPiece = $weightPerPieces[$size] ?? 0;
+
+                    $configItem = PackingListConfigItem::updateOrCreate([
+                        'config_id' => $configMaster->id,
+                        'color'     => $color,
+                        'size'      => $size,
+                    ], [
+                        'po_id'           => $po_id,
+                        'vendor_id'       => $vendor_id,
+                        'po_qty'          => $poQty,
+                        'pack_qty'        => $packQty,
+                        'position'        => null,
+                        'per_carton_qty'  => null,
                         'weight_per_piece' => $weightPerPiece,
                         'status'          => 0,
                         'created_by'      => auth()->user()->id,
@@ -318,7 +383,7 @@ class PackingListController extends BaseController
                         'vendor_id'       => $vendor_id,
                         'color'           => $color,
                         'size'            => $size,
-                        'country'         => $country, // Save country for vendor ID 2
+                        'country'         => $country,
                         'po_qty'          => $poQty,
                         'pack_qty'        => $packQty,
                         'position'        => $position,
@@ -1857,6 +1922,12 @@ class PackingListController extends BaseController
 
     public function po_print($id)
     {
+        // D-Mart (vendor_id 8) has its own print layout/logic — hand off immediately.
+        $vendorCheck = PackingListMaster::find($id);
+        if ($vendorCheck && $vendorCheck->vendor_id == 8) {
+            return app(DmartPackingListController::class)->po_print($id);
+        }
+
         // Load the packing list with related items, carton, po_item, vendor, po
         $packingList = PackingListMaster::with([
             'items.carton',
