@@ -25,6 +25,12 @@
                                 <li class="list-group-item">
                                     <strong>Vendor Number:</strong> {{ $data['vendor_number'] ?? 'Not available' }}
                                 </li>
+                                <li class="list-group-item">
+                                    <strong>Total Quantity:</strong> {{ $data['total_quantity'] ?? 'Not available' }}
+                                </li>
+                                <li class="list-group-item">
+                                    <strong>Total Value:</strong> {{ $data['total_value'] ?? 'Not available' }}
+                                </li>
                             </ul>
                         </div>
 
@@ -80,6 +86,10 @@
             <div id="collapsePoItems" class="accordion-collapse collapse"
                 aria-labelledby="headingPoItems" data-bs-parent="#pdfAccordion">
                 <div class="accordion-body">
+
+                    {{-- Filled/refreshed by aditiyaRecalcSummary() whenever a Qty value changes --}}
+                    <div id="aditiyaQtyAlert" class="alert alert-warning d-none mb-3" role="alert"></div>
+
                     {{-- PO Items Table --}}
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped">
@@ -106,14 +116,22 @@
                                     <th>Store Loc</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="aditiyaItemsBody">
                                 @if(isset($data['po_items']) && is_array($data['po_items']))
                                 @foreach($data['po_items'] as $index => $item)
-                                <tr>
+                                <tr data-index="{{ $index }}">
                                     <td>{{ $index + 1 }}</td>
-                                    <td>{{ $item['Material Code'] ?? '' }}</td>
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm aditiya-material-input"
+                                            data-index="{{ $index }}"
+                                            value="{{ $item['Material Code'] ?? '' }}">
+                                    </td>
                                     <td>{{ $item['HSN Number'] ?? '' }}</td>
-                                    <td>{{ $item['Qty'] ?? '' }}</td>
+                                    <td>
+                                        <input type="text" inputmode="numeric" class="form-control form-control-sm aditiya-qty-input"
+                                            data-index="{{ $index }}"
+                                            value="{{ $item['Qty'] ?? '' }}">
+                                    </td>
                                     <td>{{ $item['Unit'] ?? '' }}</td>
                                     <td>{{ $item['Per'] ?? '' }}</td>
                                     <td>{{ $item['Rate/Unit'] ?? '' }}</td>
@@ -125,10 +143,14 @@
                                     <td>{{ $item['Val1'] ?? '' }}</td>
                                     <td>{{ $item['Val2'] ?? '' }}</td>
                                     <td>{{ $item['Delivery Date'] ?? '' }}</td>
-                                    <td>{{ $item['Size'] ?? '' }}</td>
+                                    <td class="aditiya-size-cell" data-index="{{ $index }}">{{ $item['Size'] ?? '' }}</td>
                                     <td>{{ $item['Sizewise Qty'] ?? '' }}</td>
                                     <td>{{ $item['Mrp'] ?? '' }}</td>
-                                    <td>{{ $item['Stor e Loc'] ?? '' }}</td>
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm aditiya-storeloc-input"
+                                            data-index="{{ $index }}"
+                                            value="{{ $item['Stor e Loc'] ?? '' }}">
+                                    </td>
                                 </tr>
                                 @endforeach
                                 @else
@@ -177,8 +199,31 @@
                 </div>
             </div>
         </div>
+
+        {{-- PO SUMMARY - grouped by Store Loc, sizewise qty pivot per Store Loc --}}
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingPoSummary">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapsePoSummary" aria-expanded="false"
+                    aria-controls="collapsePoSummary">
+                    PO Summary
+                </button>
+            </h2>
+            <div id="collapsePoSummary" class="accordion-collapse collapse"
+                aria-labelledby="headingPoSummary" data-bs-parent="#pdfAccordion">
+                <div class="accordion-body">
+                    {{-- Populated/refreshed by JS (aditiyaRecalcSummary) whenever
+                         Material Code / Qty / Store Loc is edited above --}}
+                    <div id="aditiyaSummaryContainer"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+
+{{-- Total Quantity extracted from the PDF (po_details accordion), used by JS to make sure
+     the sum of every item's Qty never exceeds it --}}
+<input type="hidden" id="aditiyaTotalQty" value="{{ $data['total_quantity'] ?? 0 }}">
 
 <div class="fixed-bottom p-3 bg-white border-top">
     <div class="form-check mb-2">

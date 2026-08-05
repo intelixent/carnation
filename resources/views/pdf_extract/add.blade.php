@@ -31,6 +31,38 @@
     .error {
         color: red;
     }
+
+    /* ------------------------------------------------------------------
+       Aditiya PO Items table - editable inputs were shrinking down to
+       near-zero width inside the bordered table cells (form-control-sm
+       has no min-width of its own), making Material Code truncate and
+       Qty render as an empty box. Give each input room + keep the row
+       from wrapping so table-responsive handles horizontal overflow
+       instead of the browser crushing the inputs.
+       ------------------------------------------------------------------ */
+    #aditiyaItemsBody td {
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .aditiya-material-input {
+        min-width: 150px;
+    }
+
+    .aditiya-qty-input {
+        min-width: 90px;
+        text-align: right;
+    }
+
+    .aditiya-storeloc-input {
+        min-width: 140px;
+    }
+
+    .aditiya-material-input.is-invalid,
+    .aditiya-qty-input.is-invalid,
+    .aditiya-storeloc-input.is-invalid {
+        border-color: #dc3545;
+    }
 </style>
 <div class="container-fluid">
     <!-- BreadCrumbs -->
@@ -217,6 +249,12 @@
                                     cartonAddColorRow();
                                 }
 
+                                // If the Aditiya PO Items table was rendered, build the initial
+                                // Store-Loc summary and Qty-vs-Total validation from the extracted data.
+                                if ($('#aditiyaItemsBody').length) {
+                                    aditiyaRecalcSummary();
+                                }
+
                                 $.toast({
                                     heading: 'Success',
                                     text: 'PDF extracted successfully',
@@ -262,9 +300,16 @@
     // ------------------------------------------------------------------
     // Verify checkbox toggles Save button - delegated because #verifyCheck
     // only exists once a vendor's response partial has been injected.
+    // For Aditiya, whether the button ends up enabled also depends on the
+    // Qty-vs-Total-Quantity check, so that view routes through
+    // aditiyaUpdateSaveButtonState() instead of the plain toggle.
     // ------------------------------------------------------------------
     $(document).on('change', '#verifyCheck', function() {
-        $('#saveButton').prop('disabled', !this.checked);
+        if ($('#aditiyaItemsBody').length) {
+            aditiyaUpdateSaveButtonState();
+        } else {
+            $('#saveButton').prop('disabled', !this.checked);
+        }
     });
 
     // ------------------------------------------------------------------
@@ -396,6 +441,149 @@
         cartonRecalcAll();
     });
 
+    // ------------------------------------------------------------------
+    // Aditiya (vendor 7) - editable Material Code / Qty / Store Loc on the
+    // PO Items table, the Store-Loc-wise PO Summary underneath it, and a
+    // Qty-vs-Total-Quantity guard so the sum of every item's Qty can never
+    // exceed the Total Quantity extracted from the PDF.
+    // aditiya_response_view.blade.php is loaded into .resultsContainer via AJAX
+    // and contains no <script> of its own - wiring lives here, through event
+    // delegation since the table only exists after injection.
+    // ------------------------------------------------------------------
+
+    // Tracks whether the current Qty total is over the PDF's Total Quantity.
+    // Read by aditiyaUpdateSaveButtonState() to keep Save disabled while true.
+    window.aditiyaQtyExceeded = false;
+
+    function aditiyaGetPoData() {
+        try {
+            return JSON.parse($('.po_data').val() || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function aditiyaSetPoData(data) {
+        $('.po_data').val(JSON.stringify(data));
+    }
+
+    function aditiyaGetTotalQty() {
+        var raw = $('#aditiyaTotalQty').val() || '0';
+        return parseFloat(String(raw).replace(/,/g, '')) || 0;
+    }
+
+    function aditiyaUpdateSaveButtonState() {
+        var verified = $('#verifyCheck').is(':checked');
+        $('#saveButton').prop('disabled', !verified || window.aditiyaQtyExceeded === true);
+    }
+
+    function aditiyaRecalcSummary() {
+        var $body = $('#aditiyaItemsBody');
+        if (!$body.length) return;
+
+        var poData = aditiyaGetPoData();
+        var items = poData.po_items || [];
+
+        // Push the current input values back into po_data so the saved
+        // payload reflects whatever the user has edited.
+        $body.find('tr').each(function() {
+            var idx = $(this).data('index');
+            if (idx === undefined || !items[idx]) return;
+
+            items[idx]['Material Code'] = $(this).find('.aditiya-material-input').val();
+            items[idx]['Qty'] = $(this).find('.aditiya-qty-input').val();
+            items[idx]['Stor e Loc'] = $(this).find('.aditiya-storeloc-input').val();
+        });
+
+        poData.po_items = items;
+        aditiyaSetPoData(poData);
+
+        // ---- Group by Store Loc -> Size -> summed Qty, and total everything ----
+        var groups = {};
+        var totalEntered = 0;
+
+        items.forEach(function(item) {
+            var storeLoc = ((item['Stor e Loc'] || '').trim()) || 'Unassigned';
+            var size = ((item['Size'] || '').trim()) || 'N/A';
+            var qty = parseFloat(String(item['Qty']).replace(/,/g, '')) || 0;
+
+            if (!groups[storeLoc]) groups[storeLoc] = {};
+            groups[storeLoc][size] = (groups[storeLoc][size] || 0) + qty;
+            totalEntered += qty;
+        });
+
+        // ---- Qty-vs-Total-Quantity validation ----
+        var totalFromPdf = aditiyaGetTotalQty();
+        var $alert = $('#aditiyaQtyAlert');
+
+        if (totalFromPdf > 0 && totalEntered > totalFromPdf) {
+            window.aditiyaQtyExceeded = true;
+            $alert.removeClass('d-none alert-success').addClass('alert-danger')
+                .text('Total entered Qty (' + totalEntered + ') exceeds the PDF Total Quantity (' +
+                    totalFromPdf + '). Please correct the Qty values before saving.');
+            $('.aditiya-qty-input').addClass('is-invalid');
+        } else if (totalFromPdf > 0) {
+            window.aditiyaQtyExceeded = false;
+            $alert.removeClass('d-none alert-danger').addClass('alert-success')
+                .text('Total entered Qty (' + totalEntered + ') is within the PDF Total Quantity (' +
+                    totalFromPdf + ').');
+            $('.aditiya-qty-input').removeClass('is-invalid');
+        } else {
+            // No Total Quantity could be extracted from the PDF - nothing to validate against.
+            window.aditiyaQtyExceeded = false;
+            $alert.addClass('d-none');
+            $('.aditiya-qty-input').removeClass('is-invalid');
+        }
+
+        aditiyaUpdateSaveButtonState();
+
+        // ---- Render the Store Loc summary tables ----
+        var $container = $('#aditiyaSummaryContainer');
+        $container.empty();
+
+        var storeLocs = Object.keys(groups).sort();
+        if (storeLocs.length === 0) {
+            $container.html('<p class="text-muted">No items to summarize.</p>');
+            return;
+        }
+
+        storeLocs.forEach(function(storeLoc) {
+            var sizes = Object.keys(groups[storeLoc]).sort();
+            var grandTotal = 0;
+
+            var $section = $('<div class="mb-4"></div>');
+            $section.append('<h6>Store Loc: ' + $('<div>').text(storeLoc).html() + '</h6>');
+
+            var $tableWrap = $('<div class="table-responsive"></div>');
+            var $table = $('<table class="table table-bordered table-sm mb-0"></table>');
+
+            var $thead = $('<thead class="table-dark"><tr><th>Size</th></tr></thead>');
+            var $headRow = $thead.find('tr');
+            sizes.forEach(function(size) {
+                $headRow.append($('<th></th>').text(size));
+            });
+            $headRow.append('<th>Total</th>');
+
+            var $tbody = $('<tbody><tr><td>Qty</td></tr></tbody>');
+            var $bodyRow = $tbody.find('tr');
+            sizes.forEach(function(size) {
+                var qty = groups[storeLoc][size];
+                grandTotal += qty;
+                $bodyRow.append($('<td></td>').text(qty));
+            });
+            $bodyRow.append($('<td></td>').html('<strong>' + grandTotal + '</strong>'));
+
+            $table.append($thead).append($tbody);
+            $tableWrap.append($table);
+            $section.append($tableWrap);
+            $container.append($section);
+        });
+    }
+
+    $(document).on('input', '.aditiya-material-input, .aditiya-qty-input, .aditiya-storeloc-input', function() {
+        aditiyaRecalcSummary();
+    });
+
     $(document).on('click', '#saveButton', function() {
         var vendor_name = $("#vendor_name").val();
         var custom_field_no = $("#custom_field_no").val();
@@ -410,6 +598,22 @@
                 confirmButtonText: 'OK'
             });
             return false;
+        }
+
+        // Make sure the latest edits (Aditiya Material Code / Qty / Store Loc) are
+        // flushed into .po_data and re-validated before we read anything below.
+        if ($('#aditiyaItemsBody').length) {
+            aditiyaRecalcSummary();
+
+            if (window.aditiyaQtyExceeded) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Qty Exceeds Total Quantity',
+                    text: 'The sum of all item Qty values cannot be more than the PDF\'s Total Quantity. Please fix the Qty values before saving.',
+                    confirmButtonText: 'OK'
+                });
+                return false;
+            }
         }
 
         var po_data = $(".po_data").val();
