@@ -26,7 +26,7 @@
             <div class="card">
                 <div class="card-header bg-primary d-flex justify-content-between align-items-center">
                     <div class="card-title text-white">
-                        Vero Modo
+                        Rare Rabbit
                     </div>
                     @if($isSuperAdmin || auth()->user()->hasPermissionTo('create-vendor-carton'))
                     <button type="button" class="btn btn-primary add-carton">
@@ -41,12 +41,12 @@
                         <a class="nav-link" href="{{route('carton_puma_master')}}">Puma</a>
                         <a class="nav-link" href="{{route('carton_benetton_master')}}">Benetton</a>
                         <a class="nav-link" href="{{route('carton_selected_master')}}">Selected</a>
-                        <a class="nav-link active" data-bs-toggle="tab" role="tab" href="#nav-vero" aria-selected="true" href="{{route('carton_vero_master')}}">Vero Modo</a>
+                        <a class="nav-link" href="{{route('carton_vero_master')}}">Vero Modo</a>
                         <a class="nav-link" href="{{route('carton_dmart_master')}}">Dmart</a>
-                        <a class="nav-link" href="{{route('carton_rare_rabbit_master')}}">Rare Rabbit</a>
+                        <a class="nav-link active" ata-bs-toggle="tab" role="tab" href="#nav-rare-rabbit" aria-selected="true" href="{{route('carton_rare_rabbit_master')}}">Rare Rabbit</a>
                     </nav>
                     <div class="tab-content">
-                        <div class="tab-pane show active text-muted" id="nav-vero" role="tabpanel">
+                        <div class="tab-pane show active text-muted" id="nav-rare-rabbit" role="tabpanel">
                             <div class="row">
                                 <div class="col-xl-12">
                                     <div class="table-responsive">

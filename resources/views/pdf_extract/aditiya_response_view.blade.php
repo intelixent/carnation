@@ -90,112 +90,136 @@
                     {{-- Filled/refreshed by aditiyaRecalcSummary() whenever a Qty value changes --}}
                     <div id="aditiyaQtyAlert" class="alert alert-warning d-none mb-3" role="alert"></div>
 
-                    {{-- PO Items Table --}}
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-striped">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>S.No</th>
-                                    <th>Material Code</th>
-                                    <th>HSN Number</th>
-                                    <th>Qty</th>
-                                    <th>Unit</th>
-                                    <th>Per</th>
-                                    <th>Rate/Unit</th>
-                                    <th>Net Value</th>
-                                    <th>IGST %</th>
-                                    <th>CGST %</th>
-                                    <th>SGST %</th>
-                                    <th>UGST %</th>
-                                    <th>Val 1</th>
-                                    <th>Val 2</th>
-                                    <th>Delivery Date</th>
-                                    <th>Size</th>
-                                    <th>Sizewise Qty</th>
-                                    <th>MRP</th>
-                                    <th>Store Loc</th>
-                                </tr>
-                            </thead>
-                            <tbody id="aditiyaItemsBody">
-                                @if(isset($data['po_items']) && is_array($data['po_items']))
-                                @foreach($data['po_items'] as $index => $item)
-                                <tr data-index="{{ $index }}">
-                                    <td>{{ $index + 1 }}</td>
-                                    <td>
-                                        <input type="text" class="form-control form-control-sm aditiya-material-input"
-                                            data-index="{{ $index }}"
-                                            value="{{ $item['Material Code'] ?? '' }}">
-                                    </td>
-                                    <td>{{ $item['HSN Number'] ?? '' }}</td>
-                                    <td>
-                                        <input type="text" inputmode="numeric" class="form-control form-control-sm aditiya-qty-input"
-                                            data-index="{{ $index }}"
-                                            value="{{ $item['Qty'] ?? '' }}">
-                                    </td>
-                                    <td>{{ $item['Unit'] ?? '' }}</td>
-                                    <td>{{ $item['Per'] ?? '' }}</td>
-                                    <td>{{ $item['Rate/Unit'] ?? '' }}</td>
-                                    <td>{{ $item['Net Value'] ?? '' }}</td>
-                                    <td>{{ $item['IGST %'] ?? '' }}</td>
-                                    <td>{{ $item['CGST %'] ?? '' }}</td>
-                                    <td>{{ $item['SGST %'] ?? '' }}</td>
-                                    <td>{{ $item['UGST %'] ?? '' }}</td>
-                                    <td>{{ $item['Val1'] ?? '' }}</td>
-                                    <td>{{ $item['Val2'] ?? '' }}</td>
-                                    <td>{{ $item['Delivery Date'] ?? '' }}</td>
-                                    <td class="aditiya-size-cell" data-index="{{ $index }}">{{ $item['Size'] ?? '' }}</td>
-                                    <td>{{ $item['Sizewise Qty'] ?? '' }}</td>
-                                    <td>{{ $item['Mrp'] ?? '' }}</td>
-                                    <td>
-                                        <input type="text" class="form-control form-control-sm aditiya-storeloc-input"
-                                            data-index="{{ $index }}"
-                                            value="{{ $item['Stor e Loc'] ?? '' }}">
-                                    </td>
-                                </tr>
-                                @endforeach
-                                @else
-                                <tr>
-                                    <td colspan="19" class="text-center">No PO items found</td>
-                                </tr>
-                                @endif
-                            </tbody>
-                        </table>
-                    </div>
+                    @php
+                    // Group items by Store Loc (keeping the ORIGINAL array index on each item
+                    // as _original_index) so that all rows for a Store Loc - across all its
+                    // sizes - are rendered together, one Store Loc block after another.
+                    // data-index on each <tr> stays tied to the original po_items index so the
+                        // JS in the parent view (which reads/writes items[idx] by that index) keeps
+                        // working unchanged even though the display order is now grouped.
+                        $poItemsRaw = $data['po_items'] ?? [];
+                        $groupedPoItems = collect($poItemsRaw)
+                        ->map(function ($item, $idx) {
+                        $item['_original_index'] = $idx;
+                        return $item;
+                        })
+                        ->groupBy(function ($item) {
+                        $storeLoc = trim($item['Stor e Loc'] ?? '');
+                        return $storeLoc !== '' ? $storeLoc : 'Unassigned';
+                        })
+                        ->sortKeys();
+                        @endphp
 
-                    {{-- Material Breakdown Table --}}
-                    <div class="mt-4">
-                        <h5>Material Breakdown ({{ isset($data['material_descriptions']) ? count($data['material_descriptions']) : 0 }} items)</h5>
+                        {{-- PO Items Table --}}
                         <div class="table-responsive">
                             <table class="table table-bordered table-striped">
                                 <thead class="table-dark">
                                     <tr>
                                         <th>S.No</th>
-                                        <th>Material</th>
-                                        <th>Material Description</th>
-                                        <th>Colour</th>
-                                        <th>Warer Trail</th>
+                                        <th>Material Code</th>
+                                        <th>Store Loc</th>
+                                        <th>Size</th>
+                                        <th>Qty</th>
+                                        <th>Sizewise Qty</th>
+                                        <th>HSN Number</th>
+                                        <th>Unit</th>
+                                        <th>Per</th>
+                                        <th>Rate/Unit</th>
+                                        <th>Net Value</th>
+                                        <th>IGST %</th>
+                                        <th>CGST %</th>
+                                        <th>SGST %</th>
+                                        <th>UGST %</th>
+                                        <th>Val 1</th>
+                                        <th>Val 2</th>
+                                        <th>Delivery Date</th>
+                                        <th>MRP</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    @if(isset($data['material_descriptions']) && is_array($data['material_descriptions']))
-                                    @foreach($data['material_descriptions'] as $index => $material)
-                                    <tr>
-                                        <td>{{ $index + 1 }}</td>
-                                        <td>{{ $material['Material'] ?? '' }}</td>
-                                        <td>{{ $material['Material description'] ?? '' }}</td>
-                                        <td>{{ $material['Colour'] ?? '' }}</td>
-                                        <td>{{ $material['Warer Trail'] ?? '' }}</td>
+                                <tbody id="aditiyaItemsBody">
+                                    @if($groupedPoItems->isNotEmpty())
+                                    @php $sno = 0; @endphp
+                                    @foreach($groupedPoItems as $storeLoc => $items)
+                                    @foreach($items as $item)
+                                    @php $sno++; @endphp
+                                    <tr data-index="{{ $item['_original_index'] }}">
+                                        <td>{{ $sno }}</td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm aditiya-material-input"
+                                                data-index="{{ $item['_original_index'] }}"
+                                                value="{{ $item['Material Code'] ?? '' }}">
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm aditiya-storeloc-input"
+                                                data-index="{{ $item['_original_index'] }}"
+                                                value="{{ $item['Stor e Loc'] ?? '' }}">
+                                        </td>
+                                        <td class="aditiya-size-cell" data-index="{{ $item['_original_index'] }}">{{ $item['Size'] ?? '' }}</td>
+                                        <td>
+                                            <input type="text" inputmode="numeric" class="form-control form-control-sm aditiya-qty-input"
+                                                data-index="{{ $item['_original_index'] }}"
+                                                value="{{ $item['Qty'] ?? '' }}">
+                                        </td>
+                                        <td>{{ $item['Sizewise Qty'] ?? '' }}</td>
+                                        <td>{{ $item['HSN Number'] ?? '' }}</td>
+                                        <td>{{ $item['Unit'] ?? '' }}</td>
+                                        <td>{{ $item['Per'] ?? '' }}</td>
+                                        <td>{{ $item['Rate/Unit'] ?? '' }}</td>
+                                        <td>{{ $item['Net Value'] ?? '' }}</td>
+                                        <td>{{ $item['IGST %'] ?? '' }}</td>
+                                        <td>{{ $item['CGST %'] ?? '' }}</td>
+                                        <td>{{ $item['SGST %'] ?? '' }}</td>
+                                        <td>{{ $item['UGST %'] ?? '' }}</td>
+                                        <td>{{ $item['Val1'] ?? '' }}</td>
+                                        <td>{{ $item['Val2'] ?? '' }}</td>
+                                        <td>{{ $item['Delivery Date'] ?? '' }}</td>
+                                        <td>{{ $item['Mrp'] ?? '' }}</td>
                                     </tr>
+                                    @endforeach
                                     @endforeach
                                     @else
                                     <tr>
-                                        <td colspan="5" class="text-center">No material descriptions found</td>
+                                        <td colspan="19" class="text-center">No PO items found</td>
                                     </tr>
                                     @endif
                                 </tbody>
                             </table>
                         </div>
-                    </div>
+
+                        {{-- Material Breakdown Table --}}
+                        <div class="mt-4">
+                            <h5>Material Breakdown ({{ isset($data['material_descriptions']) ? count($data['material_descriptions']) : 0 }} items)</h5>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-striped">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>S.No</th>
+                                            <th>Material</th>
+                                            <th>Material Description</th>
+                                            <th>Colour</th>
+                                            <th>Warer Trail</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @if(isset($data['material_descriptions']) && is_array($data['material_descriptions']))
+                                        @foreach($data['material_descriptions'] as $index => $material)
+                                        <tr>
+                                            <td>{{ $index + 1 }}</td>
+                                            <td>{{ $material['Material'] ?? '' }}</td>
+                                            <td>{{ $material['Material description'] ?? '' }}</td>
+                                            <td>{{ $material['Colour'] ?? '' }}</td>
+                                            <td>{{ $material['Warer Trail'] ?? '' }}</td>
+                                        </tr>
+                                        @endforeach
+                                        @else
+                                        <tr>
+                                            <td colspan="5" class="text-center">No material descriptions found</td>
+                                        </tr>
+                                        @endif
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                 </div>
             </div>
         </div>

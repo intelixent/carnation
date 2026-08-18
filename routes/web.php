@@ -196,6 +196,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
                 Route::get('/selected_master', [VendorController::class, 'carton_selected_master'])->name('carton_selected_master');
                 Route::get('/vero_master', [VendorController::class, 'carton_vero_master'])->name('carton_vero_master');
                 Route::get('/dmart_master', [VendorController::class, 'carton_dmart_master'])->name('carton_dmart_master');
+                Route::get('/rare_rabbit_master', [VendorController::class, 'carton_rare_rabbit_master'])->name('carton_rare_rabbit_master');
                 Route::post('/add', [VendorController::class, 'carton_add'])->name('carton_add');
                 Route::post('/store', [VendorController::class, 'carton_store'])->name('carton_store');
                 Route::post('/details', [VendorController::class, 'get_carton_details'])->name('get_carton_details');

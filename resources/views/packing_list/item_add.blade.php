@@ -55,6 +55,23 @@
             </div>
             @else
             <!-- For other vendors: Show article selection -->
+
+            {{-- Bulk carton generation - Super Admin / Manager only, vendors 1/3/5/6/7.
+                 $showCartonCountInput is resolved server-side in item_add(); this field
+                 simply doesn't render for anyone/anything else. --}}
+            @if(!empty($showCartonCountInput) && $showCartonCountInput)
+            <div class="mb-3 border p-3 rounded bg-light" id="cartonCountWrapper">
+                <label class="form-label fw-bold">No. of Cartons</label>
+                <input type="number" min="1" class="form-control" id="cartonCount" placeholder="Enter number of cartons to generate">
+                <small class="text-muted">
+                    Leave blank (or 1) to add a single carton. Enter a number to generate that
+                    many identical cartons using the sizes/quantities selected below - if any
+                    size doesn't have enough remaining quantity for that many cartons, you'll
+                    get a warning before it saves.
+                </small>
+            </div>
+            @endif
+
             <div id="articlesWrapper">
                 <div class="article-block mb-4 border p-3 rounded">
                     <button type="button" class="btn-close float-end remove-article" title="Remove this article"></button>

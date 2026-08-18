@@ -1341,23 +1341,25 @@
                         const $block = $(this);
                         const article_number = $block.find('.articleSelect').val();
                         const selectedSizes = [];
-
+                
                         $block.find('.size-checkbox:checked').each(function() {
                             const size = $(this).val();
                             const quantity = $block.find(`.quantity-input[data-size="${size}"]`).val();
                             const configId = $(this).data('config-id');
                             const poItemId = $(this).data('po-item-id');
-
+                            const maxQty = parseInt($(this).data('max-qty')) || 0;
+                
                             if (quantity && parseInt(quantity) > 0) {
                                 selectedSizes.push({
                                     size: size,
                                     quantity: parseInt(quantity),
                                     config_item_id: configId,
-                                    po_item_id: poItemId
+                                    po_item_id: poItemId,
+                                    max_qty: maxQty
                                 });
                             }
                         });
-
+                
                         if (selectedSizes.length > 0) {
                             allArticlesData.push({
                                 article_number,
@@ -1366,7 +1368,7 @@
                             });
                         }
                     });
-
+                
                     if (allArticlesData.length === 0) {
                         Swal.fire({
                             icon: 'warning',
@@ -1376,9 +1378,45 @@
                         });
                         return;
                     }
-
+                
+                    // ------------------------------------------------------------------
+                    // Bulk carton generation - the #cartonCount field only renders for
+                    // Super Admin / Manager on vendors 1/3/5/6/7 (see item_add.blade.php),
+                    // so for everyone else it's simply absent and defaults to 1.
+                    // ------------------------------------------------------------------
+                    const cartonCountVal = parseInt($('#cartonCount').val()) || 1;
+                
+                    if (cartonCountVal > 1) {
+                        let shortage = null;
+                
+                        allArticlesData.forEach(function(article) {
+                            article.sizes.forEach(function(s) {
+                                const totalRequested = s.quantity * cartonCountVal;
+                                if (totalRequested > s.max_qty) {
+                                    shortage = {
+                                        size: s.size,
+                                        quantity: s.quantity,
+                                        cartonCountVal: cartonCountVal,
+                                        totalRequested: totalRequested,
+                                        maxQty: s.max_qty
+                                    };
+                                }
+                            });
+                        });
+                
+                        if (shortage) {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Not Enough Quantity Available',
+                                text: `Size ${shortage.size}: ${shortage.quantity} x ${shortage.cartonCountVal} cartons = ${shortage.totalRequested}, but only ${shortage.maxQty} is available.`,
+                                confirmButtonColor: '#3085d6'
+                            });
+                            return;
+                        }
+                    }
+                
                     // Call batch save without country
-                    saveMultipleItems(allArticlesData);
+                    saveMultipleItems(allArticlesData, null, cartonCountVal);
                 }
             }
         });
@@ -1519,9 +1557,9 @@
         }
 
         // Batch save function (for add mode)
-        function saveMultipleItems(allArticlesData, country = null) {
+        function saveMultipleItems(allArticlesData, country = null, cartonCount = 1) {
             const packingTableNo = $('input[name="packing_table_no"]:checked').val();
-
+        
             const po_details = {
                 po_id: $('#po_id').val(),
                 carton_id: $('#carton_id').val(),
@@ -1530,12 +1568,19 @@
                 net_weight: $("#net_weight").val(),
                 packing_table_no: packingTableNo
             };
-
+        
             // Add country for vendor 2
             if (country) {
                 po_details.country = country;
             }
-
+        
+            // Bulk carton count (Super Admin / Manager only, vendors 1/3/5/6/7) -
+            // the server independently re-checks role + vendor eligibility, so this
+            // is just what the user asked for, not a trusted authorization.
+            if (cartonCount > 1) {
+                po_details.carton_count = cartonCount;
+            }
+        
             Swal.fire({
                 title: 'Saving Items...',
                 text: 'Please wait',
@@ -1544,7 +1589,7 @@
                 showConfirmButton: false,
                 didOpen: () => Swal.showLoading()
             });
-
+        
             $.ajax({
                 url: '{{ route("packing_list_item_store") }}',
                 method: 'POST',
@@ -1557,7 +1602,9 @@
                     $('#add_modal').modal('hide');
                     Swal.fire({
                         title: 'Success!',
-                        text: `Items added successfully!`,
+                        text: cartonCount > 1
+                            ? `${cartonCount} cartons generated successfully!`
+                            : 'Items added successfully!',
                         icon: 'success',
                         timer: 2000,
                         showConfirmButton: false

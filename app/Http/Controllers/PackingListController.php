@@ -1135,6 +1135,16 @@ class PackingListController extends BaseController
 
         $carton_id = $carton->id;
 
+        // ------------------------------------------------------------------
+        // Bulk carton generation ("No. of Cartons" field) - only shown to
+        // Super Admin (role id 1) / Manager (role id 2), and only for vendors
+        // 1, 3, 5, 6, 7, 9 (the D-Mart-style bulk flow is separate and already
+        // exists for vendor 8; other vendors keep the single-item flow).
+        // ------------------------------------------------------------------
+        $userRoleIds = auth()->user()->roles->pluck('id')->toArray();
+        $canGenerateBulkCartons = !empty(array_intersect([1, 2], $userRoleIds));
+        $showCartonCountInput = $canGenerateBulkCartons && in_array((int) $vendorId, [1, 3, 5, 6, 7, 9], true);
+
         // Check if packing list master already exists for this combination
         $existingPackingListQuery = PackingListMaster::where('po_id', $poId)
             ->where('color', $color)
@@ -1215,7 +1225,8 @@ class PackingListController extends BaseController
             'articleNumber',
             'country',
             'isFirstTime',
-            'existingPackingTableNo'
+            'existingPackingTableNo',
+            'showCartonCountInput'
         ));
     }
 
@@ -1241,6 +1252,22 @@ class PackingListController extends BaseController
             return response()->json(['error' => 'PO not found'], 404);
         }
         $vendorId = $po->vendor_id;
+
+        // ------------------------------------------------------------------
+        // Bulk carton generation - re-checked server-side (never trust the UI):
+        // only Super Admin (role id 1) / Manager (role id 2), only vendors
+        // 1, 3, 5, 6, 7, 9. Any other user/vendor is always forced to exactly 1
+        // carton, i.e. identical behaviour to before this change.
+        // ------------------------------------------------------------------
+        $cartonCount = 1;
+        if (in_array((int) $vendorId, [1, 3, 5, 6, 7, 9], true)) {
+            $userRoleIds = auth()->user()->roles->pluck('id')->toArray();
+            $canGenerateBulkCartons = !empty(array_intersect([1, 2], $userRoleIds));
+
+            if ($canGenerateBulkCartons) {
+                $cartonCount = max(1, (int) ($po_details['carton_count'] ?? 1));
+            }
+        }
 
         // Common validation rules
         $rules = [
@@ -1313,20 +1340,25 @@ class PackingListController extends BaseController
                 $createData
             );
 
-            $currentCartonNumber = $this->getNextCartonNumber($vendorId, $packingList->id);
-            $cartonName = $this->formatCartonName($vendorId, $currentCartonNumber);
             $createdAt = now();
+
+            // ------------------------------------------------------------------
+            // PASS 1 - resolve max qty / already-packed qty for every article &
+            // size exactly like before, but validate the TOTAL requested across
+            // every carton being generated ($qty * $cartonCount), not just $qty.
+            // Nothing is written to the DB until every size passes - if any size
+            // is short, we bail out before creating a single carton.
+            // ------------------------------------------------------------------
+            $resolvedItems = [];
 
             foreach ($carton_data as $carton) {
                 $sizes = $carton['sizes'];
 
-                // Loop each size entry
-                foreach ($sizes as $idx => $size) {
+                foreach ($sizes as $size) {
                     $qty = $size['quantity'];
                     $configItemId = $size['config_item_id'] ?? null;
                     $poItemId = $size['po_item_id'] ?? null;
 
-                    // Check remaining qty for this size/color based on vendor
                     if ($vendorId == 2) {
                         // Vendor 2 logic - get from PackingListConfigItem and sum by size
                         $configItemsQuery = PackingListConfigItem::whereHas('config', function ($q) use ($po_id) {
@@ -1449,24 +1481,44 @@ class PackingListController extends BaseController
                     }
 
                     $remaining = $maxQty - $alreadyPacked;
+                    $totalRequested = $qty * $cartonCount;
 
-                    if ($qty > $remaining) {
+                    if ($totalRequested > $remaining) {
+                        $breakdown = $cartonCount > 1 ? " ({$qty} x {$cartonCount} cartons)" : '';
                         return response()->json([
-                            'error' => "Quantity for size {$size['size']} exceeds available limit. Available: {$remaining}, Requested: {$qty}"
+                            'error' => "Quantity for size {$size['size']} exceeds available limit. Available: {$remaining}, Requested: {$totalRequested}{$breakdown}"
                         ], 400);
                     }
 
-                    // Create the PackingListItem
+                    $resolvedItems[] = [
+                        'article_number' => $carton['article_number'],
+                        'size'           => $size['size'],
+                        'qty'            => $qty,
+                        'po_item_id'     => ($vendorId == 4) ? null : ($poItemForCreate->id ?? null),
+                    ];
+                }
+            }
+
+            // ------------------------------------------------------------------
+            // PASS 2 - every size confirmed available across all requested
+            // cartons, so now actually create $cartonCount cartons, each one
+            // carrying the full resolved article/size/qty set.
+            // ------------------------------------------------------------------
+            for ($c = 0; $c < $cartonCount; $c++) {
+                $currentCartonNumber = $this->getNextCartonNumber($vendorId, $packingList->id);
+                $cartonName = $this->formatCartonName($vendorId, $currentCartonNumber);
+
+                foreach ($resolvedItems as $resolved) {
                     $itemData = [
                         'packing_list_id' => $packingList->id,
                         'vendor_id'       => $po->vendor_id,
-                        'po_item_id'      => ($vendorId == 4) ? null : ($poItemForCreate->id ?? null),
+                        'po_item_id'      => $resolved['po_item_id'],
                         'carton_id'       => $carton_id,
                         'carton_name'     => $cartonName,
-                        'article_number'  => $carton['article_number'],
+                        'article_number'  => $resolved['article_number'],
                         'color'           => $color,
-                        'size'            => $size['size'],
-                        'quantity'        => $qty,
+                        'size'            => $resolved['size'],
+                        'quantity'        => $resolved['qty'],
                         'net_weight'      => $net_weight,
                         'created_by'      => auth()->user()->id,
                         'created_at'      => $createdAt,
@@ -1995,6 +2047,13 @@ class PackingListController extends BaseController
                 $styleArr = PoItems::whereIn('color', $uniqueColor)
                     ->where('po_id', $packingList->po->id)
                     ->pluck('part_description')
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->toArray();
+            } elseif ($packingList->vendor_id == 9) {
+                $styleArr = PoItems::whereIn('id', $uniquePoItemIds)
+                    ->pluck('content')
                     ->filter()
                     ->unique()
                     ->values()
@@ -3405,6 +3464,370 @@ class PackingListController extends BaseController
                 'rows'      => $tableRows,
                 'totals'    => $totals
             ];
+        } elseif ($packingList->vendor_id == 9) {
+            //
+            // VENDOR ID 9 (Rare Rabbit-specific)
+            //
+
+            // Small local helper: ["S","M","L","XL"] -> "S,M,L & XL"
+            $joinWithAmpersand = function (array $items) {
+                $items = array_values(array_filter($items, fn($v) => $v !== null && $v !== ''));
+                $count = count($items);
+                if ($count === 0) return '';
+                if ($count === 1) return $items[0];
+                $last = array_pop($items);
+                return implode(',', $items) . ' & ' . $last;
+            };
+
+            $allSizesFromPO = collect($sizeOrder);
+
+            // Ordered quantities per size, from this packing list's PO items
+            $orderedQuantities = collect();
+            foreach ($sizeOrder as $size) {
+                $orderedQuantities[$size] = 0;
+            }
+
+            if (!empty($uniquePoItemIds)) {
+                $poItemsFiltered = PoItems::whereIn('id', $uniquePoItemIds)->get();
+                foreach ($poItemsFiltered as $poItem) {
+                    if (in_array($poItem->size, $sizeOrder)) {
+                        $currentQty = $orderedQuantities->get($poItem->size, 0);
+                        $orderedQuantities[$poItem->size] = $currentQty + $poItem->qty;
+                    }
+                }
+            } else {
+                if ($packingList->po_id) {
+                    $allPoItems = PoItems::where('po_id', $packingList->po_id)->get();
+                    foreach ($allPoItems as $poItem) {
+                        if (in_array($poItem->size, $sizeOrder)) {
+                            $currentQty = $orderedQuantities->get($poItem->size, 0);
+                            $orderedQuantities[$poItem->size] = $currentQty + $poItem->qty;
+                        }
+                    }
+                }
+            }
+
+            $allSizes = $allSizesFromPO;
+
+            // Separate pure and mixed cartons
+            $pureItems = $sortedItems->where('is_mixed', false);
+            $mixedItems = $sortedItems->where('is_mixed', true);
+
+            // Group pure items by position, then by article, color, size
+            $positionGroups = [];
+
+            foreach ($pureItems->groupBy('position') as $position => $posItems) {
+                foreach (
+                    $posItems->groupBy(function ($item) {
+                        return $item->article_number . '|' . $item->color . '|' . $item->size;
+                    }) as $groupKey => $groupItems
+                ) {
+                    list($articleNumber, $color, $size) = explode('|', $groupKey);
+
+                    // Group consecutive cartons
+                    $cartonRanges = [];
+                    $currentRange = [];
+                    $lastCartonNum = null;
+
+                    foreach ($groupItems->sortBy('id') as $item) {
+                        // FIX: Use real carton_name from DB instead of dynamic_carton_name
+                        $currentCartonNum = intval(str_replace($cartonPrefix, '', $item->carton_name));
+
+                        if ($lastCartonNum === null || $currentCartonNum == $lastCartonNum + 1) {
+                            $currentRange[] = $item;
+                        } else {
+                            if (!empty($currentRange)) {
+                                $cartonRanges[] = $currentRange;
+                            }
+                            $currentRange = [$item];
+                        }
+
+                        $lastCartonNum = $currentCartonNum;
+                    }
+
+                    if (!empty($currentRange)) {
+                        $cartonRanges[] = $currentRange;
+                    }
+
+                    // Create groups for each range
+                    foreach ($cartonRanges as $range) {
+                        $rangeItems = collect($range);
+                        // FIX: Use real carton_name from DB
+                        $cartonNames = $rangeItems->pluck('carton_name')->toArray();
+                        $cartonCount = count($cartonNames);
+
+                        $firstName = $cartonNames[0];
+                        $lastName = end($cartonNames);
+
+                        $totalQty = $rangeItems->sum('quantity');
+
+                        $firstItem = $rangeItems->first();
+                        $carton = $firstItem->carton;
+
+                        $netWeightPerCarton = $firstItem->net_weight ?? 0;
+                        $grossWeightPerCarton = ($firstItem->net_weight ?? 0) + 1.45;
+
+                        $dimension = '';
+                        if (
+                            ($carton->length ?? 0) > 0
+                            || ($carton->breadth ?? 0) > 0
+                            || ($carton->height ?? 0) > 0
+                        ) {
+                            $dimension = ($carton->length ?? 0)
+                                . '*' . ($carton->breadth ?? 0)
+                                . '*' . ($carton->height ?? 0)
+                                . ' CMS';
+                        }
+
+                        $cbmPerCarton = (($carton->length ?? 0) * ($carton->breadth ?? 0) * ($carton->height ?? 0)) / 1000000;
+
+                        $perCartonQty = $cartonCount > 0 ? round($totalQty / $cartonCount) : 0;
+                        $mrp = $firstItem->po_item->mrp ?? '';
+                        $poItemId = $firstItem->po_item_id;
+
+                        // Single size in a pure row -> style code is just the full
+                        // article number. category-style-colour is the po_item's
+                        // "content" value as-is (it already ends with the colour,
+                        // e.g. "RARE RABBIT CALLUM PRIMARY NAVY") plus the size.
+                        $styleCode = $articleNumber;
+                        $categoryStyleColor = trim($styleDescriptionsDisplay ?: '')
+                            . ',' . $joinWithAmpersand([$size]);
+
+                        $positionGroups[] = [
+                            'position' => $position,
+                            'article_number'  => $articleNumber,
+                            'color'           => $color,
+                            'size'            => $size,
+                            'ctn_first'       => $firstName,
+                            'ctn_last'        => $lastName,
+                            'first_carton_id' => $cartonNames[0],
+                            'ttl_ctn'         => $cartonCount,
+                            'per_size'        => array_fill_keys($sizeOrder, 0),
+                            'per_ctn'         => $perCartonQty,
+                            'total'           => $totalQty,
+                            'net_wt_per'      => $netWeightPerCarton,
+                            'grs_wt_per'      => $grossWeightPerCarton,
+                            'cbm_per'         => $cbmPerCarton,
+                            'ctn_dim'         => $dimension,
+                            'mrp'             => $mrp,
+                            'po_item_id'      => $poItemId,
+                            'style_code'      => $styleCode,
+                            'category_style_color' => $categoryStyleColor,
+                            'is_mixed'        => false
+                        ];
+
+                        $positionGroups[count($positionGroups) - 1]['per_size'][$size] = $totalQty;
+                    }
+                }
+            }
+
+            // Group mixed carton items: first pattern-match consecutive cartons
+            // that share the exact same size/qty pattern into a single ranged row
+            // (mirrors the pure-item range grouping above), then compute the
+            // combined style code / category-style-colour for that row.
+            $mixedPatternGroups = [];
+
+            // FIX: Group by real carton_name from DB instead of dynamic_carton_name
+            foreach ($mixedItems->groupBy('carton_name') as $cartonName => $items) {
+                // Sort the sizes inside this carton by configured position (S, M, L, XL ...)
+                $sortedCartonItems = $items->sortBy(function ($item) use ($sizePositionMap) {
+                    return $sizePositionMap[$item->size]['position'] ?? 999;
+                })->values();
+
+                $sizeQuantities = [];
+                foreach ($sortedCartonItems as $item) {
+                    $sizeQuantities[$item->size] = ($sizeQuantities[$item->size] ?? 0) + $item->quantity;
+                }
+                ksort($sizeQuantities);
+
+                $patternKey = md5(json_encode($sizeQuantities));
+
+                if (!isset($mixedPatternGroups[$patternKey])) {
+                    $mixedPatternGroups[$patternKey] = [
+                        'pattern' => $sizeQuantities,
+                        'carton_items' => [], // carton_name => sorted items collection
+                    ];
+                }
+                $mixedPatternGroups[$patternKey]['carton_items'][$cartonName] = $sortedCartonItems;
+            }
+
+            $positionGroupsMixed = [];
+
+            foreach ($mixedPatternGroups as $patternData) {
+                // Sort carton names in this pattern by carton number, then chain
+                // consecutive carton numbers into ranges.
+                $cartonNames = array_keys($patternData['carton_items']);
+                usort($cartonNames, function ($a, $b) use ($cartonPrefix) {
+                    return intval(str_replace($cartonPrefix, '', $a)) - intval(str_replace($cartonPrefix, '', $b));
+                });
+
+                $ranges = [];
+                $currentRange = [];
+                $lastCartonNum = null;
+
+                foreach ($cartonNames as $cartonName) {
+                    $currentCartonNum = intval(str_replace($cartonPrefix, '', $cartonName));
+
+                    if ($lastCartonNum === null || $currentCartonNum == $lastCartonNum + 1) {
+                        $currentRange[] = $cartonName;
+                    } else {
+                        if (!empty($currentRange)) {
+                            $ranges[] = $currentRange;
+                        }
+                        $currentRange = [$cartonName];
+                    }
+
+                    $lastCartonNum = $currentCartonNum;
+                }
+                if (!empty($currentRange)) {
+                    $ranges[] = $currentRange;
+                }
+
+                foreach ($ranges as $range) {
+                    $cartonCount = count($range);
+                    $firstName = $range[0];
+                    $lastName = end($range);
+
+                    // Use the first carton in the range as the representative for
+                    // per-carton weight/dimension/style-code (pattern is identical
+                    // across the whole range).
+                    $representativeItems = $patternData['carton_items'][$firstName];
+                    $firstItem = $representativeItems->first();
+                    $carton = $firstItem->carton;
+
+                    $totalQtyPerCarton = array_sum($patternData['pattern']);
+                    $totalQty = $totalQtyPerCarton * $cartonCount;
+
+                    $netWeightPerCarton = $firstItem->net_weight ?? 0;
+                    $grossWeightPerCarton = ($firstItem->net_weight ?? 0) + 1.45;
+
+                    $dimension = '';
+                    if (
+                        ($carton->length ?? 0) > 0
+                        || ($carton->breadth ?? 0) > 0
+                        || ($carton->height ?? 0) > 0
+                    ) {
+                        $dimension = ($carton->length ?? 0)
+                            . '*' . ($carton->breadth ?? 0)
+                            . '*' . ($carton->height ?? 0)
+                            . ' CMS';
+                    }
+
+                    $cbmPerCarton = (($carton->length ?? 0) * ($carton->breadth ?? 0) * ($carton->height ?? 0)) / 1000000;
+
+                    $mrp = $firstItem->po_item->mrp ?? '';
+                    $poItemId = $firstItem->po_item_id;
+
+                    // Style code: first size present -> full article number,
+                    // every other size present in the same carton -> last 4 digits.
+                    $styleCodeParts = [];
+                    foreach ($representativeItems as $idx => $item) {
+                        $styleCodeParts[] = $idx === 0 ? $item->article_number : substr($item->article_number, -4);
+                    }
+                    $styleCode = $joinWithAmpersand($styleCodeParts);
+
+                    // Category-Style+Colour: the po_item's "content" value as-is
+                    // (already ends with the colour), then the sizes present.
+                    $sizesPresent = $representativeItems->pluck('size')->unique()->values()->toArray();
+                    $categoryStyleColor = trim($styleDescriptionsDisplay ?: '')
+                        . ',' . $joinWithAmpersand($sizesPresent);
+
+                    $perSizeArray = array_fill_keys($sizeOrder, 0);
+                    foreach ($patternData['pattern'] as $size => $qty) {
+                        if (isset($perSizeArray[$size])) {
+                            $perSizeArray[$size] = $qty;
+                        }
+                    }
+
+                    $perCartonQty = $cartonCount > 0 ? round($totalQty / $cartonCount) : 0;
+
+                    $positionGroupsMixed[] = [
+                        'position' => 9999,
+                        'article_number'  => $firstItem->article_number,
+                        'color'           => $firstItem->color,
+                        'size'            => 'Mixed',
+                        'ctn_first'       => $firstName,
+                        'ctn_last'        => $lastName,
+                        'first_carton_id' => $firstName,
+                        'ttl_ctn'         => $cartonCount,
+                        'per_size'        => $perSizeArray,
+                        'per_ctn'         => $perCartonQty,
+                        'total'           => $totalQty,
+                        'net_wt_per'      => $netWeightPerCarton,
+                        'grs_wt_per'      => $grossWeightPerCarton,
+                        'cbm_per'         => $cbmPerCarton,
+                        'ctn_dim'         => $dimension,
+                        'mrp'             => $mrp,
+                        'po_item_id'      => $poItemId,
+                        'style_code'      => $styleCode,
+                        'category_style_color' => $categoryStyleColor,
+                        'is_mixed'        => true
+                    ];
+                }
+            }
+
+            $positionGroups = array_merge($positionGroups, $positionGroupsMixed);
+
+            // FIX: Sort strictly by first carton # instead of position!
+            // This ensures they are printed in order (1, 2, 3, 4, 5...)
+            usort($positionGroups, function ($a, $b) use ($cartonPrefix) {
+                $aFirst = intval(str_replace($cartonPrefix, '', $a['ctn_first']));
+                $bFirst = intval(str_replace($cartonPrefix, '', $b['ctn_first']));
+                return $aFirst - $bFirst;
+            });
+
+            $tableRows = $positionGroups;
+
+            $totals = [
+                'carton_count' => 0,
+                'per_size'     => array_fill_keys($sizeOrder, 0),
+                'total_pieces' => 0,
+            ];
+
+            foreach ($tableRows as $row) {
+                $totals['carton_count'] += $row['ttl_ctn'];
+                foreach ($row['per_size'] as $size => $qty) {
+                    if (isset($totals['per_size'][$size])) {
+                        $totals['per_size'][$size] += $qty;
+                    }
+                }
+                $totals['total_pieces'] += $row['total'];
+            }
+
+            $tableData = [
+                'sizeOrder' => $sizeOrder,
+                'rows'      => $tableRows,
+                'totals'    => $totals,
+            ];
+
+            $totalCtn = $totals['carton_count'];
+
+            // Real net/gross weight and CBM totals (summed per row * that row's carton count)
+            $totalNetWeight = 0;
+            $totalGrossWeight = 0;
+            $totalCbm = 0;
+            foreach ($tableRows as $row) {
+                $rowCartons = $row['ttl_ctn'] ?? 0;
+                $totalNetWeight   += ($row['net_wt_per'] ?? 0) * $rowCartons;
+                $totalGrossWeight += ($row['grs_wt_per'] ?? 0) * $rowCartons;
+                $totalCbm         += ($row['cbm_per'] ?? 0) * $rowCartons;
+            }
+
+            // Ordered vs packed balance/percentage per size - drives the
+            // ORDER QTY / PACKED QTY / SHORTAGE-EXCESS QTY / % summary block
+            $balances = collect();
+            $percentages = collect();
+            foreach ($allSizes as $size) {
+                $ordered = $orderedQuantities->get($size, 0);
+                $packed  = $packedQuantities->get($size, 0);
+                $balances[$size]    = $ordered - $packed;
+                $percentages[$size] = $ordered > 0 ? round(($packed / $ordered) * 100, 2) : 0;
+            }
+
+            $dispatchQuantities = collect();
+            $totalDispatches = 0;
+            $orderQuantitiesFromAllPacks = collect();
+            $currentDispatchNumber = 1;
         } else {
             //
             // OTHER VENDORS (1, 5, 6 and others): generic summary
@@ -3739,6 +4162,8 @@ class PackingListController extends BaseController
             $viewTemplate = 'packing_list.skechers_print';
         } elseif ($packingList->vendor_id == 7) {
             $viewTemplate = 'packing_list.aditiya_print';
+        } elseif ($packingList->vendor_id == 9) {
+            $viewTemplate = 'packing_list.rare_rabbit_print';
         } else {
             $viewTemplate = 'packing_list.jack_print';
         }
