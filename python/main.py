@@ -2493,6 +2493,305 @@ def extract_dmart(pdf_path):
 
     return result
 
+def extract_rare_rabbit(pdf_path):
+    print(f"Starting Rare Rabbit extraction from: {pdf_path}")
+    pos = []
+
+    with pdfplumber.open(pdf_path) as pdf:
+        # Data page = every 2nd page starting at 0 ("Page : 1" of each PO).
+        # The page in between ("Page : 2") is just the signature/footer
+        # page and is skipped entirely.
+        for page_idx in range(0, len(pdf.pages), 2):
+            page = pdf.pages[page_idx]
+            text = page.extract_text() or ""
+
+            if "Order No." not in text:
+                # Defensive: if the PDF doesn't strictly alternate 2 pages
+                # per PO, don't silently skip a data page - fall back to
+                # scanning every page for "Order No." instead.
+                continue
+
+            po = _parse_rare_rabbit_page(text)
+            if po:
+                pos.append(po)
+                print(f"  Parsed PO {po['order_no']} with {len(po['po_items'])} item(s)")
+
+        # Fallback: if the strict every-2nd-page assumption produced
+        # nothing (e.g. a PDF with an odd page count or extra pages),
+        # scan every page and de-duplicate by order_no.
+        if not pos:
+            print("No POs found via the every-2nd-page pass; scanning all pages")
+            seen_order_nos = set()
+            for page in pdf.pages:
+                text = page.extract_text() or ""
+                if "Order No." not in text:
+                    continue
+                po = _parse_rare_rabbit_page(text)
+                if po and po["order_no"] and po["order_no"] not in seen_order_nos:
+                    seen_order_nos.add(po["order_no"])
+                    pos.append(po)
+
+    print(f"Rare Rabbit extraction complete. {len(pos)} PO(s) found")
+
+    if not pos:
+        return None
+
+    return {"pos": pos, "po_count": len(pos)}
+
+
+def _parse_rare_rabbit_page(text):
+    """Parse a single 'Page : 1' block (one full PO) into a dict."""
+ 
+    def field(pattern, flags=0, default=""):
+        m = re.search(pattern, text, flags)
+        return m.group(1).strip() if m else default
+ 
+    po = {}
+ 
+    po["order_no"] = field(r'Order No\.\s*:\s*(\S+)')
+    if not po["order_no"]:
+        return None
+ 
+    po["order_date"] = field(r'CIN\s*:\S+\s+Date\s*:\s*([\d\-]+)')
+    po["channel"] = field(r'Channel\s*:\s*(\S+)')
+    po["cin"] = field(r'CIN\s*:(\S+)')
+    po["category"] = _parse_rare_rabbit_category(text)
+    po["buyer_gstin"] = field(r'GSTIN\s*:([A-Z0-9]+)\[')
+    po["warehouse_gst_state"] = field(r'\[\d+\s*-\s*([A-Za-z ]+)\]')
+    po["vendor_gst_state"] = field(r'GST State\s*:\s*([A-Za-z ]+?)\s*\(')
+    po["vendor_gstin"] = field(
+        r'(\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9])\s+Marchandiser'
+    )
+ 
+    # ---- Warehouse (Ship To) block --------------------------------------
+    # Everything between the page marker and "Order No." is the company
+    # block. Rather than assume a fixed line shape, split into lines,
+    # drop the standalone phone-number line, and treat the first line
+    # that contains a digit as the start of the address (everything
+    # before it - the pure-text lines - is the company/warehouse name).
+    top_match = re.search(r'^(.*?)Order No\.', text, re.DOTALL)
+    if top_match:
+        block = top_match.group(1)
+        block = block.replace('Purchase Order', ' ')
+        # Strip the "Page : N" marker itself if it happens to appear in this span
+        block = re.sub(r'Page\s*:\s*\d+', ' ', block)
+        lines = [l.strip() for l in block.split('\n') if l.strip()]
+
+        # Drop a trailing bare phone-number line (digits only, e.g.
+        # "08025735982") that sits right before "Order No."
+        while lines and re.match(r'^\d{6,}$', lines[-1]):
+            lines.pop()
+
+        name_lines = []
+        addr_lines = []
+        address_started = False
+        for l in lines:
+            if not address_started and not re.search(r'\d', l):
+                name_lines.append(l)
+            else:
+                address_started = True
+                addr_lines.append(l.rstrip(','))
+
+        po["warehouse_name"] = ' '.join(name_lines).strip()
+        po["warehouse_address"] = ', '.join(a for a in addr_lines if a)
+    else:
+        po["warehouse_name"] = ""
+        po["warehouse_address"] = ""
+ 
+    # ---- Vendor block -----------------------------------------------------
+    po["vendor_name"] = field(r'Vendor Name\s*:\s*(.+?)\s+Vendor ID')
+    po["vendor_id"] = field(r'Vendor ID\s*:\s*(\S+)')
+ 
+    # Capture the whole span up to "Contact No." (a left-column label
+    # that always follows the vendor address block), then strip out the
+    # right-column fields that share lines with the address so only the
+    # actual address fragments remain.
+    va_block_match = re.search(
+        r'Vendor Address\s*:\s*(.*?)Contact No\.',
+        text, re.DOTALL
+    )
+    if va_block_match:
+        va_block = va_block_match.group(1)
+        va_block = re.sub(r'Delivery Date\s*:\s*[\d\-]+', '', va_block)
+        va_block = re.sub(r'Doc No\s*:', '', va_block)
+        va_block = re.sub(r'Consignment\s*:\s*\S+', '', va_block)
+        va_block = re.sub(r'Payment Terms\s*', '', va_block)
+        va_block = re.sub(r'\(Days\)\s*:\s*\d+', '', va_block)
+        va_block = re.sub(r'Currency\s*:\s*\w+', '', va_block)
+        va_block = re.sub(r'Marchandiser\s*:\s*\[.*?\]', '', va_block)
+        va_block = re.sub(r'Transporter\s*:?', '', va_block)
+        va_block = re.sub(r'Agent Name\s*:?', '', va_block)
+        va_block = re.sub(r'Agent Rate\s*:?', '', va_block)
+
+        addr_lines = [l.strip().rstrip(',') for l in va_block.split('\n') if l.strip()]
+        po["vendor_address"] = ', '.join(l for l in addr_lines if l)
+    else:
+        po["vendor_address"] = ""
+ 
+    # Delivery date used to be pulled out of the same vendor-address
+    # regex - grab it independently now that that regex has changed.
+    po["delivery_date"] = field(r'Delivery Date\s*:\s*([\d\-]+)')
+ 
+    po["payment_terms_days"] = field(r'\(Days\)\s*:\s*(\d+)')
+    po["email"] = field(r'Email ID\.\s*:\s*(\S+)')
+    po["currency"] = field(r'Currency\s*:\s*(\w+)')
+ 
+    # ---- Line items (unchanged - see rare_rabbit_items_fix.py) --------
+    po["po_items"] = _parse_rare_rabbit_page_items(text)
+ 
+    # ---- Totals & charges (unchanged) ------------------------------------
+    tot_match = re.search(r'\nTotal\s+([\d,]+\.\d+)\s+([\d,]+\.\d+)\s*\n', text)
+    if tot_match:
+        po["total_qty"] = tot_match.group(1)
+        po["total_basic_amount"] = tot_match.group(2)
+    else:
+        po["total_qty"] = ""
+        po["total_basic_amount"] = ""
+ 
+    po["other_charges"] = field(r'Other Charges\s*\[.*?\]\s*([\d,.]+)')
+    po["discount_amount"] = field(r'Discount %\s*\[.*?\]\s*([\d,.]+)')
+    po["round_off"] = field(r'Round Off \+\s*\[.*?\]\s*([\d,.]+)')
+ 
+    igst_match = re.search(
+        r'Integrated GST \(IGST\)\s*\[\s*@\s*([\d.]+)%.*?\]\s*([\d,.]+)', text
+    )
+    if igst_match:
+        po["igst_pct"] = igst_match.group(1)
+        po["igst_amount"] = igst_match.group(2)
+    else:
+        po["igst_pct"] = ""
+        po["igst_amount"] = ""
+ 
+    po["net_amount"] = field(r'Net Amount\s+([\d,]+\.\d+)')
+    po["amount_in_words"] = field(r'Amount in Words\s*:\s*(.+)')
+ 
+    return po
+
+def _parse_rare_rabbit_page_items(text):
+    """
+    Extract every line item on one Rare Rabbit PO page.
+ 
+    Robust to however pdfplumber happens to wrap each row across lines -
+    see the module docstring above for why. Returns a list of dicts with
+    the same keys as before: ean, description, size, season, hsn, rate,
+    quantity, uom, amount.
+    """
+    # Narrow to the item-table section when we can find clean boundaries,
+    # but fall back to the whole page text if the header/footer markers
+    # aren't found exactly as expected - better to scan too much than to
+    # silently extract nothing.
+    section_match = re.search(
+        r'Basic Amount\s*(.*?)\nTotal\s+[\d,]+\.\d+', text, re.DOTALL
+    )
+    section_text = section_match.group(1) if section_match else text
+ 
+    # Collapse all whitespace/newlines to single spaces so it no longer
+    # matters how many lines a given row was split across.
+    flat = re.sub(r'\s+', ' ', section_text).strip()
+ 
+    item_pattern = re.compile(
+        r'(\d{12,14})\s+'      # EAN
+        r'(.+?)\s+'            # description + size + season (lazy)
+        r'(\d{6,8})\s+'        # HSN
+        r'([\d.]+)\s+'         # Rate
+        r'([\d.]+)\s+'         # Qty
+        r'(\S+)\s+'            # UOM
+        r'([\d,.]+)'           # Amount
+    )
+ 
+    items = []
+    matches = list(item_pattern.finditer(flat))
+    for i, m in enumerate(matches):
+        ean, desc_blob, hsn, rate, qty, uom, amount = m.groups()
+ 
+        # Check for leftover description text between this row's Amount and the next row's EAN.
+        # This happens when the description column spans multiple lines and pdfplumber
+        # extracts the continuation on the line physically below the rest of the row's fields.
+        if i + 1 < len(matches):
+            leftover = flat[m.end():matches[i+1].start()].strip()
+        else:
+            tail = flat[m.end():].strip()
+            # Stop if we hit typical footer keywords that might follow the last item
+            footer_match = re.search(r'\b(?:Total|Other Charges|Discount|Integrated GST|Round Off|Net Amount)\b', tail)
+            if footer_match:
+                leftover = tail[:footer_match.start()].strip()
+            else:
+                leftover = tail
+                
+        if leftover:
+            desc_blob = f"{desc_blob} {leftover}".strip()
+        # Season code is a fixed shape, e.g. "AW-26 SS" or "SS-26 AW" -
+        # two letters, dash, two digits, then two more letters - pull it
+        # off the end of the blob first.
+        # Allow optional spaces around the dash since line breaks might have added them.
+        season_match = re.search(r'([A-Z]{2}\s*-\s*\d{2}\s+[A-Z]{2})\s*$', desc_blob)
+        if season_match:
+            season = season_match.group(1)
+            # Normalize to remove accidental spaces around the dash
+            season = re.sub(r'\s*-\s*', '-', season)
+            season = re.sub(r'\s+', ' ', season).strip()
+            desc_and_size = desc_blob[:season_match.start()].strip()
+        else:
+            season = ""
+            desc_and_size = desc_blob.strip()
+ 
+        # Whatever's left ends in the size token, e.g.
+        # "RARE RABBIT CALLUM PRIMARY NAVY XS" -> size "XS"
+        size_match = re.search(r'\s+([A-Z0-9]{1,4})$', desc_and_size)
+        if size_match:
+            size = size_match.group(1)
+            description = desc_and_size[:size_match.start()].strip()
+        else:
+            size = ""
+            description = desc_and_size
+ 
+        items.append({
+            "ean": ean,
+            "description": description,
+            "size": size,
+            "season": season,
+            "hsn": hsn,
+            "rate": rate,
+            "quantity": qty,
+            "uom": uom,
+            "amount": amount,
+        })
+ 
+    return items
+
+def _parse_rare_rabbit_category(text):
+    """
+    The item table has a "Group / Item ... Basic Amount" header row,
+    immediately followed by a category line (e.g. "MEN - T-SHIRT")
+    that groups the items underneath it, before the first EAN row
+    starts. Grab that line.
+ 
+    Example excerpt from the PDF text:
+        "...Rate Qty. UOM Basic Amount
+        MEN - T-SHIRT
+        8909196852528 RARE RABBIT CALLUM PRIMARY NAVY XS ..."
+    """
+    m = re.search(r'Basic Amount\s*\n\s*(.+?)\s*\n', text)
+    if not m:
+        return ""
+ 
+    candidate = m.group(1).strip()
+ 
+    # Guard against accidentally grabbing a data row if the category
+    # line is ever missing on some PO layout - a real item row always
+    # starts with a 12-14 digit EAN, a category line never does.
+    if candidate and re.match(r'^\d{12,14}', candidate):
+        return ""
+ 
+    # pdfplumber sometimes glues a stray row-index number onto the same
+    # text line as the category (e.g. "MEN - T-SHIRT 1"), coming from an
+    # invisible/zero-width serial-number column in the table. Strip any
+    # trailing run of digits (and the space before it) so only the real
+    # category text remains.
+    candidate = re.sub(r'\s+\d+\s*$', '', candidate).strip()
+ 
+    return candidate
+
 @app.post("/process")
 async def process_pdf(request: dict = Body(...)):
     extraction_no = request.get("extraction_no", "")
@@ -2523,6 +2822,8 @@ async def process_pdf(request: dict = Body(...)):
                 result = extract_aditiya(temp_path)
             elif "6" in extraction_no:
                 result = extract_dmart(temp_path)
+            elif "7" in extraction_no:
+                result = extract_rare_rabbit(temp_path)
             else:
                 result = None
 

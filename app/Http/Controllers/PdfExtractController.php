@@ -251,6 +251,11 @@ class PdfExtractController extends BaseController
 
                 $viewData['sizes'] = $sizes;
                 $viewData['totalCaseLot'] = $totalCaseLot;
+            } elseif ($extraction_no === '7') {
+                // Rare Rabbit: one PDF can contain multiple POs. $data['pos'] is
+                // an array (see extract_rare_rabbit()) - the view renders one
+                // tab per PO with a PO Details / PO Items accordion inside each.
+                $view = 'pdf_extract.rare_rabbit_response_view';
             } else {
                 $view = 'pdf_extract.jack_jones_response_view';
             }
@@ -262,6 +267,7 @@ class PdfExtractController extends BaseController
         }
     }
 
+
     public function check_po_exists(Request $request)
     {
         try {
@@ -270,6 +276,42 @@ class PdfExtractController extends BaseController
 
             if ($request->has('po_data')) {
                 $data = json_decode($request->input('po_data'), true);
+
+                if ($vendor_id === "9" && is_array($data) && array_is_list($data)) {
+                    // Rare Rabbit: po_data is an ARRAY of PO objects (one per
+                    // PO in the PDF) - check every order_no, not just one.
+                    foreach ($data as $singlePo) {
+                        $checkPoNum = $singlePo['order_no'] ?? null;
+                        if (!$checkPoNum) {
+                            continue;
+                        }
+
+                        $amendedPo = PoMaster::where('po_num', $checkPoNum)->where('status', 1)->first();
+                        if ($amendedPo) {
+                            return response()->json([
+                                'exists' => true,
+                                'amended' => true,
+                                'po_num' => $checkPoNum,
+                                'po_id' => $amendedPo->id,
+                                'message' => 'PO number already exists with amended status'
+                            ]);
+                        }
+
+                        $unamendedPo = PoMaster::where('po_num', $checkPoNum)->where('status', 0)->first();
+                        if ($unamendedPo) {
+                            return response()->json([
+                                'exists' => true,
+                                'amended' => false,
+                                'po_num' => $checkPoNum,
+                                'po_id' => $unamendedPo->id,
+                                'message' => 'PO number already exists but not amended'
+                            ]);
+                        }
+                    }
+
+                    return response()->json(['exists' => false]);
+                }
+
                 if ($vendor_id === "2") {
                     $po_num = $data['po_details']['order_no'] ?? null;
                 } elseif ($vendor_id === "4") {
@@ -356,9 +398,6 @@ class PdfExtractController extends BaseController
                 $file->storeAs('public/po', $pdfFileName);
             }
 
-            $currentNumber = $prefixSetting->number;
-            $poNo = $prefixSetting->format . str_pad($currentNumber, 5, '0', STR_PAD_LEFT);
-
             $vendor_id = $request->input('vendor_id');
             $hsn_code = $request->input('hsn_code');
 
@@ -368,9 +407,56 @@ class PdfExtractController extends BaseController
 
             // Modified data extraction logic
             if ($request->has('po_data')) {
-                // For Skechers and Benetton - use entire po_data as po_details
                 $data = json_decode($request->input('po_data'), true);
-                $po_details = $data; // Use full data instead of nested array
+
+                // Rare Rabbit (vendor_id 9) sends a JSON *array* of PO
+                // objects - one element per PO found in the PDF. Every other
+                // vendor that uses po_data sends a single object, so this
+                // branch is the only place multiple PoMaster rows get created
+                // from a single submission.
+                $isMultiPo = $vendor_id === "9" && is_array($data) && array_is_list($data);
+
+                if ($isMultiPo) {
+                    $createdIds = [];
+
+                    foreach ($data as $singlePo) {
+                        $currentNumber = $prefixSetting->number;
+                        $poNo = $prefixSetting->format . str_pad($currentNumber, 5, '0', STR_PAD_LEFT);
+
+                        $pomaster = $this->createPoMaster(
+                            $vendor_id,
+                            $poNo,
+                            $singlePo,
+                            null,
+                            $request,
+                            null,
+                            $pdfFileName
+                        );
+
+                        $prefixSetting->number = $currentNumber + 1;
+                        $prefixSetting->save();
+
+                        $this->createPoItems(
+                            $vendor_id,
+                            $pomaster->id,
+                            $singlePo['po_items'] ?? [],
+                            $singlePo,
+                            $hsn_code,
+                            $carton_qty_sizes
+                        );
+
+                        $createdIds[] = $pomaster->id;
+                    }
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => count($createdIds) . ' Purchase Order(s) stored successfully.',
+                        'po_ids' => $createdIds,
+                    ]);
+                }
+
+                // For Skechers and Benetton - use entire po_data as po_details
+                $po_details = $data;
                 $po_items = $data['po_items'] ?? [];
                 $article_details = null;
                 $article_details_input = null;
@@ -386,6 +472,9 @@ class PdfExtractController extends BaseController
                     $po_details['article_details'] = $article_details;
                 }
             }
+
+            $currentNumber = $prefixSetting->number;
+            $poNo = $prefixSetting->format . str_pad($currentNumber, 5, '0', STR_PAD_LEFT);
 
             // Create PO Master
             $pomaster = $this->createPoMaster($vendor_id, $poNo, $po_details, $article_details, $request, $article_details_input, $pdfFileName);
@@ -586,9 +675,70 @@ class PdfExtractController extends BaseController
                     ]),
                 ]);
                 break;
+
+            case "9":
+                // Rare Rabbit - $po_details here is a SINGLE PO object (one
+                // element already plucked out of the array by store()'s loop),
+                // same shape as every other vendor's po_details at this point.
+                $poData = array_merge($poData, [
+                    'po_num'           => $po_details['order_no'] ?? null,
+                    'po_date'          => $po_details['order_date'] ?? null,
+                    'goods_ready_date' => $po_details['delivery_date'] ?? null,
+                    'vendor_customer_name'   => $po_details['warehouse_name'] ?? null,
+                    'vendor_del_adr'   => $po_details['warehouse_address'] ?? null,
+                    'vendor_com_adr'   => $po_details['vendor_address'] ?? null,
+                    'vendor_gst'       => $po_details['vendor_gstin'] ?? ($po_details['buyer_gstin'] ?? null),
+                    'vendor_cin'       => $po_details['cin'] ?? null,
+                    'po_unit_price'    => $po_details['po_items'][0]['rate'] ?? 0,
+                    'po_qty'           => (float) str_replace(',', '', $po_details['total_qty'] ?? 0),
+                    'colors'           => $this->extractRareRabbitColors($po_details),
+                    'article_info'     => json_encode([
+                        'category'            => $po_details['category'] ?? null, // <-- NEW: e.g. "MEN - T-SHIRT", read off the item table's group header
+                        'channel'             => $po_details['channel'] ?? null,
+                        'warehouse_gst_state' => $po_details['warehouse_gst_state'] ?? null,
+                        'warehouse_city_name' => $this->extractWarehouseCityName($po_details['warehouse_name'] ?? null),
+                        'vendor_name'         => $po_details['vendor_name'] ?? null,
+                        'vendor_id_code'      => $po_details['vendor_id'] ?? null,
+                        'vendor_gst_state'    => $po_details['vendor_gst_state'] ?? null,
+                        'payment_terms_days'  => $po_details['payment_terms_days'] ?? null,
+                        'email'               => $po_details['email'] ?? null,
+                        'currency'            => $po_details['currency'] ?? null,
+                        'total_basic_amount'  => $po_details['total_basic_amount'] ?? null,
+                        'other_charges'       => $po_details['other_charges'] ?? null,
+                        'discount_amount'     => $po_details['discount_amount'] ?? null,
+                        'round_off'           => $po_details['round_off'] ?? null,
+                        'igst_pct'            => $po_details['igst_pct'] ?? null,
+                        'igst_amount'         => $po_details['igst_amount'] ?? null,
+                        'net_amount'          => $po_details['net_amount'] ?? null,
+                        'amount_in_words'     => $po_details['amount_in_words'] ?? null,
+                    ]),
+                ]);
+                break;
         }
 
         return PoMaster::create($poData);
+    }
+
+    private function extractWarehouseCityName($warehouseName)
+    {
+        if (empty($warehouseName)) {
+            return null;
+        }
+
+        // Grabs the content inside the LAST parentheses at the end of the string,
+        // e.g. "RARE RABBIT WAREHOUSE MUMBAI (ECOM)" -> "ECOM"
+        if (preg_match('/\(([^()]*)\)\s*$/', trim($warehouseName), $matches)) {
+            $inner = trim($matches[1]);
+            if ($inner === '') {
+                return null;
+            }
+
+            // If there are multiple words inside the parens, take the last one
+            $words = explode(' ', $inner);
+            return end($words);
+        }
+
+        return null;
     }
 
     private function getVendorIdByName($vendorName)
@@ -625,6 +775,10 @@ class PdfExtractController extends BaseController
 
             case "8":
                 $this->createDmartItems($po_id, $po_items, $po_details, $hsn_code, $carton_qty_sizes);
+                break;
+
+            case "9":
+                $this->createRareRabbitItems($po_id, $po_items, $hsn_code);
                 break;
         }
     }
@@ -985,6 +1139,52 @@ class PdfExtractController extends BaseController
         return $description;
     }
 
+    private function extractRareRabbitColors($po_details)
+    {
+        $colors = [];
+        foreach ($po_details['po_items'] ?? [] as $item) {
+            $description = trim($item['description'] ?? '');
+            if ($description === '') {
+                continue;
+            }
+            // Colour is the last word of the description before the size
+            // was stripped off, e.g. "RARE RABBIT CALLUM PRIMARY NAVY" -> NAVY
+            $words = explode(' ', $description);
+            $colors[] = end($words);
+        }
+        return implode(', ', array_unique(array_filter($colors)));
+    }
+
+    private function createRareRabbitItems($po_id, $po_items, $hsn_code)
+    {
+        // NOTE: this does not persist the item's "season" code (e.g.
+        // "AW-26 SS") because po_items has no matching column yet. If you
+        // want it stored, add a `season` column via migration and uncomment
+        // the line below.
+        foreach ($po_items as $index => $item) {
+            $description = trim($item['description'] ?? '');
+            $words = $description !== '' ? explode(' ', $description) : [];
+            $color = $words ? end($words) : null;
+
+            PoItems::create([
+                'po_id'          => $po_id,
+                'sno'            => $index + 1,
+                'article_number' => $item['ean'] ?? null,
+                'content'        => $description,
+                'color'          => $color,
+                'size'           => $item['size'] ?? null,
+                'qty'            => (int) str_replace(',', '', $item['quantity'] ?? 0),
+                'uom'            => $item['uom'] ?? null,
+                'unit_price'     => $this->cleanNumber($item['rate'] ?? 0),
+                'total_amount'   => $this->cleanNumber($item['amount'] ?? 0),
+                'hsn_code'       => $item['hsn'] ?? $hsn_code,
+                // 'season'      => $item['season'] ?? null,   // needs a migration first
+                'created_at'     => now(),
+                'created_by'     => auth()->user()->id,
+            ]);
+        }
+    }
+
     public function get_po_details(Request $request)
     {
         $po_id = $request->input('po_id');
@@ -1135,6 +1335,9 @@ class PdfExtractController extends BaseController
                 break;
             case 8:
                 $view = 'pdf_extract.dmart_details';
+                break;
+            case 9:
+                $view = 'pdf_extract.rare_rabbit_details';
                 break;
             default:
                 $view = 'pdf_extract.details';

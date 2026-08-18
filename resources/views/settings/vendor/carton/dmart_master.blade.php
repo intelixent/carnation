@@ -43,6 +43,7 @@
                         <a class="nav-link" href="{{route('carton_selected_master')}}">Selected</a>
                         <a class="nav-link" href="{{route('carton_vero_master')}}">Vero Modo</a>
                         <a class="nav-link active" ata-bs-toggle="tab" role="tab" href="#nav-dmart" aria-selected="true" href="{{route('carton_dmart_master')}}">Dmart</a>
+                        <a class="nav-link" href="{{route('carton_rare_rabbit_master')}}">Rare Rabbit</a>
                     </nav>
                     <div class="tab-content">
                         <div class="tab-pane show active text-muted" id="nav-dmart" role="tabpanel">

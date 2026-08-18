@@ -325,6 +325,23 @@ class VendorController extends BaseController
         return view('settings.vendor.carton.dmart_master', $page_data);
     }
 
+    public function carton_rare_rabbit_master()
+    {
+        $cartons = CartonMaster::where('vendor_id', 9)
+            ->where('status', 0)
+            ->get();
+
+        $page_data = [
+            'page_title' => "Master",
+            'page_main_title' => "Settings",
+            'page_child_title' => "Carton",
+            'cartons' => $cartons,
+            'isSuperAdmin' => $this->isSuperAdmin,
+        ];
+
+        return view('settings.vendor.carton.rare_rabbit_master', $page_data);
+    }
+
     public function carton_add()
     {
         $vendors = VendorMaster::where('status', 0)->get();
