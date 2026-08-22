@@ -15,6 +15,7 @@ use App\Http\Controllers\AutoPackingListController;
 use App\Http\Controllers\JobOrderController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\DmartPackingListController;
+use App\Http\Controllers\BulkPoExtractController;
 
 /*
 |--------------------------------------------------------------------------
@@ -79,6 +80,12 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/check_po_exists', [PdfExtractController::class, 'check_po_exists'])->name('check_po_exists');
         Route::post('/get_amend_details', [PdfExtractController::class, 'get_amend_details'])->name('get_amend_details');
         Route::post('/po_amended', [PdfExtractController::class, 'po_amended'])->name('po_amended');
+    });
+
+    Route::group(['prefix' => 'bulk_import'], function () {
+        Route::get('/', [BulkPoExtractController::class, 'import'])->name('pdf_extract_bulk_import');
+        Route::post('/process', [BulkPoExtractController::class, 'process'])->name('bulk_pdf_process');
+        Route::post('/store', [BulkPoExtractController::class, 'store'])->name('bulk_store');
     });
 
     Route::group(['prefix' => 'packing_list'], function () {

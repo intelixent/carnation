@@ -2690,7 +2690,7 @@ def _parse_rare_rabbit_page_items(text):
     flat = re.sub(r'\s+', ' ', section_text).strip()
  
     item_pattern = re.compile(
-        r'(\d{12,14})\s+'      # EAN
+        r'(\d{12,14}|[A-Z]{2,5}\d{4,8})\s+'   # EAN barcode OR alpha+numeric style code (e.g. RR277607)
         r'(.+?)\s+'            # description + size + season (lazy)
         r'(\d{6,8})\s+'        # HSN
         r'([\d.]+)\s+'         # Rate
@@ -2724,7 +2724,7 @@ def _parse_rare_rabbit_page_items(text):
         # two letters, dash, two digits, then two more letters - pull it
         # off the end of the blob first.
         # Allow optional spaces around the dash since line breaks might have added them.
-        season_match = re.search(r'([A-Z]{2}\s*-\s*\d{2}\s+[A-Z]{2})\s*$', desc_blob)
+        season_match = re.search(r'([A-Z]{1,4}\s*-\s*\d{2}\s+[A-Z]{2})\s*$', desc_blob)
         if season_match:
             season = season_match.group(1)
             # Normalize to remove accidental spaces around the dash
