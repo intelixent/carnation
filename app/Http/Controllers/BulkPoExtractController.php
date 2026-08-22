@@ -76,6 +76,7 @@ class BulkPoExtractController extends BaseController
                 return response()->json(['error' => 'Selected vendor not found.'], 404);
             }
 
+            $extraction_no = (string)($vendor->extraction_no ?? $vendor_id);
             $vendorExcess = floatval($vendor->excess ?? 0);
             $vendorShortage = floatval($vendor->shortage ?? 0);
             $vendorDiscount = floatval($vendor->discount ?? 0);
@@ -143,7 +144,7 @@ class BulkPoExtractController extends BaseController
 
                 // Call Python extraction microservice
                 $response = Http::timeout(60)->post('http://localhost:8000/process', [
-                    'extraction_no' => (string)$vendor_id,
+                    'extraction_no' => $extraction_no,
                     'pdf_base64' => $pdfBase64,
                 ]);
 
