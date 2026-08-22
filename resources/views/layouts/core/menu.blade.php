@@ -96,6 +96,21 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                 </li>
                 <!-- End::slide -->
 
+                <!-- Start::slide Bulk Import -->
+                <li class="slide has-sub {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') ? 'active open' : '' }}">
+                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') ? 'active' : '' }}">
+                        <i class="side-menu__icon fa-solid fa-file-import"></i>
+                        <span class="side-menu__label ">Bulk Import</span>
+                        <i class="fe fe-chevron-right side-menu__angle"></i>
+                    </a>
+                    <ul class="slide-menu child1">
+                        <li class="slide">
+                            <a href="{{ route('pdf_extract_bulk_import') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_bulk_import') ? 'active' : '' }}">Upload</a>
+                        </li>
+                    </ul>
+                </li>
+                <!-- End::slide Bulk Import -->
+
                 <li class="slide has-sub {{ request()->is('packing_list*') ? 'active open' : '' }}">
                     <a href="javascript:void(0);" class="side-menu__item {{ request()->is('packing_list*') ? 'active open' : '' }}">
                         <i class="side-menu__icon fa-solid fa-list-check"></i>
