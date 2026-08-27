@@ -213,7 +213,7 @@
                 [0, 'asc']
             ],
             responsive: true,
-            stateSave: true,
+            stateSave: false,
             drawCallback: function(settings) {
                 updateFilterSummary();
             }

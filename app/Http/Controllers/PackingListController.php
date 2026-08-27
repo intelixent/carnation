@@ -4051,10 +4051,26 @@ class PackingListController extends BaseController
             $currentDispatchNumber = 1;
 
             if (in_array($packingList->vendor_id, [1, 5, 6])) {
-                $allPackingLists = PackingListMaster::where('po_id', $packingList->po_id)
-                    ->orderBy('id', 'asc')
-                    ->get();
+                // Target color for current packing list
+                $targetColor = $packingList->color;
+                if (empty($targetColor)) {
+                    $firstItem = PackingListItem::where('packing_list_id', $packingList->id)->first();
+                    $targetColor = $firstItem->color ?? null;
+                }
 
+                $allPackingListsQuery = PackingListMaster::where('po_id', $packingList->po_id)
+                    ->orderBy('id', 'asc');
+
+                if (!empty($targetColor)) {
+                    $allPackingListsQuery->where(function ($q) use ($targetColor) {
+                        $q->where('color', $targetColor)
+                            ->orWhereHas('items', function ($iq) use ($targetColor) {
+                                $iq->where('color', $targetColor);
+                            });
+                    });
+                }
+
+                $allPackingLists = $allPackingListsQuery->get();
                 $totalDispatches = $allPackingLists->count();
 
                 // Initialize with position order
@@ -4064,7 +4080,9 @@ class PackingListController extends BaseController
 
                 $configOrderQty = PackingListConfigItem::where('po_id', $packingList->po_id)
                     ->where('status', 0)
-                    ->where('color', $packingList->color)
+                    ->when(!empty($targetColor), function ($q) use ($targetColor) {
+                        $q->where('color', $targetColor);
+                    })
                     ->get();
 
                 foreach ($configOrderQty as $config) {
@@ -4079,13 +4097,23 @@ class PackingListController extends BaseController
                     return $item->id == $packingList->id;
                 });
 
-                // Calculate dispatch quantities for all packing lists up to and including current one
+                if ($currentPackingListIndex === false) {
+                    $currentPackingListIndex = max(0, $allPackingLists->count() - 1);
+                }
+
+                $dispatchQuantities = collect();
+
+                // Calculate dispatch quantities for packing lists matching target color up to current one
                 foreach ($allPackingLists as $index => $pList) {
                     if ($index <= $currentPackingListIndex) {
-                        $dispatchNumber = $index + 1; // 1st dispatch, 2nd dispatch, etc.
+                        $dispatchNumber = $index + 1; // 1st dispatch, 2nd dispatch, etc. for this color
 
-                        // Get items for this specific packing list
-                        $packingListItems = PackingListItem::where('packing_list_id', $pList->id)->get();
+                        // Get items for this specific packing list matching target color
+                        $packingListItems = PackingListItem::where('packing_list_id', $pList->id)
+                            ->when(!empty($targetColor), function ($q) use ($targetColor) {
+                                $q->where('color', $targetColor);
+                            })
+                            ->get();
 
                         // Initialize with position order
                         $dispatchQtyBySize = collect();

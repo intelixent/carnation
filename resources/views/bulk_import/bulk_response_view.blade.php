@@ -710,15 +710,15 @@
                                                         <td>PCS</td>
                                                         <td id="invTotQty-{{ $index }}-{{ $invIdx }}">{{ number_format($inv['total_qty']) }}</td>
                                                         <td></td>
+                                                        <td id="invTotGross-{{ $index }}-{{ $invIdx }}">{{ number_format($inv['gross_amount'], 2) }}</td>
+                                                        <td id="invTotDisc-{{ $index }}-{{ $invIdx }}">{{ number_format($inv['total_discount'], 2) }}</td>
                                                         <td id="invTotTaxable-{{ $index }}-{{ $invIdx }}">{{ number_format($inv['taxable_value'], 2) }}</td>
-                                                        <td>{{ number_format($inv['total_discount'], 2) }}</td>
-                                                        <td id="invTotTaxable2-{{ $index }}-{{ $invIdx }}">{{ number_format($inv['taxable_value'], 2) }}</td>
                                                         <td></td>
                                                         <td id="invTotIgst-{{ $index }}-{{ $invIdx }}">{{ number_format($inv['igst_amount'], 2) }}</td>
                                                     </tr>
-                                                    <tr class="table-dark text-white">
-                                                        <td colspan="12" class="text-end fs-6">Grand Invoice Total:</td>
-                                                        <td colspan="2" class="fs-6" id="invGrandTotal-{{ $index }}-{{ $invIdx }}">INR {{ number_format($inv['final_total'], 2) }}</td>
+                                                    <tr>
+                                                        <td colspan="12" class="text-end">Final Amount:</td>
+                                                        <td colspan="2" class="text-end" id="invGrandTotal-{{ $index }}-{{ $invIdx }}">{{ number_format($inv['final_total'], 2) }}</td>
                                                     </tr>
                                                 </tfoot>
                                             </table>

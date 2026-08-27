@@ -1244,14 +1244,16 @@ class PdfExtractController extends BaseController
                 $formatted_po_items[] = [
                     'sno' => $item->sno,
                     'article_number' => $item->article_number,
-                    'color' => $item->id_color,
+                    'article_id' => $item->id_color,
+                    'color' => $item->color,
                     'size' => $item->size,
                     'quatity_uom' => $item->qty,
                     'uom' => $item->uom,
                     'igst_taxable_value' => $item->igst_taxable_value,
                     'igst_per' => $item->igst_per,
                     'mrp' => $item->mrp,
-                    'ean_code' => $item->ean_code
+                    'ean_code' => $item->ean_code,
+                    'hsn_code' => $item->hsn_code,
                 ];
             }
         } elseif ($vendor_id == 7) {

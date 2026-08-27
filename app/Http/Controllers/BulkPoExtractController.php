@@ -167,10 +167,14 @@ class BulkPoExtractController extends BaseController
                     $shippingAddress = $po_details['Delivery Address'] ?? '';
                 }
 
-                // Parse unit price
+                // Helper to parse numeric float from strings like "VCP to be 199.50" or "Rs. 199.50"
+                // Parse VCP Rate first (use VCP rate for all calculations if present, else fallback to Price per unit)
+                $vcpRaw = $po_details['VCP'] ?? ($po_details['vcp'] ?? null);
+                $vcpRate = $this->parseNumericAmount($vcpRaw);
                 $price_str = $article_info['Price per unit'] ?? '0';
-                preg_match('/\d+(\.\d+)?/', $price_str, $matchess);
-                $per_unit_price = isset($matchess[0]) ? floatval(str_replace(',', '', $matchess[0])) : 0;
+                $fallbackPrice = $this->parseNumericAmount($price_str);
+
+                $per_unit_price = ($vcpRate > 0) ? $vcpRate : $fallbackPrice;
 
                 // Total PO Quantity & Values
                 $total_qty = 0;
@@ -364,10 +368,12 @@ class BulkPoExtractController extends BaseController
                         $styleName = $article_info['Article description'] ?? 'JJOR WINDSOR POLO SS';
                         $goodsDesc = $styleName . ', ' . $sz;
 
+                        $lineHsnCode = $this->extractHsnCode($article_info, $cItems, $po_details);
+
                         $invoice_lines[] = [
                             'sno' => $sno++,
                             'description' => $goodsDesc,
-                            'hsn_code' => $article_info['Customs code'] ?? '61051090',
+                            'hsn_code' => $lineHsnCode,
                             'style_no' => $styleName,
                             'color' => $colorName,
                             'unit' => 'PCS',
@@ -699,7 +705,7 @@ class BulkPoExtractController extends BaseController
                             'size' => $po_item['size_years'] ?? null,
                             'qty' => $qty,
                             'uom' => $uom,
-                            'hsn_code' => $po_item['hsn_code'] ?? ($article_info['Customs code'] ?? '61051090'),
+                            'hsn_code' => $this->extractHsnCode($article_info, [$po_item], $po_details),
                             'unit_price' => $singlePo['per_unit_price'] ?? 0,
                             'total_amount' => $qty * ($singlePo['per_unit_price'] ?? 0),
                             'style_description' => $article_info['Article description'] ?? null,
@@ -960,5 +966,46 @@ class BulkPoExtractController extends BaseController
         $tens = floor($num / 10) * 10;
         $units = $num % 10;
         return trim($words[$tens] . ' ' . $words[$units]);
+    }
+
+    private function parseNumericAmount($val)
+    {
+        if (is_numeric($val)) return floatval($val);
+        if (empty($val)) return 0.0;
+        $clean = str_replace(',', '', (string)$val);
+        if (preg_match('/\d+(\.\d+)?/', $clean, $matches)) {
+            return floatval($matches[0]);
+        }
+        return 0.0;
+    }
+
+    private function extractHsnCode($article_info = [], $po_items = [], $po_details = [])
+    {
+        if (is_array($po_items)) {
+            foreach ($po_items as $item) {
+                if (is_array($item)) {
+                    foreach (['hsn_code', 'hsn', 'HSN', 'HSN Code', 'HSN Number'] as $key) {
+                        if (!empty($item[$key])) {
+                            return (string)$item[$key];
+                        }
+                    }
+                }
+            }
+        }
+        if (is_array($article_info)) {
+            foreach (['Customs code', 'HSN Code', 'hsn_code', 'HSN', 'hsn', 'Customs Code'] as $key) {
+                if (!empty($article_info[$key])) {
+                    return (string)$article_info[$key];
+                }
+            }
+        }
+        if (is_array($po_details)) {
+            foreach (['HSN Code', 'HSN', 'hsn_code', 'hsn'] as $key) {
+                if (!empty($po_details[$key])) {
+                    return (string)$po_details[$key];
+                }
+            }
+        }
+        return '61051090';
     }
 }
