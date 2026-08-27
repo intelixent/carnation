@@ -144,22 +144,22 @@
                                             $finalTotal = $total + $taxAmount;
                                             ?>
                                             <tr>
-                                                <td colspan=7>Total Value ( <?php echo $per_unit_price; ?> / EA)</td>
+                                                <td colspan=9>Total Value ( <?php echo $per_unit_price; ?> / EA)</td>
                                                 <td colspan=2><?php echo $total; ?></td>
                                                 <td></td>
                                             </tr>
                                             <tr>
-                                                <td colspan=7>Total IGST</td>
+                                                <td colspan=9>Total IGST</td>
                                                 <td colspan=2><?php echo $taxAmount; ?></td>
                                                 <td></td>
                                             </tr>
                                             <tr>
-                                                <td colspan=7>Total Value Inc Tax</td>
+                                                <td colspan=9>Total Value Inc Tax</td>
                                                 <td colspan=2><?php echo $finalTotal; ?></td>
                                                 <td></td>
                                             </tr>
                                             <tr>
-                                                <td colspan=7>Total Quantity</td>
+                                                <td colspan=9>Total Quantity</td>
                                                 <td colspan=2><?php echo $total_qty; ?></td>
                                                 <td></td>
                                             </tr>

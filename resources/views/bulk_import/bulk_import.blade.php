@@ -237,6 +237,8 @@
             let perUnitPrice = globalPosData[poIdx].per_unit_price || 0;
             let vendorDiscount = globalPosData[poIdx].vendor_discount || 0;
 
+            let newGrossTotal = 0;
+            let newDiscountTotal = 0;
             let newTaxableTotal = 0;
             let newIgstTotal = 0;
             let newFinalTotal = 0;
@@ -257,6 +259,8 @@
                 line.igst_amount = igstAmt;
                 line.total_line_amount = lineTotal;
 
+                newGrossTotal += grossAmt;
+                newDiscountTotal += discAmt;
                 newTaxableTotal += taxable;
                 newIgstTotal += igstAmt;
                 newFinalTotal += lineTotal;
@@ -279,14 +283,17 @@
                 </tr>`;
             });
 
+            invData.gross_amount = newGrossTotal;
+            invData.total_discount = newDiscountTotal;
             invData.taxable_value = newTaxableTotal;
             invData.igst_amount = newIgstTotal;
             invData.final_total = newFinalTotal;
             invData.amount_in_words = convertNumberToWords(newFinalTotal);
 
             $('#invLinesTbody-' + poIdx + '-' + invIdx).html(linesHtml);
+            $('#invTotGross-' + poIdx + '-' + invIdx).text(newGrossTotal.toFixed(2));
+            $('#invTotDisc-' + poIdx + '-' + invIdx).text(newDiscountTotal.toFixed(2));
             $('#invTotTaxable-' + poIdx + '-' + invIdx).text(newTaxableTotal.toFixed(2));
-            $('#invTotTaxable2-' + poIdx + '-' + invIdx).text(newTaxableTotal.toFixed(2));
             $('#invTotIgst-' + poIdx + '-' + invIdx).text(newIgstTotal.toFixed(2));
             $('#invGrandTotal-' + poIdx + '-' + invIdx).text('INR ' + newFinalTotal.toFixed(2));
             $('#invWords-' + poIdx + '-' + invIdx).text(invData.amount_in_words);
@@ -474,6 +481,11 @@
                 </td>
             </tr>`;
         });
+
+        pList.total_cartons = totCartonCount;
+        if (poData && poData.invoices_by_color && poData.invoices_by_color[colorName]) {
+            poData.invoices_by_color[colorName].total_cartons = totCartonCount;
+        }
 
         $('#cartonTbody-' + poIdx + '-' + cIdx).html(tbodyHtml);
         $('#totalCartonQty-' + poIdx + '-' + cIdx).text(totQty);
