@@ -118,19 +118,19 @@
             @php $info = json_decode($packing_list->po->article_info, true); @endphp
             <tr>
                 <th style="background-color:#bbb; padding:8px;">Final Destination</th>
-                <td style="padding:8px;" colspan="1"></td>
+                <td style="padding:8px;" colspan="1">{{ $packing_list->vendor->shipping_city_town_village ?? '' }}</td>
                 <th style="background-color:#bbb; padding:8px;" colspan="2">Color</th>
                 <td style="padding:8px;" colspan="2">{{ $packing_list->color }}</td>
             </tr>
             <tr>
                 <th style="background-color:#bbb; padding:8px;">Item Description</th>
                 <td style="padding:8px;" colspan="1">
-                    {{ ($info['Gender'] ?? '') . ' ' . ($info['Article description'] ?? '') }}
+                    {{ $info['Article group'] ?? '' }}
                 </td>
                 <th style="background-color:#bbb; padding:8px;">PO No.</th>
                 <td style="padding:8px;">{{ $packing_list->po->po_num }}</td>
                 <th style="background-color:#bbb; padding:8px;">Style No.</th>
-                <td style="padding:8px;">{{ $info['Style No.'] ?? '' }}</td>
+                <td style="padding:8px;">{{ $packing_list->items->first()->po_item->style_description ?? '' }}</td>
             </tr>
         </table>
     </div>
