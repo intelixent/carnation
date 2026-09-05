@@ -130,7 +130,7 @@
                 <th style="background-color:#bbb; padding:8px;">PO No.</th>
                 <td style="padding:8px;">{{ $packing_list->po->po_num }}</td>
                 <th style="background-color:#bbb; padding:8px;">Style No.</th>
-                <td style="padding:8px;">{{ $packing_list->items->first()->po_item->style_description ?? '' }}</td>
+                <td style="padding:8px;">{{ $info['Article description'] ?? '' }}</td>
             </tr>
         </table>
     </div>
