@@ -97,8 +97,8 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                 <!-- End::slide -->
 
                 <!-- Start::slide Bulk Import -->
-                <li class="slide has-sub {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') ? 'active open' : '' }}">
-                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') ? 'active' : '' }}">
+                <li class="slide has-sub {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') || request()->routeIs('bulk_po_import') || request()->routeIs('bulk_packing_list_import') ? 'active open' : '' }}">
+                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') || request()->routeIs('bulk_po_import') || request()->routeIs('bulk_packing_list_import') ? 'active' : '' }}">
                         <i class="side-menu__icon fa-solid fa-file-import"></i>
                         <span class="side-menu__label ">Bulk Import</span>
                         <i class="fe fe-chevron-right side-menu__angle"></i>
@@ -106,6 +106,12 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                     <ul class="slide-menu child1">
                         <li class="slide">
                             <a href="{{ route('pdf_extract_bulk_import') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_bulk_import') ? 'active' : '' }}">Upload</a>
+                        </li>
+                        <li class="slide">
+                            <a href="{{ route('bulk_po_import') }}" class="side-menu__item {{ request()->routeIs('bulk_po_import') ? 'active' : '' }}">PO Import</a>
+                        </li>
+                        <li class="slide">
+                            <a href="{{ route('bulk_pl_import') }}" class="side-menu__item {{ request()->routeIs('bulk_pl_import') ? 'active' : '' }}">PL Import</a>
                         </li>
                     </ul>
                 </li>
