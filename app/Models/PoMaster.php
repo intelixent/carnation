@@ -71,4 +71,9 @@ class PoMaster extends Model
     {
         return $this->belongsTo(JobOrderMaster::class, 'po_job_id');
     }
+
+    public function po_items()
+    {
+        return $this->hasMany(PoItems::class, 'po_id');
+    }
 }

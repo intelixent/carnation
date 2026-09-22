@@ -16,6 +16,7 @@ use App\Http\Controllers\JobOrderController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\DmartPackingListController;
 use App\Http\Controllers\BulkPoExtractController;
+use App\Http\Controllers\BulkExtractController;
 
 /*
 |--------------------------------------------------------------------------
@@ -86,6 +87,14 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::get('/', [BulkPoExtractController::class, 'import'])->name('pdf_extract_bulk_import');
         Route::post('/process', [BulkPoExtractController::class, 'process'])->name('bulk_pdf_process');
         Route::post('/store', [BulkPoExtractController::class, 'store'])->name('bulk_store');
+
+        Route::get('/po_import', [BulkExtractController::class, 'po_import'])->name('bulk_po_import');
+        Route::post('/po_import/process', [BulkExtractController::class, 'po_import_process'])->name('bulk_po_import_process');
+        Route::post('/po_import/store', [BulkExtractController::class, 'po_import_store'])->name('bulk_po_import_store');
+
+        Route::get('/pl_import', [BulkExtractController::class, 'pl_import'])->name('bulk_pl_import');
+        Route::post('/pl_import/process', [BulkExtractController::class, 'pl_import_process'])->name('bulk_pl_import_process');
+        Route::post('/pl_import/store', [BulkExtractController::class, 'pl_import_store'])->name('bulk_pl_import_store');
     });
 
     Route::group(['prefix' => 'packing_list'], function () {
