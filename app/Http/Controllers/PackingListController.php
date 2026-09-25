@@ -1985,11 +1985,32 @@ class PackingListController extends BaseController
             'items.carton',
             'items.po_item',
             'vendor',
-            'po'
+            'po.po_items'
         ])->find($id);
 
         if (!$packingList) {
             abort(404, 'Packing list not found');
+        }
+
+        // Auto-resolve missing po_item relationships from PO items
+        if ($packingList->po && $packingList->po->po_items) {
+            $poItems = $packingList->po->po_items;
+            foreach ($packingList->items as $item) {
+                if (!$item->po_item) {
+                    $matched = $poItems->first(function ($pi) use ($item) {
+                        return $pi->article_number == $item->article_number
+                            || (strcasecmp($pi->color ?? '', $item->color ?? '') === 0 && strcasecmp($pi->size ?? '', $item->size ?? '') === 0)
+                            || ($pi->id_color == $item->article_number && strcasecmp($pi->size ?? '', $item->size ?? '') === 0);
+                    });
+                    if ($matched) {
+                        $item->setRelation('po_item', $matched);
+                        if (empty($item->po_item_id)) {
+                            $item->po_item_id = $matched->id;
+                            PackingListItem::where('id', $item->id)->update(['po_item_id' => $matched->id]);
+                        }
+                    }
+                }
+            }
         }
 
         //
@@ -2002,7 +2023,7 @@ class PackingListController extends BaseController
         $poJobNum = $packingList->po->po_job_num ?? '';
 
         // Unique PO item IDs in this packing list
-        $uniquePoItemIds = $packingList->items->pluck('po_item_id')->unique()->values()->toArray();
+        $uniquePoItemIds = $packingList->items->pluck('po_item_id')->filter()->unique()->values()->toArray();
 
         // Unique article numbers
         $uniqueArticleNumbers = $packingList->items->pluck('article_number')->unique()->values()->toArray();

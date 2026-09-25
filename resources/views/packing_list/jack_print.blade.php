@@ -206,19 +206,29 @@
 
         <tbody class="{{ $cls }}" @if($force) style="page-break-before: always;" @endif>
             @php
-            $net = $items->first()->net_weight;
+            $net = $items->first()->net_weight ?? 0;
             $gross = $net + 1.2;
             $grandNet += $net;
             $grandGross += $gross;
             @endphp
             @foreach($items as $i => $item)
             @php
-            $cbm = $item->quantity * (
-                $item->carton->length *
-                $item->carton->breadth *
-                $item->carton->height
-            ) / 1e6;
-            $grandQty += $item->quantity;
+            $itemLength = $item->carton->length ?? 0;
+            $itemBreadth = $item->carton->breadth ?? 0;
+            $itemHeight = $item->carton->height ?? 0;
+            $itemQty = $item->quantity ?? 0;
+            $cbm = $itemQty * ($itemLength * $itemBreadth * $itemHeight) / 1e6;
+            $grandQty += $itemQty;
+            
+            $eanCode = $item->po_item->ean_code ?? null;
+            if (!$eanCode && isset($packing_list->po->po_items)) {
+                $matchedPi = $packing_list->po->po_items->first(function($pi) use ($item) {
+                    return $pi->article_number == $item->article_number
+                        || (strcasecmp($pi->color ?? '', $item->color ?? '') === 0 && strcasecmp($pi->size ?? '', $item->size ?? '') === 0)
+                        || ($pi->id_color == $item->article_number && strcasecmp($pi->size ?? '', $item->size ?? '') === 0);
+                });
+                $eanCode = $matchedPi->ean_code ?? '';
+            }
             @endphp
             <tr @if($i===0 && $force) style="page-break-before: always;" @endif>
                 @if($i === 0)
@@ -226,15 +236,15 @@
                     {{ $dynamicCartonName }}
                 </td>
                 @endif
-                <td>{{ $packing_list->po_no }}</td>
+                <td>{{ $packing_list->po_no ?? ($packing_list->po->po_num ?? '') }}</td>
                 <td>{{ $item->article_number }}</td>
                 <td>{{ $info['Article description'] ?? '' }}</td>
-                <td>{{ $item->po_item->ean_code }}</td>
+                <td>{{ $eanCode ?? ($item->po_item->ean_code ?? '') }}</td>
                 <td>{{ $item->size }}</td>
                 <td>{{ $item->quantity }}</td>
-                <td>{{ $item->carton->length }}</td>
-                <td>{{ $item->carton->breadth }}</td>
-                <td>{{ $item->carton->height }}</td>
+                <td>{{ $itemLength > 0 ? $itemLength : ($item->carton->length ?? '') }}</td>
+                <td>{{ $itemBreadth > 0 ? $itemBreadth : ($item->carton->breadth ?? '') }}</td>
+                <td>{{ $itemHeight > 0 ? $itemHeight : ($item->carton->height ?? '') }}</td>
                 @if($i === 0)
                 <td rowspan="{{ $count }}">{{ $net }}</td>
                 <td rowspan="{{ $count }}">{{ round($gross, 2) }}</td>
