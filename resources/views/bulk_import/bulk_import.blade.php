@@ -202,7 +202,8 @@
         let cIdx = 0;
         if (poData.packing_lists) {
             $.each(poData.packing_lists, function(colorName, pList) {
-                let newPackRef = newJobNo ? (newJobNo + '/' + plSeq) : ('' + plSeq);
+                let seqNum = pList.pl_no ? pList.pl_no : plSeq;
+                let newPackRef = newJobNo ? (newJobNo + '/' + seqNum) : ('' + seqNum);
                 pList.pack_ref_no = newPackRef;
                 $('#packRefNoDisplay-' + poIdx + '-' + cIdx).text(newPackRef);
                 plSeq++;

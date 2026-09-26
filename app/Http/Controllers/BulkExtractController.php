@@ -1765,7 +1765,7 @@ class BulkExtractController extends BaseController
                         foreach ($sizeTotals as $szName => $szPackQty) {
                             $matchingPi = $poItems->first(function ($pi) use ($colorName, $szName) {
                                 return strcasecmp(trim($pi->color), trim($colorName)) === 0 &&
-                                       strcasecmp(trim($pi->size), trim($szName)) === 0;
+                                        strcasecmp(trim($pi->size), trim($szName)) === 0;
                             });
                             $poQty = $matchingPi ? $matchingPi->qty : $szPackQty;
 
@@ -1807,7 +1807,7 @@ class BulkExtractController extends BaseController
 
                                 $matchingPi = $poItems->first(function ($pi) use ($colorName, $szName) {
                                     return strcasecmp(trim($pi->color), trim($colorName)) === 0 &&
-                                           strcasecmp(trim($pi->size), trim($szName)) === 0;
+                                            strcasecmp(trim($pi->size), trim($szName)) === 0;
                                 });
                                 $articleNo = $matchingPi ? $matchingPi->article_number : ($firstPoItem->article_number ?? '');
 
