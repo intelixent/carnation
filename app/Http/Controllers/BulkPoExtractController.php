@@ -207,8 +207,28 @@ class BulkPoExtractController extends BaseController
                 $packing_lists_by_color = [];
                 $invoices_by_color = [];
                 $po_num = $po_details['PO Number'] ?? ('PO-' . ($index + 1));
-                $userJobNo = '';
-                $plSeq = 1;
+
+                // Check if PO exists in database
+                $existingPo = !empty($po_num) ? PoMaster::where('po_num', $po_num)->first() : null;
+
+                // Auto Job Number like BulkExtractController:
+                if ($existingPo && !empty($existingPo->po_job_num)) {
+                    $userJobNo = $existingPo->po_job_num;
+                } else {
+                    $poSuffix = (strlen($po_num) >= 4) ? substr($po_num, -4) : str_pad($po_num, 4, '0', STR_PAD_LEFT);
+                    if (in_array((string)$vendor_id, ['1', '5', '6'])) {
+                        $userJobNo = 'JJ-' . $poSuffix;
+                    } elseif ((string)$vendor_id === '3') {
+                        $userJobNo = 'PUMA-' . $poSuffix;
+                    } elseif ((string)$vendor_id === '7') {
+                        $userJobNo = 'LP-' . $poSuffix;
+                    } else {
+                        $userJobNo = 'JJ-' . $poSuffix;
+                    }
+                }
+
+                $existingPlCount = $existingPo ? PackingListMaster::where('po_id', $existingPo->id)->count() : 0;
+                $plSeq = $existingPlCount + 1;
 
                 foreach ($colorGroups as $colorName => $cItems) {
                     $cartonCounter = 1;
@@ -327,12 +347,15 @@ class BulkPoExtractController extends BaseController
 
                     // Total Cartons Count = Number of unique carton names
                     $totalCartonsForColor = count(array_unique(array_column($cartonList, 'carton_name')));
-                    $packRefNo = !empty($userJobNo) ? ($userJobNo . '/' . $plSeq) : ((string)$plSeq);
+                    $plNo = (string)$plSeq;
+                    $packRefNo = "{$userJobNo}/{$plNo}";
                     $plSeq++;
 
                     $packing_lists_by_color[$colorName] = [
                         'color' => $colorName,
+                        'pl_no' => $plNo,
                         'pack_ref_no' => $packRefNo,
+                        'job_no' => $userJobNo,
                         'po_no' => $po_num,
                         'po_date' => $po_details['PO Date'] ?? '',
                         'total_cartons' => $totalCartonsForColor,
@@ -438,12 +461,10 @@ class BulkPoExtractController extends BaseController
 
                 // Existing PO Duplicate Check
                 $po_num_check = $po_details['PO Number'] ?? '';
-                $existingPo = null;
                 $hasPackingListOrInvoice = false;
                 $existingPoStatusMsg = null;
 
                 if (!empty($po_num_check)) {
-                    $existingPo = PoMaster::where('po_num', $po_num_check)->first();
                     if ($existingPo) {
                         $hasPL = PackingListMaster::where('po_id', $existingPo->id)->exists();
                         $hasInv = InvoiceMaster::where('po_id', $existingPo->id)->exists();
@@ -612,19 +633,49 @@ class BulkPoExtractController extends BaseController
                         }
                     }
 
-                    $userJobNo = !empty($singlePo['job_no']) ? $singlePo['job_no'] : $poNo;
+                    $userJobNo = !empty($singlePo['job_no']) ? trim($singlePo['job_no']) : null;
+                    if (empty($userJobNo)) {
+                        $poNumForJob = $po_details['PO Number'] ?? '';
+                        if (!empty($poNumForJob)) {
+                            $poSuffix = (strlen($poNumForJob) >= 4) ? substr($poNumForJob, -4) : str_pad($poNumForJob, 4, '0', STR_PAD_LEFT);
+                            if (in_array((string)$vendor_id, ['1', '5', '6'])) {
+                                $userJobNo = 'JJ-' . $poSuffix;
+                            } elseif ((string)$vendor_id === '3') {
+                                $userJobNo = 'PUMA-' . $poSuffix;
+                            } elseif ((string)$vendor_id === '7') {
+                                $userJobNo = 'LP-' . $poSuffix;
+                            } else {
+                                $userJobNo = 'JJ-' . $poSuffix;
+                            }
+                        } else {
+                            $userJobNo = $poNo;
+                        }
+                    }
 
-                    // 1. Create Job Order Master & Sizes
-                    $jobOrder = JobOrderMaster::create([
-                        'vendor_id' => $vendor_id,
-                        'job_no' => $userJobNo,
-                        'style' => $article_info['Article description'] ?? 'POLOS',
-                        'color' => $po_details['Colors'] ?? null,
-                        'type' => $jobType,
-                        'created_by' => auth()->id(),
-                        'created_at' => now(),
-                        'status' => 1 // Status 1 = Assigned / Amended
-                    ]);
+                    // 1. Create or Find Job Order Master & Sizes
+                    $jobOrder = JobOrderMaster::where('job_no', $userJobNo)->where('vendor_id', $vendor_id)->first();
+                    if (!$jobOrder) {
+                        $jobOrder = JobOrderMaster::where('job_no', $userJobNo)->first();
+                    }
+
+                    if (!$jobOrder) {
+                        $jobOrder = JobOrderMaster::create([
+                            'vendor_id' => $vendor_id,
+                            'job_no' => $userJobNo,
+                            'style' => $article_info['Article description'] ?? 'POLOS',
+                            'color' => $po_details['Colors'] ?? null,
+                            'type' => $jobType,
+                            'created_by' => auth()->id() ?? 1,
+                            'created_at' => now(),
+                            'status' => 1 // Status 1 = Assigned / Amended
+                        ]);
+                    } else {
+                        $jobOrder->status = 1;
+                        if (empty($jobOrder->type)) {
+                            $jobOrder->type = $jobType;
+                        }
+                        $jobOrder->save();
+                    }
 
                     // Map size charts for Job Order Sizes
                     foreach ($po_items as $pItem) {
@@ -637,14 +688,17 @@ class BulkPoExtractController extends BaseController
                         });
 
                         if ($matchingSc) {
-                            JobOrderSizeMaster::create([
-                                'job_id' => $jobOrder->id,
-                                'size_id' => $matchingSc->id,
-                                'qty' => $szQty,
-                                'created_by' => auth()->id(),
-                                'created_at' => now(),
-                                'status' => 0
-                            ]);
+                            JobOrderSizeMaster::updateOrCreate(
+                                [
+                                    'job_id' => $jobOrder->id,
+                                    'size_id' => $matchingSc->id,
+                                ],
+                                [
+                                    'qty' => $szQty,
+                                    'created_by' => auth()->id() ?? 1,
+                                    'status' => 0
+                                ]
+                            );
                         }
                     }
 
@@ -759,8 +813,20 @@ class BulkPoExtractController extends BaseController
                     }
 
                     // 5. Create Packing List & Invoice for EACH color packing list (marked completed)
+                    $existingPlCount = PackingListMaster::where('po_id', $pomaster->id)->count();
+                    $plSeq = $existingPlCount + 1;
+
                     foreach ($packing_lists as $colorName => $pData) {
-                        $packRefNo = 'PL-AUTO-' . $pomaster->po_job_num . '/' . $colorName;
+                        $plNo = !empty($pData['pl_no']) ? $pData['pl_no'] : (string)$plSeq;
+                        $finalJobNo = $pomaster->po_job_num ?: ($userJobNo ?: $poNo);
+
+                        // pack_ref_no stored as {job_no}/{pl_no} e.g. JJ-3466/1, JJ-3466/2 (like BulkExtractController)
+                        $incomingRefNo = trim((string)($pData['pack_ref_no'] ?? ''));
+                        if (!empty($incomingRefNo) && strpos($incomingRefNo, 'PL-AUTO') === false && strpos($incomingRefNo, '/') !== false) {
+                            $packRefNo = $incomingRefNo;
+                        } else {
+                            $packRefNo = "{$finalJobNo}/{$plNo}";
+                        }
 
                         $plMaster = PackingListMaster::create([
                             'po_id' => $pomaster->id,
@@ -775,9 +841,14 @@ class BulkPoExtractController extends BaseController
                             'created_by' => auth()->id(),
                         ]);
 
+                        $plSeq++;
+
                         $cartons = $pData['cartons'] ?? [];
                         foreach ($cartons as $cItem) {
-                            $matchingPoItem = $savedPoItems->where('color', $colorName)->where('size', $cItem['size'])->first();
+                            $matchingPoItem = $savedPoItems->first(function ($pi) use ($colorName, $cItem) {
+                                return strcasecmp(trim($pi->color), trim($colorName)) === 0 &&
+                                       strcasecmp(trim($pi->size), trim($cItem['size'] ?? '')) === 0;
+                            });
 
                             PackingListItem::create([
                                 'packing_list_id' => $plMaster->id,

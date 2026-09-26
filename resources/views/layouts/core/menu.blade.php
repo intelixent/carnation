@@ -96,27 +96,7 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                 </li>
                 <!-- End::slide -->
 
-                <!-- Start::slide Bulk Import -->
-                <li class="slide has-sub {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') || request()->routeIs('bulk_po_import') || request()->routeIs('bulk_packing_list_import') ? 'active open' : '' }}">
-                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') || request()->routeIs('bulk_po_import') || request()->routeIs('bulk_packing_list_import') ? 'active' : '' }}">
-                        <i class="side-menu__icon fa-solid fa-file-import"></i>
-                        <span class="side-menu__label ">Bulk Import</span>
-                        <i class="fe fe-chevron-right side-menu__angle"></i>
-                    </a>
-                    <ul class="slide-menu child1">
-                        <li class="slide">
-                            <a href="{{ route('pdf_extract_bulk_import') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_bulk_import') ? 'active' : '' }}">Upload</a>
-                        </li>
-                        <li class="slide">
-                            <a href="{{ route('bulk_po_import') }}" class="side-menu__item {{ request()->routeIs('bulk_po_import') ? 'active' : '' }}">PO Import</a>
-                        </li>
-                        <li class="slide">
-                            <a href="{{ route('bulk_pl_import') }}" class="side-menu__item {{ request()->routeIs('bulk_pl_import') ? 'active' : '' }}">PL Import</a>
-                        </li>
-                    </ul>
-                </li>
-                <!-- End::slide Bulk Import -->
-
+                <!-- Start::slide -->
                 <li class="slide has-sub {{ request()->is('packing_list*') ? 'active open' : '' }}">
                     <a href="javascript:void(0);" class="side-menu__item {{ request()->is('packing_list*') ? 'active open' : '' }}">
                         <i class="side-menu__icon fa-solid fa-list-check"></i>
@@ -138,7 +118,9 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                         </li>
                     </ul>
                 </li>
+                <!-- End::slide -->
 
+                <!-- Start::slide -->
                 <li class="slide has-sub {{ request()->is('invoice*') ? 'active open' : '' }}">
                     <a href="javascript:void(0);" class="side-menu__item {{ request()->is('invoice*') ? 'active open' : '' }}">
                         <i class="side-menu__icon fa-solid fa-file-invoice"></i>
@@ -160,6 +142,28 @@ $isSuperAdmin = auth()->user()->hasRole('superadmin');
                         </li>
                     </ul>
                 </li>
+                <!-- End::slide -->
+
+                <!-- Start::slide -->
+                <li class="slide has-sub {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') || request()->routeIs('bulk_po_import') || request()->routeIs('bulk_packing_list_import') ? 'active open' : '' }}">
+                    <a href="javascript:void(0);" class="side-menu__item {{ request()->is('bulk*') || request()->routeIs('pdf_extract_bulk_import') || request()->routeIs('bulk_po_import') || request()->routeIs('bulk_packing_list_import') ? 'active' : '' }}">
+                        <i class="side-menu__icon fa-solid fa-file-import"></i>
+                        <span class="side-menu__label ">Bulk Import</span>
+                        <i class="fe fe-chevron-right side-menu__angle"></i>
+                    </a>
+                    <ul class="slide-menu child1">
+                        <li class="slide">
+                            <a href="{{ route('pdf_extract_bulk_import') }}" class="side-menu__item {{ request()->routeIs('pdf_extract_bulk_import') ? 'active' : '' }}">Upload</a>
+                        </li>
+                        <li class="slide">
+                            <a href="{{ route('bulk_po_import') }}" class="side-menu__item {{ request()->routeIs('bulk_po_import') ? 'active' : '' }}">PO Import</a>
+                        </li>
+                        <li class="slide">
+                            <a href="{{ route('bulk_pl_import') }}" class="side-menu__item {{ request()->routeIs('bulk_pl_import') ? 'active' : '' }}">PL Import</a>
+                        </li>
+                    </ul>
+                </li>
+                <!-- End::slide -->
 
                 <!-- Start::slide -->
                 <li class="slide has-sub {{ request()->is('report*') ? 'active open' : '' }}">

@@ -1035,13 +1035,19 @@ class PackingListController extends BaseController
 
             foreach ($configItems as $item) {
                 $maxQty = $item->pack_qty;
-                $packedQty = PackingListItem::whereHas('packingList', function ($q) use ($poId) {
+                $articleNumber = $item->poItem ? $item->poItem->article_number : null;
+
+                $packedQuery = PackingListItem::whereHas('packingList', function ($q) use ($poId) {
                     $q->where('po_id', $poId);
                 })
-                    ->where('article_number', $item->poItem->article_number)
                     ->where('color', $color)
-                    ->where('size', $item->size)
-                    ->sum('quantity');
+                    ->where('size', $item->size);
+
+                if ($articleNumber) {
+                    $packedQuery->where('article_number', $articleNumber);
+                }
+
+                $packedQty = $packedQuery->sum('quantity');
 
                 if ($packedQty < $maxQty) {
                     return true; // Still have items to pack for this color
