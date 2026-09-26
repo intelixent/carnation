@@ -777,7 +777,10 @@ class BulkPoExtractController extends BaseController
 
                         $cartons = $pData['cartons'] ?? [];
                         foreach ($cartons as $cItem) {
-                            $matchingPoItem = $savedPoItems->where('color', $colorName)->where('size', $cItem['size'])->first();
+                            $matchingPoItem = $savedPoItems->first(function ($pi) use ($colorName, $cItem) {
+                                return strcasecmp(trim($pi->color), trim($colorName)) === 0 &&
+                                       strcasecmp(trim($pi->size), trim($cItem['size'] ?? '')) === 0;
+                            });
 
                             PackingListItem::create([
                                 'packing_list_id' => $plMaster->id,

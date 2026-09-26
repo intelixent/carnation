@@ -1763,7 +1763,10 @@ class BulkExtractController extends BaseController
                         // Also update / create PackingListConfigItem for each size in this Color
                         $sizeTotals = $plData['size_totals'] ?? [];
                         foreach ($sizeTotals as $szName => $szPackQty) {
-                            $matchingPi = $poItems->where('color', $colorName)->where('size', $szName)->first();
+                            $matchingPi = $poItems->first(function ($pi) use ($colorName, $szName) {
+                                return strcasecmp(trim($pi->color), trim($colorName)) === 0 &&
+                                       strcasecmp(trim($pi->size), trim($szName)) === 0;
+                            });
                             $poQty = $matchingPi ? $matchingPi->qty : $szPackQty;
 
                             PackingListConfigItem::updateOrCreate(
@@ -1802,7 +1805,10 @@ class BulkExtractController extends BaseController
                             foreach ($cItem['sizes'] as $szName => $szQty) {
                                 if ($szQty <= 0) continue;
 
-                                $matchingPi = $poItems->where('color', $colorName)->where('size', $szName)->first();
+                                $matchingPi = $poItems->first(function ($pi) use ($colorName, $szName) {
+                                    return strcasecmp(trim($pi->color), trim($colorName)) === 0 &&
+                                           strcasecmp(trim($pi->size), trim($szName)) === 0;
+                                });
                                 $articleNo = $matchingPi ? $matchingPi->article_number : ($firstPoItem->article_number ?? '');
 
                                 PackingListItem::create([
