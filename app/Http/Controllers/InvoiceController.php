@@ -1731,4 +1731,69 @@ class InvoiceController extends BaseController
             'article_info' => $articleInfo
         ];
     }
+
+    public function delete(Request $request)
+    {
+        $invoiceId = $request->input('id');
+
+        try {
+            DB::beginTransaction();
+
+            $invoice = InvoiceMaster::find($invoiceId);
+            if (!$invoice) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invoice not found.'
+                ], 404);
+            }
+
+            // Extract pack_ids associated with this invoice
+            $packIds = array_filter(array_map('trim', explode(',', $invoice->pack_ids ?? '')));
+
+            if (!empty($packIds)) {
+                // Fetch the packing lists in ascending order of ID
+                $packingLists = PackingListMaster::whereIn('id', $packIds)
+                    ->orderBy('id', 'asc')
+                    ->get();
+
+                if ($packingLists->isNotEmpty()) {
+                    if ($packingLists->count() === 1) {
+                        // Single packing list -> set pack_status to 0 (in progress / open for packing & editing)
+                        $packingLists->first()->update(['pack_status' => 0]);
+                    } else {
+                        // Multiple packing lists:
+                        // The most recent packing list (last one) -> pack_status = 0 (can add carton & change qty for it alone)
+                        // Earlier packing lists -> pack_status = 1 (completed)
+                        $recentPackingList = $packingLists->last();
+                        $recentPackingList->update(['pack_status' => 0]);
+
+                        $otherPackingLists = $packingLists->slice(0, $packingLists->count() - 1);
+                        $otherPackingListIds = $otherPackingLists->pluck('id')->toArray();
+
+                        if (!empty($otherPackingListIds)) {
+                            PackingListMaster::whereIn('id', $otherPackingListIds)->update(['pack_status' => 1]);
+                        }
+                    }
+                }
+            }
+
+            // Delete invoice history and invoice record
+            InvoiceHistoryMaster::where('invoice_id', $invoice->id)->delete();
+            $invoice->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Invoice deleted successfully. Packing list status has been updated to allow more packing.'
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete invoice: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
+

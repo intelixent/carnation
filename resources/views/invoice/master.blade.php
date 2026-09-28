@@ -1163,6 +1163,73 @@
                 }
             });
         });
+
+        $(document).on('click', '.delete_invoice', function() {
+            var id = $(this).data('id');
+
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "This will delete the invoice and revert packing list status to allow further packing.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it!',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Deleting...',
+                        text: 'Please wait while we delete the invoice',
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
+                        didOpen: () => Swal.showLoading()
+                    });
+
+                    $.ajax({
+                        url: "{{ route('invoice_delete') }}",
+                        method: 'POST',
+                        data: {
+                            id: id,
+                            _token: '{{ csrf_token() }}'
+                        },
+                        success: function(response) {
+                            Swal.close();
+                            if (response.success) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Deleted!',
+                                    text: response.message || 'Invoice deleted successfully.',
+                                    timer: 2000
+                                }).then(() => {
+                                    if (dataTable) {
+                                        dataTable.ajax.reload();
+                                    }
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error!',
+                                    text: response.message || 'Failed to delete invoice.'
+                                });
+                            }
+                        },
+                        error: function(xhr) {
+                            Swal.close();
+                            let errorMessage = 'An error occurred while deleting invoice';
+                            if (xhr.responseJSON && xhr.responseJSON.message) {
+                                errorMessage = xhr.responseJSON.message;
+                            }
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error!',
+                                text: errorMessage
+                            });
+                        }
+                    });
+                }
+            });
+        });
     });
 </script>
 @endpush

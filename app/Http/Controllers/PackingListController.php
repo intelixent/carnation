@@ -4300,4 +4300,32 @@ class PackingListController extends BaseController
             ], 500);
         }
     }
+
+    public function delete(Request $request)
+    {
+        try {
+            $packingList = PackingListMaster::find($request->id);
+
+            if (!$packingList) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Packing list not found!'
+                ], 404);
+            }
+
+            PackingListItem::where('packing_list_id', $packingList->id)->delete();
+            $packingList->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Packing list deleted successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
+

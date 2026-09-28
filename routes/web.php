@@ -160,6 +160,7 @@ Route::middleware(['auth', 'superadmin'])->group(function () {
         Route::post('/update-da-number', [InvoiceController::class, 'updateDaNumber'])->name('invoice_update_da_number');
         Route::post('/details', [InvoiceController::class, 'invoice_details'])->name('invoice_details');
         Route::post('/history', [InvoiceController::class, 'invoice_history_details'])->name('invoice_history_details');
+        Route::post('/delete', [InvoiceController::class, 'delete'])->name('invoice_delete');
     });
 
     Route::group(['prefix' => 'e_invoice'], function () {
