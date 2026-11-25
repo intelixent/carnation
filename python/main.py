@@ -2495,41 +2495,27 @@ def extract_dmart(pdf_path):
 
 def extract_rare_rabbit(pdf_path):
     print(f"Starting Rare Rabbit extraction from: {pdf_path}")
-    pos = []
+    po_pages = {}
+    order_sequence = []
 
     with pdfplumber.open(pdf_path) as pdf:
-        # Data page = every 2nd page starting at 0 ("Page : 1" of each PO).
-        # The page in between ("Page : 2") is just the signature/footer
-        # page and is skipped entirely.
-        for page_idx in range(0, len(pdf.pages), 2):
-            page = pdf.pages[page_idx]
+        for page in pdf.pages:
             text = page.extract_text() or ""
-
-            if "Order No." not in text:
-                # Defensive: if the PDF doesn't strictly alternate 2 pages
-                # per PO, don't silently skip a data page - fall back to
-                # scanning every page for "Order No." instead.
+            m = re.search(r'Order No\.\s*:\s*(\S+)', text)
+            if not m:
                 continue
+            order_no = m.group(1).strip()
+            if order_no not in po_pages:
+                po_pages[order_no] = []
+                order_sequence.append(order_no)
+            po_pages[order_no].append(text)
 
-            po = _parse_rare_rabbit_page(text)
-            if po:
-                pos.append(po)
-                print(f"  Parsed PO {po['order_no']} with {len(po['po_items'])} item(s)")
-
-        # Fallback: if the strict every-2nd-page assumption produced
-        # nothing (e.g. a PDF with an odd page count or extra pages),
-        # scan every page and de-duplicate by order_no.
-        if not pos:
-            print("No POs found via the every-2nd-page pass; scanning all pages")
-            seen_order_nos = set()
-            for page in pdf.pages:
-                text = page.extract_text() or ""
-                if "Order No." not in text:
-                    continue
-                po = _parse_rare_rabbit_page(text)
-                if po and po["order_no"] and po["order_no"] not in seen_order_nos:
-                    seen_order_nos.add(po["order_no"])
-                    pos.append(po)
+    pos = []
+    for order_no in order_sequence:
+        po = _parse_rare_rabbit_pages(po_pages[order_no])
+        if po:
+            pos.append(po)
+            print(f"  Parsed PO {po['order_no']} with {len(po['po_items'])} item(s)")
 
     print(f"Rare Rabbit extraction complete. {len(pos)} PO(s) found")
 
@@ -2537,6 +2523,61 @@ def extract_rare_rabbit(pdf_path):
         return None
 
     return {"pos": pos, "po_count": len(pos)}
+
+
+def _parse_rare_rabbit_pages(pages_texts):
+    """Parse all pages belonging to a single Rare Rabbit PO into one dict."""
+    if not pages_texts:
+        return None
+
+    po = _parse_rare_rabbit_page(pages_texts[0])
+    if not po:
+        return None
+
+    # Aggregate line items across all pages for this PO (handles POs that
+    # spill onto a second/subsequent page before the Totals block).
+    all_items = []
+    for page_text in pages_texts:
+        all_items.extend(_parse_rare_rabbit_page_items(page_text))
+    po["po_items"] = all_items
+
+    # Totals & charges may sit on a continuation page (e.g. page 2 of a 14-item PO).
+    combined_text = "\n".join(pages_texts)
+    _populate_rare_rabbit_totals(po, combined_text)
+
+    return po
+
+
+def _populate_rare_rabbit_totals(po, text):
+    """Populate total qty, amounts, taxes, and amount-in-words from PO text."""
+    def field(pattern, flags=0, default=""):
+        m = re.search(pattern, text, flags)
+        return m.group(1).strip() if m else default
+
+    tot_match = re.search(r'\nTotal\s+([\d,]+\.\d+)\s+([\d,]+\.\d+)\s*\n', text)
+    if tot_match:
+        po["total_qty"] = tot_match.group(1)
+        po["total_basic_amount"] = tot_match.group(2)
+    else:
+        po["total_qty"] = ""
+        po["total_basic_amount"] = ""
+
+    po["other_charges"] = field(r'Other Charges\s*\[.*?\]\s*([\d,.]+)')
+    po["discount_amount"] = field(r'Discount %\s*\[.*?\]\s*([\d,.]+)')
+    po["round_off"] = field(r'Round Off \+\s*\[.*?\]\s*([\d,.]+)')
+
+    igst_match = re.search(
+        r'Integrated GST \(IGST\)\s*\[\s*@\s*([\d.]+)%.*?\]\s*([\d,.]+)', text
+    )
+    if igst_match:
+        po["igst_pct"] = igst_match.group(1)
+        po["igst_amount"] = igst_match.group(2)
+    else:
+        po["igst_pct"] = ""
+        po["igst_amount"] = ""
+
+    po["net_amount"] = field(r'Net Amount\s+([\d,]+\.\d+)')
+    po["amount_in_words"] = field(r'Amount in Words\s*:\s*(.+)')
 
 
 def _parse_rare_rabbit_page(text):
@@ -2562,6 +2603,10 @@ def _parse_rare_rabbit_page(text):
     po["vendor_gstin"] = field(
         r'(\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9])\s+Marchandiser'
     )
+    if not po["vendor_gstin"]:
+        po["vendor_gstin"] = field(
+            r'(?:Email ID\.|Vendor Address)[\s\S]*?:\s*(\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9])\b'
+        )
  
     # ---- Warehouse (Ship To) block --------------------------------------
     # Everything between the page marker and "Order No." is the company
@@ -2639,31 +2684,8 @@ def _parse_rare_rabbit_page(text):
     # ---- Line items (unchanged - see rare_rabbit_items_fix.py) --------
     po["po_items"] = _parse_rare_rabbit_page_items(text)
  
-    # ---- Totals & charges (unchanged) ------------------------------------
-    tot_match = re.search(r'\nTotal\s+([\d,]+\.\d+)\s+([\d,]+\.\d+)\s*\n', text)
-    if tot_match:
-        po["total_qty"] = tot_match.group(1)
-        po["total_basic_amount"] = tot_match.group(2)
-    else:
-        po["total_qty"] = ""
-        po["total_basic_amount"] = ""
- 
-    po["other_charges"] = field(r'Other Charges\s*\[.*?\]\s*([\d,.]+)')
-    po["discount_amount"] = field(r'Discount %\s*\[.*?\]\s*([\d,.]+)')
-    po["round_off"] = field(r'Round Off \+\s*\[.*?\]\s*([\d,.]+)')
- 
-    igst_match = re.search(
-        r'Integrated GST \(IGST\)\s*\[\s*@\s*([\d.]+)%.*?\]\s*([\d,.]+)', text
-    )
-    if igst_match:
-        po["igst_pct"] = igst_match.group(1)
-        po["igst_amount"] = igst_match.group(2)
-    else:
-        po["igst_pct"] = ""
-        po["igst_amount"] = ""
- 
-    po["net_amount"] = field(r'Net Amount\s+([\d,]+\.\d+)')
-    po["amount_in_words"] = field(r'Amount in Words\s*:\s*(.+)')
+    # ---- Totals & charges -----------------------------------------------
+    _populate_rare_rabbit_totals(po, text)
  
     return po
 
@@ -2681,7 +2703,8 @@ def _parse_rare_rabbit_page_items(text):
     # aren't found exactly as expected - better to scan too much than to
     # silently extract nothing.
     section_match = re.search(
-        r'Basic Amount\s*(.*?)\nTotal\s+[\d,]+\.\d+', text, re.DOTALL
+        r'Basic Amount\s*(.*?)(?:\nTotal\s+[\d,]+\.\d+|\nTotal\s*:|\nRemarks\b|\nFor\s+Radhamani|\nPrint Date\s*:|\Z)',
+        text, re.DOTALL
     )
     section_text = section_match.group(1) if section_match else text
  
@@ -2701,6 +2724,8 @@ def _parse_rare_rabbit_page_items(text):
  
     items = []
     matches = list(item_pattern.finditer(flat))
+    season_tail_re = re.compile(r'[A-Z]{1,4}\s*-\s*\d{2}\s+[A-Z]{2}\s*$')
+
     for i, m in enumerate(matches):
         ean, desc_blob, hsn, rate, qty, uom, amount = m.groups()
  
@@ -2712,14 +2737,23 @@ def _parse_rare_rabbit_page_items(text):
         else:
             tail = flat[m.end():].strip()
             # Stop if we hit typical footer keywords that might follow the last item
-            footer_match = re.search(r'\b(?:Total|Other Charges|Discount|Integrated GST|Round Off|Net Amount)\b', tail)
+            footer_match = re.search(r'\b(?:Total|Other Charges|Discount|Integrated GST|Round Off|Net Amount|Signature Not Verified|Print Date)\b', tail)
             if footer_match:
                 leftover = tail[:footer_match.start()].strip()
             else:
                 leftover = tail
                 
-        if leftover:
-            desc_blob = f"{desc_blob} {leftover}".strip()
+        if leftover and not season_tail_re.search(desc_blob):
+            # If a group header (e.g. "KIDS - T-SHIRT 1") follows the wrapped
+            # season code in leftover, drop everything after the season code.
+            m_season_left = re.search(r'[A-Z]{1,4}\s*-\s*\d{2}\s+[A-Z]{2}', leftover)
+            if m_season_left:
+                leftover = leftover[:m_season_left.end()].strip()
+            if desc_blob.endswith('-'):
+                desc_blob = f"{desc_blob}{leftover}".strip()
+            else:
+                desc_blob = f"{desc_blob} {leftover}".strip()
+
         # Season code is a fixed shape, e.g. "AW-26 SS" or "SS-26 AW" -
         # two letters, dash, two digits, then two more letters - pull it
         # off the end of the blob first.
@@ -2735,9 +2769,13 @@ def _parse_rare_rabbit_page_items(text):
             season = ""
             desc_and_size = desc_blob.strip()
  
+        # Rejoin hyphenated age/size tokens if a line break split e.g. "10-" and "11Y"
+        desc_and_size = re.sub(r'\b(\d{1,2})\s*-\s*(\d{1,2}[A-Z]{1,3})\b', r'\1-\2', desc_and_size)
+
         # Whatever's left ends in the size token, e.g.
         # "RARE RABBIT CALLUM PRIMARY NAVY XS" -> size "XS"
-        size_match = re.search(r'\s+([A-Z0-9]{1,4})$', desc_and_size)
+        # "RARE ONES KITCH PRIMARY BLACK 4-5Y" -> size "4-5Y"
+        size_match = re.search(r'\s+(\d{1,2}-\d{1,2}[A-Z]{1,3}|[A-Z0-9]{1,4})$', desc_and_size)
         if size_match:
             size = size_match.group(1)
             description = desc_and_size[:size_match.start()].strip()
