@@ -63,13 +63,13 @@
                     <div class="card-title text-white">
                         Vendor Master
                     </div>
-                    <div class="card-options">
+                    <!-- <div class="card-options">
                         @if($isSuperAdmin || auth()->user()->hasDirectPermission('add-vendor'))
                         <button class="btn btn-sm btn-light add-vendor" type="button">
                             <i class="fas fa-plus me-1"></i>Add Vendor
                         </button>
                         @endif
-                    </div>
+                    </div> -->
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
